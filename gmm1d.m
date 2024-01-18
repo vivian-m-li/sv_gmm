@@ -51,7 +51,7 @@ logL  = zeros(10,1);   % logL values
 
 % initial log-likelihood
 %   logL  = sum_{i=1}^n log( sum_{k=1}^K  p_k * N(xi|uk,sk)  )
-Nxi     = [pdf('norm',x,mu(1),sqrt(vr(1))) pdf('norm',x,mu(2),sqrt(vr(2))) pdf('norm',x,mu(3),sqrt(vr(3)))]';
+Nxi     = [pdf('norm',x,mu(1),sqrt(vr(1))) pdf('norm',x,mu(2),sqrt(vr(2))) pdf('norm',x,mu(3),sqrt(vr(3)))];
 logL(1) = sum( log( p * Nxi ));
 
 fprintf('[%i] logL = %8.2f\n',1,logL(1));
@@ -95,7 +95,7 @@ while jj<=numel(logL)
     p = nk./n;
     
     % update likelihood
-    Nxi     = [pdf('norm',x,mu(1),sqrt(vr(1))) pdf('norm',x,mu(2),sqrt(vr(2))) pdf('norm',x,mu(3),sqrt(vr(3)))]';
+    Nxi     = [pdf('norm',x,mu(1),sqrt(vr(1))) pdf('norm',x,mu(2),sqrt(vr(2))) pdf('norm',x,mu(3),sqrt(vr(3)))];
     logL(jj) = sum( log( p * Nxi ));
 
     fprintf('[%i] logL = %8.2f\n',jj,logL(jj));
