@@ -74,11 +74,19 @@ def calc_log_likelihood(
     Nxi2 = np.where(Nxi == 0, sys.float_info.min, Nxi)
     logL = np.sum(np.log(p * Nxi2))
     if np.isnan(logL):
-        # TODO
+        # TODO log likelihood sometimes nan
         import pdb
 
         pdb.set_trace()
     return logL
+
+
+def calc_aic(logL: float, num_modes: int) -> float:
+    num_params = (
+        num_modes * 3
+    ) - 1  # mu, vr, and p as the params to predict, - 1 because the last p value is determined by the other(s)
+    aic = -2 * logL + 2 * num_params
+    return aic
 
 
 """
@@ -197,15 +205,17 @@ def run_em(
     for jj in range(1, len(logL)):  # len(logL) is number of iterations
         # E-step: calculate the posterior probabilities
         for i in range(len(x)):
-            # weight of a mode * probability that a point is from a gaussian given a mean + standard deviation
+            # for each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
             gz[i, :] = p * norm.pdf(x[i], mu, np.sqrt(vr))
             gz[i, :] /= np.sum(gz[i, :])
 
         # M-step: estimate gaussian parameters
+        # given the probability that each point belongs to particular gaussian, calculate the mean, variance, and weight of the gaussian
         nk = np.sum(gz, axis=0)
-        mu = [(1.0 / nk[j]) * np.sum(gz[:, j] * x) for j in range(len(mu))]
+        mu = [(1.0 / nk[j]) * np.sum(gz[:, j] * x) for j in range(num_modes)]
         vr = [
-            (1.0 / nk[j]) * np.sum(gz[:, j] * (x - mu[j]) ** 2) for j in range(len(vr))
+            (1.0 / nk[j]) * np.sum(gz[:, j] * (x - mu[j]) ** 2)
+            for j in range(num_modes)
         ]
         p = nk / n
 
@@ -252,7 +262,9 @@ def run_gmm(x: np.ndarray) -> None:
         max_logL = -sys.maxsize - 1
         for num_modes in range(1, 4):
             params = run_em(x, num_modes)
-            if params[-1].logL > max_logL:
+            aic = calc_aic(params[-1].logL, num_modes)
+            print(num_modes, aic)
+            if aic > max_logL:  # TODO: calculate penalized likelihood
                 opt_params = params
                 num_sv = num_modes
 
