@@ -3,6 +3,7 @@ import warnings
 import random
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 import matplotlib.cm as cm
 from scipy.stats import norm
 from sklearn.cluster import KMeans
@@ -23,6 +24,24 @@ def print_stats(logL, mu, vr, p) -> str:
     return f"logL={round(logL, 2)}, means={round_lst(mu)}, variances={round_lst(vr)}, weights={round_lst(p)}"
 
 
+"""
+Plotting functions
+"""
+
+
+def get_scatter_data(x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    ux = np.arange(min(x), max(x) + 0.25, 0.25)
+    hx, edges = np.histogram(x, bins=ux)
+    ux = (edges[:-1] + edges[1:]) / 2
+
+    # filter out x values with 0 points
+    nonzero_filter = hx > 0
+    ux = ux[nonzero_filter]
+    hx = hx[nonzero_filter]
+
+    return ux, hx
+
+
 def plot_distributions(
     x: np.ndarray[float],
     n: int,
@@ -33,15 +52,7 @@ def plot_distributions(
     title: str = None,
 ) -> None:
     # visualize the data and the generative model
-    ux = np.arange(min(x), max(x) + 0.25, 0.25)
-    hx, edges = np.histogram(x, bins=ux)
-    ux = (edges[:-1] + edges[1:]) / 2
-
-    # filter out x values with 0 points
-    nonzero_filter = hx > 0
-    ux = ux[nonzero_filter]
-    hx = hx[nonzero_filter]
-
+    ux, hx = get_scatter_data(x)
     plt.figure()
     plt.scatter(ux, hx, marker=".", color="blue")
     for i in range(len(mu)):
@@ -58,12 +69,75 @@ def plot_distributions(
     plt.show()
 
 
+def calc_y_vals(ux, n, gmm, i):
+    return (n * gmm.p[i] / 4) * norm.pdf(ux, gmm.mu[i], np.sqrt(gmm.vr[i]))
+
+
+class UpdateDist:
+    def __init__(self, ax, x, gmms):
+        self.ax = ax
+        self.x = x
+        self.gmms = gmms
+        self.num_modes = len(gmms[0].mu)
+        self.n = len(x)
+
+        self.ux, self.hx = get_scatter_data(x)
+
+        self.scatter = ax.scatter([], [], marker=".", color="blue")
+        self.lines = ()
+        for i in range(self.num_modes):
+            (line,) = ax.plot(
+                [],
+                [],
+                linestyle="-",
+                color=cm.Set1.colors[i],
+            )
+            self.lines = self.lines + (line,)
+
+    def start(self):
+        self.scatter = self.ax.scatter(self.ux, self.hx, marker=".", color="blue")
+        lines = ()
+        for i in range(self.num_modes):
+            (line,) = self.ax.plot(
+                self.ux,
+                calc_y_vals(self.ux, self.n, self.gmms[0], i),
+                linestyle="-",
+                color=cm.Set1.colors[i],
+            )
+            lines = lines + (line,)
+        self.lines = lines
+        return (self.scatter,) + self.lines
+
+    def __call__(self, frame):
+        for i, line in enumerate(self.lines):
+            line.set_ydata(calc_y_vals(self.ux, self.n, self.gmms[frame], i))
+        self.scatter.set_offsets(np.column_stack((self.ux, self.hx)))
+        return (self.scatter,) + self.lines
+
+
+def animate_distribution(x: np.ndarray, gmms: List[GaussianDistribution]) -> None:
+    fig, ax = plt.subplots()
+    ud = UpdateDist(ax, x, gmms)
+    anim = FuncAnimation(
+        fig=fig, func=ud, init_func=ud.start, frames=len(gmms), interval=300, blit=True
+    )
+
+    plt.xlabel("x value")
+    plt.ylabel("density")
+    plt.show()
+
+
 def plot_likelihood(logL: np.ndarray[float]) -> None:
     plt.figure()
     plt.plot(np.arange(1, len(logL) + 1), logL, "bo-")
     plt.xlabel("iterations")
     plt.ylabel("log-likelihood")
     plt.show()
+
+
+"""
+GMM/EM helper functions
+"""
 
 
 def calc_log_likelihood(
@@ -203,9 +277,9 @@ def init_em(
     # initial log-likelihood
     logL.append(calc_log_likelihood(x, mu, vr, p))
 
-    # plot_distributions(
-    #     x, n, mu, vr, p, title=f"Initial Stats: {print_stats(logL[0], mu, vr, p)}"
-    # )
+    plot_distributions(
+        x, n, mu, vr, p, title=f"Initial Stats: {print_stats(logL[0], mu, vr, p)}"
+    )
     return n, mu, vr, p, logL
 
 
@@ -254,7 +328,6 @@ def run_em(
 
         # Convergence check
         if abs(logL[-1] - logL[-2]) < 0.05:
-            print(f"Converged at {jj} iterations")
             break
         if jj == num_iterations - 1:
             warnings.warn(
@@ -301,4 +374,16 @@ def run_gmm(x: np.ndarray) -> None:
     final_params = opt_params[-1]
     print(
         f"\nNumber of SVs: {num_sv}\n{print_stats(final_params.logL, final_params.mu, final_params.vr, final_params.p)}"
+    )
+    animate_distribution(x, opt_params)
+
+
+if __name__ == "__main__":
+    run_gmm(
+        generate_data(
+            10000,
+            mode_means=np.array([0, 5, 10]),
+            mode_variances=np.array([1, 1, 1]),
+            weights=np.array([0.2, 0.5, 0.3]),
+        )
     )
