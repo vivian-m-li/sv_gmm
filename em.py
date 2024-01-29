@@ -8,6 +8,7 @@ import matplotlib.cm as cm
 from scipy.stats import norm
 from sklearn.cluster import KMeans
 from sklearn.mixture import GaussianMixture
+from IPython.display import HTML
 from gmm_types import *
 from typing import Tuple, List
 
@@ -124,6 +125,9 @@ def animate_distribution(x: np.ndarray, gmms: List[GaussianDistribution]) -> Non
 
     plt.xlabel("x value")
     plt.ylabel("density")
+    plt.title("animation")
+
+    # HTML(anim.to_html5_video())
     plt.show()
 
 
@@ -146,16 +150,12 @@ def calc_log_likelihood(
     vr: np.ndarray[float],
     p: np.ndarray[float],
 ):
-    Nxi = np.column_stack(
-        [norm.pdf(x, mu[i], np.sqrt(vr[i])) for i in range(len(mu))]
-    )  # TODO: check this
-    # Nxi2 = np.where(Nxi == 0, sys.float_info.min, Nxi)
-    logL = np.sum(np.log(p * Nxi))
-    if np.isnan(logL):
-        # TODO log likelihood sometimes nan
-        import pdb
-
-        pdb.set_trace()
+    num_modes = len(mu)
+    logL = 0.0
+    for i in range(len(x)):
+        pdf = [p[k] * norm.pdf(x[i], mu[k], np.sqrt(vr[k])) for k in range(num_modes)]
+        likelihood_i = np.sum(pdf)
+        logL += np.log(likelihood_i)
     return logL
 
 
@@ -164,8 +164,6 @@ def calc_aic(logL: float, num_modes: int) -> float:
         num_modes * 3
     ) - 1  # mu, vr, and p as the params to predict, - 1 because the last p value is determined by the other(s)
     aic = (2 * num_params) - (2 * logL)
-    # TODO: still not calculating correctly
-    print(f"logL: {round(logL, 2)}, num_modes: {num_modes}, aic: {round(aic, 2)}")
     return aic
 
 
@@ -253,22 +251,12 @@ def init_em(
     num_modes: int,
 ) -> Tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     # initial conditions
-    # if num_modes == 1:
-    #     mu = [np.median(x)]
-    # elif num_modes == 2:
-    #     mu = [np.percentile(x, 25), np.percentile(x, 75)]
-    # else:
-    #     mu = [min(x), np.median(x), max(x)]  # initial means
-    # vr = [1] * num_modes  # initial variances
-
     kmeans_data = np.ravel(x).astype(float).reshape(-1, 1)
     kmeans = KMeans(n_init=3, n_clusters=num_modes)
     kmeans.fit(kmeans_data)
 
     mu = np.sort(np.ravel(kmeans.cluster_centers_))  # initial means
     vr = [np.var(x)] * num_modes  # initial variances
-
-    # logL: -828039.12, num_modes: 3, aic: 1656094.23
 
     p = np.ones(num_modes) / num_modes  # initial p_k proportions
     logL = []  # logL values
@@ -277,9 +265,6 @@ def init_em(
     # initial log-likelihood
     logL.append(calc_log_likelihood(x, mu, vr, p))
 
-    plot_distributions(
-        x, n, mu, vr, p, title=f"Initial Stats: {print_stats(logL[0], mu, vr, p)}"
-    )
     return n, mu, vr, p, logL
 
 
@@ -293,16 +278,16 @@ def run_em(
     all_params.append(GaussianDistribution(mu, vr, p, logL[0]))
 
     gz = np.zeros((n, len(mu)))
-    num_iterations = 20
+    num_iterations = 15
     for jj in range(1, num_iterations):
         # Expectation step: calculate the posterior probabilities
         for i in range(len(x)):
-            # for each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
+            # For each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
             gz[i, :] = p * norm.pdf(x[i], mu, np.sqrt(vr))
             gz[i, :] /= np.sum(gz[i, :])
 
         # Maximization step: estimate gaussian parameters
-        # given the probability that each point belongs to particular gaussian, calculate the mean, variance, and weight of the gaussian
+        # Given the probability that each point belongs to particular gaussian, calculate the mean, variance, and weight of the gaussian
         nk = np.sum(gz, axis=0)
         mu = [(1.0 / nk[j]) * np.sum(gz[:, j] * x) for j in range(num_modes)]
         vr = [
@@ -314,17 +299,6 @@ def run_em(
         # update likelihood
         logL.append(calc_log_likelihood(x, mu, vr, p))
         all_params.append(GaussianDistribution(mu, vr, p, logL[-1]))
-        if np.isnan(logL[-1]):
-            raise Exception("logL is nan")
-
-        # plot_distributions(
-        #     x,
-        #     n,
-        #     mu,
-        #     vr,
-        #     p,
-        #     title=f"Iteration {jj + 1}: {print_stats(logL[-1], mu, vr, p)}",
-        # )
 
         # Convergence check
         if abs(logL[-1] - logL[-2]) < 0.05:
@@ -333,9 +307,6 @@ def run_em(
             warnings.warn(
                 "Maximum number of iterations reached without logL convergence"
             )
-
-    # Plot the likelihood function over time
-    plot_likelihood(logL)
 
     # Visualize the final model
     plot_distributions(
@@ -355,7 +326,7 @@ def run_gmm(x: np.ndarray) -> None:
 
     opt_params = None
     num_sv = 0
-    if len(x) <= 10:  # TODO: "very small integer"
+    if len(x) <= 10:  # small number of SVs detected
         opt_params = run_em(x, 1)
         num_sv = 1
     else:
@@ -366,24 +337,19 @@ def run_gmm(x: np.ndarray) -> None:
             aic = calc_aic(params[-1].logL, num_modes)
             all_params.append(params)
             aic_vals.append(aic)
-
-            min_aic_idx = aic_vals.index(min(aic_vals))
-            opt_params = all_params[min_aic_idx]
-            num_sv = len(opt_params[0].mu)
+        min_aic_idx = aic_vals.index(min(aic_vals))
+        opt_params = all_params[min_aic_idx]
+        num_sv = len(opt_params[0].mu)
 
     final_params = opt_params[-1]
     print(
         f"\nNumber of SVs: {num_sv}\n{print_stats(final_params.logL, final_params.mu, final_params.vr, final_params.p)}"
     )
+    # Plot the likelihood function over time
+    plot_likelihood([x.logL for x in opt_params])
     animate_distribution(x, opt_params)
 
 
 if __name__ == "__main__":
-    run_gmm(
-        generate_data(
-            10000,
-            mode_means=np.array([0, 5, 10]),
-            mode_variances=np.array([1, 1, 1]),
-            weights=np.array([0.2, 0.5, 0.3]),
-        )
-    )
+    x = generate_data(10000, num_modes=3)
+    run_gmm(x)
