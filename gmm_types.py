@@ -1,10 +1,25 @@
+import numpy as np
 from dataclasses import dataclass
 from typing import List
 
 
 @dataclass
 class GaussianDistribution:
-    mu: List[float]  # estimated means
-    vr: List[float]  # estimated variances
-    p: List[float]  # estimated component weights
+    mu: List[float]  # means
+    vr: List[float]  # variances
+    p: List[float]  # component weights
+
+
+@dataclass
+class SampleData(GaussianDistribution):
+    x: np.ndarray[int]
+
+
+@dataclass
+class EstimatedGMM(GaussianDistribution):
+    num_modes: int
+
+
+@dataclass
+class GMM(GaussianDistribution):
     logL: float  # log-likelihood

@@ -116,7 +116,7 @@ class UpdateDist:
         return (self.scatter,) + self.lines
 
 
-def animate_distribution(x: np.ndarray, gmms: List[GaussianDistribution]) -> None:
+def animate_distribution(x: np.ndarray, gmms: List[GMM]) -> None:
     fig, ax = plt.subplots()
     ud = UpdateDist(ax, x, gmms)
     anim = FuncAnimation(
@@ -205,7 +205,8 @@ def generate_data(
     weights: np.ndarray[float] = None,
     num_modes: int = None,
     plot: bool = False,
-) -> np.ndarray[float]:
+    pr: bool = True,
+) -> Tuple[np.ndarray[float], np.ndarray, np.ndarray, np.ndarray]:
     assert mode_means is not None or num_modes is not None
 
     num_modes = len(mode_means) if mode_means is not None else num_modes
@@ -213,6 +214,7 @@ def generate_data(
         mu = mode_means
     else:
         mu = generate_means(num_modes)
+    mu = sorted(mu)
 
     if mode_variances is not None:
         vr = mode_variances
@@ -241,9 +243,9 @@ def generate_data(
             p,
             title=title,
         )
-    else:
+    elif pr:
         print(title)
-    return np.array(x)
+    return SampleData(mu, vr, p, np.array(x))
 
 
 def init_em(
@@ -271,11 +273,12 @@ def init_em(
 def run_em(
     x: np.ndarray,  # data
     num_modes: int,
-) -> List[GaussianDistribution]:
-    all_params: List[GaussianDistribution] = []
+    plot: bool,
+) -> List[GMM]:
+    all_params: List[GMM] = []
 
     n, mu, vr, p, logL = init_em(x, num_modes)  # initialize parameters
-    all_params.append(GaussianDistribution(mu, vr, p, logL[0]))
+    all_params.append(GMM(mu, vr, p, logL[0]))
 
     gz = np.zeros((n, len(mu)))
     num_iterations = 15
@@ -298,31 +301,32 @@ def run_em(
 
         # update likelihood
         logL.append(calc_log_likelihood(x, mu, vr, p))
-        all_params.append(GaussianDistribution(mu, vr, p, logL[-1]))
+        all_params.append(GMM(mu, vr, p, logL[-1]))
 
         # Convergence check
         if abs(logL[-1] - logL[-2]) < 0.05:
             break
-        if jj == num_iterations - 1:
-            warnings.warn(
-                "Maximum number of iterations reached without logL convergence"
-            )
+        # if jj == num_iterations - 1:
+        #     warnings.warn(
+        #         "Maximum number of iterations reached without logL convergence"
+        #     )
 
-    # Visualize the final model
-    plot_distributions(
-        x, n, mu, vr, p, title=f"Final Stats: {print_stats(logL[-1], mu, vr, p)}"
-    )
+    if plot:
+        # Visualize the final model
+        plot_distributions(
+            x, n, mu, vr, p, title=f"Final Stats: {print_stats(logL[-1], mu, vr, p)}"
+        )
 
     return all_params
 
 
-def run_gmm(x: np.ndarray) -> None:
+def run_gmm(x: np.ndarray, *, plot: bool = True, pr: bool = True) -> EstimatedGMM:
     if len(x) == 0:
         warnings.warn("Input data is empty")
-        return
+        return 0
     if len(x) == 1:
         warnings.warn("Input data contains one SV")
-        return
+        return 1
 
     opt_params = None
     num_sv = 0
@@ -333,7 +337,7 @@ def run_gmm(x: np.ndarray) -> None:
         aic_vals = []
         all_params = []
         for num_modes in range(1, 4):
-            params = run_em(x, num_modes)
+            params = run_em(x, num_modes, plot)
             aic = calc_aic(params[-1].logL, num_modes)
             all_params.append(params)
             aic_vals.append(aic)
@@ -342,14 +346,20 @@ def run_gmm(x: np.ndarray) -> None:
         num_sv = len(opt_params[0].mu)
 
     final_params = opt_params[-1]
-    print(
-        f"\nNumber of SVs: {num_sv}\n{print_stats(final_params.logL, final_params.mu, final_params.vr, final_params.p)}"
-    )
-    # Plot the likelihood function over time
-    plot_likelihood([x.logL for x in opt_params])
-    animate_distribution(x, opt_params)
+
+    if pr:
+        print(
+            f"\nNumber of SVs: {num_sv}\n{print_stats(final_params.logL, final_params.mu, final_params.vr, final_params.p)}"
+        )
+
+    if plot:
+        # Plot the likelihood function over time
+        plot_likelihood([x.logL for x in opt_params])
+        animate_distribution(x, opt_params)
+
+    return EstimatedGMM(final_params.mu, final_params.vr, final_params.p, num_sv)
 
 
 if __name__ == "__main__":
-    x = generate_data(10000, num_modes=3)
+    x = generate_data(10000, num_modes=3).x
     run_gmm(x)
