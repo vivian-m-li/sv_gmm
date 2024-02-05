@@ -298,6 +298,7 @@ def run_em(
             for j in range(num_modes)
         ]
         p = nk / n
+        # TODO: check if p is less than some threshold -- if so, set a warning
 
         # update likelihood
         logL.append(calc_log_likelihood(x, mu, vr, p))
