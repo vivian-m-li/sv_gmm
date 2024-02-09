@@ -10,7 +10,7 @@ from sklearn.cluster import KMeans
 from sklearn.mixture import GaussianMixture
 from IPython.display import HTML
 from gmm_types import *
-from typing import Tuple, List
+from typing import Tuple, List, Dict
 
 
 def round_lst(lst):
@@ -136,6 +136,36 @@ def plot_likelihood(logL: np.ndarray[float]) -> None:
     plt.plot(np.arange(1, len(logL) + 1), logL, "bo-")
     plt.xlabel("iterations")
     plt.ylabel("log-likelihood")
+    plt.show()
+
+
+def plot_param_vs_aic(
+    n: int, gmm_lookup: Dict[float, EstimatedGMM], xlabel: str
+) -> None:
+    cmap = cm.Set2.colors
+
+    x_vals = []
+    y_vals = []
+    colors = []
+    for sig, gmm in gmm_lookup.items():
+        x_vals.append(sig)
+        y_vals.append(gmm.aic)
+        colors.append(cmap[gmm.num_modes])
+
+    plt.figure()
+    plt.scatter(x_vals, y_vals, c=colors)
+    plt.title(f"n={n}")
+    plt.legend(
+        handles=[
+            plt.Line2D([], [], color=color, label=label)
+            for color, label in zip(
+                [cmap[1], cmap[2], cmap[3]], ["1 mode", "2 modes", "3 modes"]
+            )
+        ],
+        loc="lower right",
+    )
+    plt.xlabel(xlabel)
+    plt.ylabel("aic")
     plt.show()
 
 
@@ -331,11 +361,11 @@ def run_gmm(x: np.ndarray, *, plot: bool = True, pr: bool = True) -> EstimatedGM
 
     opt_params = None
     num_sv = 0
+    aic_vals = []
     if len(x) <= 10:  # small number of SVs detected
-        opt_params = run_em(x, 1)
+        opt_params = run_em(x, 1, plot)
         num_sv = 1
     else:
-        aic_vals = []
         all_params = []
         for num_modes in range(1, 4):
             params = run_em(x, num_modes, plot)
@@ -354,11 +384,18 @@ def run_gmm(x: np.ndarray, *, plot: bool = True, pr: bool = True) -> EstimatedGM
         )
 
     if plot:
+        pass
         # Plot the likelihood function over time
-        plot_likelihood([x.logL for x in opt_params])
-        animate_distribution(x, opt_params)
+        # plot_likelihood([x.logL for x in opt_params])
+        # animate_distribution(x, opt_params)
 
-    return EstimatedGMM(final_params.mu, final_params.vr, final_params.p, num_sv)
+    return EstimatedGMM(
+        mu=final_params.mu,
+        vr=final_params.vr,
+        p=final_params.p,
+        num_modes=num_sv,
+        aic=min(aic_vals) if len(aic_vals) > 0 else None,
+    )
 
 
 if __name__ == "__main__":

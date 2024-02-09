@@ -1,6 +1,6 @@
 import numpy as np
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 
 @dataclass
@@ -18,6 +18,7 @@ class SampleData(GaussianDistribution):
 @dataclass
 class EstimatedGMM(GaussianDistribution):
     num_modes: int
+    aic: Optional[float]
 
 
 @dataclass
