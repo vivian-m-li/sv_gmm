@@ -19,8 +19,10 @@ class SampleData(GaussianDistribution):
 class EstimatedGMM(GaussianDistribution):
     num_modes: int
     aic: Optional[float]
+    outliers: List[float]
 
 
 @dataclass
 class GMM(GaussianDistribution):
     logL: float  # log-likelihood
+    outliers: Optional[List[float]] = None

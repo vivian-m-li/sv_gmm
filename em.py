@@ -1,4 +1,3 @@
-import sys
 import warnings
 import random
 import numpy as np
@@ -7,7 +6,6 @@ from matplotlib.animation import FuncAnimation
 import matplotlib.cm as cm
 from scipy.stats import norm
 from sklearn.cluster import KMeans
-from sklearn.mixture import GaussianMixture
 from IPython.display import HTML
 from gmm_types import *
 from typing import Tuple, List, Dict
@@ -56,6 +54,7 @@ def plot_distributions(
     title: str = None,
 ) -> None:
     # visualize the data and the generative model
+    # TODO: plot outliers - fix # of points bug
     ux, hx = get_scatter_data(x)
     plt.figure()
     plt.scatter(ux, hx, marker=".", color="blue")
@@ -309,8 +308,38 @@ def identify_outliers(x, mu, vr):
         contributions = norm.pdf(x[i], mu, np.sqrt(vr))
         poss_outlier = np.any(contributions < OUTLIER_THRESHOLD / len(x))
         if poss_outlier:
-            outliers.append(x_i)
+            outliers.append((i, x_i))
     return outliers
+
+
+def em(
+    x: np.ndarray,
+    num_modes: int,
+    n: int,
+    mu: np.ndarray,
+    vr: np.ndarray,
+    p: np.ndarray,
+    gz: np.ndarray,
+):
+    # Expectation step: calculate the posterior probabilities
+    for i in range(len(x)):
+        # For each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
+        gz[i, :] = p * norm.pdf(x[i], mu, np.sqrt(vr))
+        gz[i, :] /= np.sum(gz[i, :])
+
+    # Ensure that each point contributes to the responsibility matrix above some threshold
+    gz[(gz < RESPONSIBILITY_THRESHOLD) | np.isnan(gz)] = RESPONSIBILITY_THRESHOLD
+
+    # Maximization step: estimate gaussian parameters
+    # Given the probability that each point belongs to particular gaussian, calculate the mean, variance, and weight of the gaussian
+    nk = np.sum(gz, axis=0)
+    mu = [(1.0 / nk[j]) * np.sum(gz[:, j] * x) for j in range(num_modes)]
+    vr = [(1.0 / nk[j]) * np.sum(gz[:, j] * (x - mu[j]) ** 2) for j in range(num_modes)]
+    p = nk / n
+
+    # update likelihood
+    logL = calc_log_likelihood(x, mu, vr, p)
+    return GMM(mu, vr, p, logL)
 
 
 def run_em(
@@ -325,40 +354,34 @@ def run_em(
 
     gz = np.zeros((n, len(mu)))
     num_iterations = 15
-    for jj in range(1, num_iterations):
-        # Expectation step: calculate the posterior probabilities
-        for i in range(len(x)):
-            # For each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
-            gz[i, :] = p * norm.pdf(x[i], mu, np.sqrt(vr))
-            gz[i, :] /= np.sum(gz[i, :])
-
-        # Ensure that each point contributes to the responsibility matrix above some threshold
-        gz[(gz < RESPONSIBILITY_THRESHOLD) | np.isnan(gz)] = RESPONSIBILITY_THRESHOLD
-
-        # Maximization step: estimate gaussian parameters
-        # Given the probability that each point belongs to particular gaussian, calculate the mean, variance, and weight of the gaussian
-        nk = np.sum(gz, axis=0)
-        mu = [(1.0 / nk[j]) * np.sum(gz[:, j] * x) for j in range(num_modes)]
-        vr = [
-            (1.0 / nk[j]) * np.sum(gz[:, j] * (x - mu[j]) ** 2)
-            for j in range(num_modes)
-        ]
-        p = nk / n
-
+    for i in range(1, num_iterations):
         # update likelihood
-        logL.append(calc_log_likelihood(x, mu, vr, p))
-        all_params.append(GMM(mu, vr, p, logL[-1]))
+        gmm = em(x, num_modes, n, mu, vr, p, gz)
+        logL.append(gmm.logL)
+        all_params.append(gmm)
+        mu, vr, p = gmm.mu, gmm.vr, gmm.p
 
         # Convergence check
         if abs(logL[-1] - logL[-2]) < 0.05:
             break
 
-        # if jj == num_iterations - 1:
+        # if i == num_iterations - 1:
         #     warnings.warn(
         #         "Maximum number of iterations reached without logL convergence"
         #     )
 
     outliers = identify_outliers(x, mu, vr)
+    outlier_values = [x_i for _, x_i in outliers]
+    n -= len(outliers)
+    if len(outliers) > 0:
+        for i, _ in outliers[::-1]:
+            x = np.delete(x, i)
+            gz = np.delete(gz, i, axis=0)
+        gmm = em(x, num_modes, n, mu, vr, p, gz)
+        logL.append(gmm.logL)
+        gmm.outliers = outlier_values
+        all_params.append(gmm)
+        mu, vr, p = gmm.mu, gmm.vr, gmm.p
 
     if plot:
         # Visualize the final model
@@ -405,7 +428,7 @@ def run_gmm(x: np.ndarray, *, plot: bool = True, pr: bool = True) -> EstimatedGM
         pass
         # Plot the likelihood function over time
         # plot_likelihood([x.logL for x in opt_params])
-        # animate_distribution(x, opt_params)
+        # animate_distribution(x, opt_params) # TODO: will removing outlier points mess up the animation?
 
     return EstimatedGMM(
         mu=final_params.mu,
@@ -413,6 +436,7 @@ def run_gmm(x: np.ndarray, *, plot: bool = True, pr: bool = True) -> EstimatedGM
         p=final_params.p,
         num_modes=num_sv,
         aic=min(aic_vals) if len(aic_vals) > 0 else None,
+        outliers=final_params.outliers,
     )
 
 
