@@ -12,6 +12,9 @@ from IPython.display import HTML
 from gmm_types import *
 from typing import Tuple, List, Dict
 
+OUTLIER_THRESHOLD = 0.01
+RESPONSIBILITY_THRESHOLD = 1e-10
+
 
 def round_lst(lst):
     return [round(x, 2) for x in lst]
@@ -300,6 +303,16 @@ def init_em(
     return n, mu, vr, p, logL
 
 
+def identify_outliers(x, mu, vr):
+    outliers = []
+    for i, x_i in enumerate(x):
+        contributions = norm.pdf(x[i], mu, np.sqrt(vr))
+        poss_outlier = np.any(contributions < OUTLIER_THRESHOLD / len(x))
+        if poss_outlier:
+            outliers.append(x_i)
+    return outliers
+
+
 def run_em(
     x: np.ndarray,  # data
     num_modes: int,
@@ -319,6 +332,9 @@ def run_em(
             gz[i, :] = p * norm.pdf(x[i], mu, np.sqrt(vr))
             gz[i, :] /= np.sum(gz[i, :])
 
+        # Ensure that each point contributes to the responsibility matrix above some threshold
+        gz[(gz < RESPONSIBILITY_THRESHOLD) | np.isnan(gz)] = RESPONSIBILITY_THRESHOLD
+
         # Maximization step: estimate gaussian parameters
         # Given the probability that each point belongs to particular gaussian, calculate the mean, variance, and weight of the gaussian
         nk = np.sum(gz, axis=0)
@@ -328,7 +344,6 @@ def run_em(
             for j in range(num_modes)
         ]
         p = nk / n
-        # TODO: check if p is less than some threshold -- if so, set a warning
 
         # update likelihood
         logL.append(calc_log_likelihood(x, mu, vr, p))
@@ -337,10 +352,13 @@ def run_em(
         # Convergence check
         if abs(logL[-1] - logL[-2]) < 0.05:
             break
+
         # if jj == num_iterations - 1:
         #     warnings.warn(
         #         "Maximum number of iterations reached without logL convergence"
         #     )
+
+    outliers = identify_outliers(x, mu, vr)
 
     if plot:
         # Visualize the final model
