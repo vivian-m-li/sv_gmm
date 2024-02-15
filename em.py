@@ -171,6 +171,17 @@ def plot_param_vs_aic(
     plt.show()
 
 
+def plot_mae(log_n, log_mae):
+    plt.figure()
+    for i, avg_mae in enumerate(log_mae):
+        plt.plot(log_n, avg_mae, color=cm.Set1.colors[i])
+
+    plt.title("Mean Average Error")
+    plt.xlabel("log n")
+    plt.ylabel("log MAE")
+    plt.show()
+
+
 """
 GMM/EM helper functions
 """
@@ -238,7 +249,7 @@ def generate_data(
     num_modes: int = None,
     plot: bool = False,
     pr: bool = True,
-) -> Tuple[np.ndarray[float], np.ndarray, np.ndarray, np.ndarray]:
+) -> SampleData:
     assert mode_means is not None or num_modes is not None
 
     num_modes = len(mode_means) if mode_means is not None else num_modes
@@ -306,7 +317,7 @@ def identify_outliers(x, mu, vr):
     outliers = []
     for i, x_i in enumerate(x):
         contributions = norm.pdf(x[i], mu, np.sqrt(vr))
-        poss_outlier = np.any(contributions < OUTLIER_THRESHOLD / len(x))
+        poss_outlier = np.all(contributions < OUTLIER_THRESHOLD / len(x))
         if poss_outlier:
             outliers.append((i, x_i))
     return outliers
@@ -438,6 +449,34 @@ def run_gmm(x: np.ndarray, *, plot: bool = True, pr: bool = True) -> EstimatedGM
         aic=min(aic_vals) if len(aic_vals) > 0 else None,
         outliers=final_params.outliers,
     )
+
+
+def match_mus(list1, list2):
+    # match items in list1 and list2, where len(list2) >= len(list1)
+    list1 = sorted(list1)
+    list2 = sorted(list2)
+
+    list1.extend(
+        [list1[-1]] * (len(list2) - len(list1))
+    )  # fill in missing values in list1
+
+    pairs = []
+    for mu1, mu2 in zip(list1, list2):
+        pairs.append((mu1, mu2))
+
+    return pairs
+
+
+def calc_mae(true_mus, sample_mus):
+    if len(true_mus) > len(sample_mus):
+        matched_mus = match_mus(sample_mus, true_mus)
+    else:
+        matched_mus = match_mus(true_mus, sample_mus)
+
+    mae = []
+    for mu1, mu2 in matched_mus:
+        mae.append(abs(mu1 - mu2))
+    return sum(mae) / len(mae)
 
 
 if __name__ == "__main__":
