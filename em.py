@@ -12,6 +12,7 @@ from typing import Tuple, List, Dict
 
 OUTLIER_THRESHOLD = 0.01
 RESPONSIBILITY_THRESHOLD = 1e-10
+MODE_WEIGHT_THRESHOLD = 0.05
 
 
 def round_lst(lst):
@@ -54,7 +55,7 @@ def plot_distributions(
     title: str = None,
 ) -> None:
     # visualize the data and the generative model
-    # TODO: plot outliers - fix # of points bug
+    # TODO: plot outliers
     ux, hx = get_scatter_data(x)
     plt.figure()
     plt.scatter(ux, hx, marker=".", color="blue")
@@ -323,6 +324,13 @@ def identify_outliers(x, mu, vr):
     return outliers
 
 
+def remove_outliers(outliers, x, gz):
+    for i, _ in outliers[::-1]:
+        x = np.delete(x, i)
+        gz = np.delete(gz, i, axis=0)
+    return x, gz
+
+
 def em(
     x: np.ndarray,
     num_modes: int,
@@ -350,7 +358,7 @@ def em(
 
     # update likelihood
     logL = calc_log_likelihood(x, mu, vr, p)
-    return GMM(mu, vr, p, logL)
+    return GMM(mu, vr, p, logL), gz
 
 
 def run_em(
@@ -364,31 +372,39 @@ def run_em(
     all_params.append(GMM(mu, vr, p, logL[0]))
 
     gz = np.zeros((n, len(mu)))
-    num_iterations = 15
-    for i in range(1, num_iterations):
+    max_iterations = 15
+    i = 0
+    while i < max_iterations:
         # update likelihood
-        gmm = em(x, num_modes, n, mu, vr, p, gz)
-        logL.append(gmm.logL)
-        all_params.append(gmm)
-        mu, vr, p = gmm.mu, gmm.vr, gmm.p
+        gmm, gz = em(x, num_modes, n, mu, vr, p, gz)
+        if np.any(p < MODE_WEIGHT_THRESHOLD):
+            outliers = identify_outliers(
+                x, gmm.mu, gmm.vr
+            )  # TODO: they're not outliers because they're associated with the mode - how do I identify and remove them or reweight the last mode?
+            x, gz = remove_outliers(outliers, x, gz)
+            print(f"removing {len(outliers)} outliers")
+        else:
+            logL.append(gmm.logL)
+            all_params.append(gmm)
+            mu, vr, p = gmm.mu, gmm.vr, gmm.p
 
-        # Convergence check
-        if abs(logL[-1] - logL[-2]) < 0.05:
-            break
+            # Convergence check
+            if abs(logL[-1] - logL[-2]) < 0.05:
+                break
 
         # if i == num_iterations - 1:
         #     warnings.warn(
         #         "Maximum number of iterations reached without logL convergence"
         #     )
+        i += 1
 
     outliers = identify_outliers(x, mu, vr)
     outlier_values = [x_i for _, x_i in outliers]
     n -= len(outliers)
     if len(outliers) > 0:
-        for i, _ in outliers[::-1]:
-            x = np.delete(x, i)
-            gz = np.delete(gz, i, axis=0)
-        gmm = em(x, num_modes, n, mu, vr, p, gz)
+        print(f"{len(outliers)} outliers")
+        x, gz = remove_outliers(outliers, x, gz)
+        gmm, _ = em(x, num_modes, n, mu, vr, p, gz)
         logL.append(gmm.logL)
         gmm.outliers = outlier_values
         all_params.append(gmm)
