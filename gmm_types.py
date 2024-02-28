@@ -12,12 +12,14 @@ class GaussianDistribution:
 
 @dataclass
 class SampleData(GaussianDistribution):
-    x: np.ndarray[int]
+    x: np.ndarray
+    x_by_mu: np.ndarray
 
 
 @dataclass
 class EstimatedGMM(GaussianDistribution):
     num_modes: int
+    logL: Optional[float]
     aic: Optional[float]
     outliers: List[float]
 

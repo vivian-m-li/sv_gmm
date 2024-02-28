@@ -6,6 +6,7 @@ from matplotlib.animation import FuncAnimation
 import matplotlib.cm as cm
 from scipy.stats import norm
 from sklearn.cluster import KMeans
+from sklearn.metrics import roc_auc_score
 from IPython.display import HTML
 from gmm_types import *
 from typing import Tuple, List, Dict
@@ -143,7 +144,7 @@ def plot_likelihood(logL: np.ndarray[float]) -> None:
 
 
 def plot_param_vs_aic(
-    n: int, gmm_lookup: Dict[float, EstimatedGMM], xlabel: str
+    n: int, gmm_lookup: Dict[float, EstimatedGMM], xlabel: str, logL: bool = False
 ) -> None:
     cmap = cm.Set2.colors
 
@@ -152,7 +153,7 @@ def plot_param_vs_aic(
     colors = []
     for sig, gmm in gmm_lookup.items():
         x_vals.append(sig)
-        y_vals.append(gmm.aic)
+        y_vals.append(gmm.logL if logL else gmm.aic)
         colors.append(cmap[gmm.num_modes])
 
     plt.figure()
@@ -168,18 +169,42 @@ def plot_param_vs_aic(
         loc="lower right",
     )
     plt.xlabel(xlabel)
-    plt.ylabel("aic")
+    plt.ylabel(f"{'logL' if logL else 'aic'}")
     plt.show()
 
 
-def plot_mae(log_n, log_mae):
+def plot_mae(n, mae, *, labels, legend_title):
     plt.figure()
-    for i, avg_mae in enumerate(log_mae):
-        plt.plot(log_n, avg_mae, color=cm.Set1.colors[i])
+    for i, avg_mae in enumerate(mae):
+        plt.loglog(
+            n,
+            avg_mae,
+            color=cm.Set1.colors[i],
+            label=labels[i],
+        )
 
     plt.title("Mean Average Error")
+    plt.legend(title=legend_title)
+    plt.xlabel("n")
+    plt.ylabel("MAE")
+    plt.show()
+
+
+def plot_auc(n, auc, *, labels, legend_title):
+    plt.figure()
+    for i, avg_auc in enumerate(auc):
+        plt.plot(
+            n,
+            avg_auc,
+            color=cm.Set1.colors[i],
+            label=labels[i],
+        )
+
+    plt.title("AUC as Sample Size Increases")
+    plt.legend(title=legend_title)
+    plt.xscale("log")
     plt.xlabel("log n")
-    plt.ylabel("log MAE")
+    plt.ylabel("AUC")
     plt.show()
 
 
@@ -209,6 +234,20 @@ def calc_aic(logL: float, num_modes: int) -> float:
     ) - 1  # mu, vr, and p as the params to predict, - 1 because the last p value is determined by the other(s)
     aic = (2 * num_params) - (2 * logL)
     return aic
+
+
+def calc_auc(data: SampleData):
+    assert len(data.mu) == 2  # can only calculate auc if there are 2 modes
+    larger_mu_idx = data.mu.index(max(data.mu))
+    smaller_mu_idx = 0 if larger_mu_idx == 1 else 1
+    labels = np.concatenate(
+        [
+            np.zeros(len(data.x_by_mu[smaller_mu_idx])),
+            np.ones(len(data.x_by_mu[larger_mu_idx])),
+        ]
+    )
+    auc_score = roc_auc_score(labels, data.x)
+    return auc_score
 
 
 """
@@ -249,7 +288,7 @@ def generate_data(
     weights: np.ndarray[float] = None,
     num_modes: int = None,
     plot: bool = False,
-    pr: bool = True,
+    pr: bool = False,
 ) -> SampleData:
     assert mode_means is not None or num_modes is not None
 
@@ -274,8 +313,11 @@ def generate_data(
     nk = (p * n).astype(int)
 
     x = []
+    x_by_mu = []
     for i in range(num_modes):
-        x.extend(mu[i] + np.random.randn(nk[i]) * np.sqrt(vr[i]))
+        vals = mu[i] + np.random.randn(nk[i]) * np.sqrt(vr[i])
+        x.extend(vals)
+        x_by_mu.append(vals)
 
     title = f"Means = {print_lst(mu)}, Vars = {print_lst(vr)}, Weights = {print_lst(p)}"
     if plot:
@@ -289,7 +331,7 @@ def generate_data(
         )
     elif pr:
         print(title)
-    return SampleData(mu, vr, p, np.array(x))
+    return SampleData(mu, vr, p, np.array(x), np.array(x_by_mu))
 
 
 def init_em(
@@ -339,7 +381,7 @@ def em(
     vr: np.ndarray,
     p: np.ndarray,
     gz: np.ndarray,
-):
+) -> GMM:
     # Expectation step: calculate the posterior probabilities
     for i in range(len(x)):
         # For each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
@@ -358,7 +400,7 @@ def em(
 
     # update likelihood
     logL = calc_log_likelihood(x, mu, vr, p)
-    return GMM(mu, vr, p, logL), gz
+    return GMM(mu, vr, p, logL)
 
 
 def run_em(
@@ -376,35 +418,29 @@ def run_em(
     i = 0
     while i < max_iterations:
         # update likelihood
-        gmm, gz = em(x, num_modes, n, mu, vr, p, gz)
-        if np.any(p < MODE_WEIGHT_THRESHOLD):
-            outliers = identify_outliers(
-                x, gmm.mu, gmm.vr
-            )  # TODO: they're not outliers because they're associated with the mode - how do I identify and remove them or reweight the last mode?
-            x, gz = remove_outliers(outliers, x, gz)
-            print(f"removing {len(outliers)} outliers")
-        else:
-            logL.append(gmm.logL)
-            all_params.append(gmm)
-            mu, vr, p = gmm.mu, gmm.vr, gmm.p
+        gmm = em(x, num_modes, n, mu, vr, p, gz)  # mutates gz
+        logL.append(gmm.logL)
+        all_params.append(gmm)
+        mu, vr, p = gmm.mu, gmm.vr, gmm.p
 
-            # Convergence check
-            if abs(logL[-1] - logL[-2]) < 0.05:
-                break
+        # Convergence check
+        if abs(logL[-1] - logL[-2]) < 0.05:
+            break
 
-        # if i == num_iterations - 1:
-        #     warnings.warn(
-        #         "Maximum number of iterations reached without logL convergence"
-        #     )
+        if i == max_iterations - 1:
+            warnings.warn(
+                "Maximum number of iterations reached without logL convergence"
+            )
         i += 1
+
+    last_logL = all_params[-1].logL
 
     outliers = identify_outliers(x, mu, vr)
     outlier_values = [x_i for _, x_i in outliers]
     n -= len(outliers)
     if len(outliers) > 0:
-        print(f"{len(outliers)} outliers")
         x, gz = remove_outliers(outliers, x, gz)
-        gmm, _ = em(x, num_modes, n, mu, vr, p, gz)
+        gmm = em(x, num_modes, n, mu, vr, p, gz)
         logL.append(gmm.logL)
         gmm.outliers = outlier_values
         all_params.append(gmm)
@@ -419,13 +455,13 @@ def run_em(
     return all_params
 
 
-def run_gmm(x: np.ndarray, *, plot: bool = True, pr: bool = True) -> EstimatedGMM:
+def run_gmm(x: np.ndarray, *, plot: bool = False, pr: bool = False) -> EstimatedGMM:
     if len(x) == 0:
         warnings.warn("Input data is empty")
-        return 0
+        return None
     if len(x) == 1:
         warnings.warn("Input data contains one SV")
-        return 1
+        return None
 
     opt_params = None
     num_sv = 0
@@ -452,9 +488,8 @@ def run_gmm(x: np.ndarray, *, plot: bool = True, pr: bool = True) -> EstimatedGM
         )
 
     if plot:
-        pass
         # Plot the likelihood function over time
-        # plot_likelihood([x.logL for x in opt_params])
+        plot_likelihood([x.logL for x in opt_params])
         # animate_distribution(x, opt_params) # TODO: will removing outlier points mess up the animation?
 
     return EstimatedGMM(
@@ -462,6 +497,7 @@ def run_gmm(x: np.ndarray, *, plot: bool = True, pr: bool = True) -> EstimatedGM
         vr=final_params.vr,
         p=final_params.p,
         num_modes=num_sv,
+        logL=final_params.logL,
         aic=min(aic_vals) if len(aic_vals) > 0 else None,
         outliers=final_params.outliers,
     )
