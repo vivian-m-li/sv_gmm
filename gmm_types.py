@@ -1,6 +1,6 @@
 import numpy as np
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
 @dataclass
@@ -22,9 +22,10 @@ class EstimatedGMM(GaussianDistribution):
     logL: Optional[float]
     aic: Optional[float]
     outliers: List[float]
+    percent_data_removed: float
+    window_size: Tuple[int, int]
 
 
 @dataclass
 class GMM(GaussianDistribution):
     logL: float  # log-likelihood
-    outliers: Optional[List[float]] = None

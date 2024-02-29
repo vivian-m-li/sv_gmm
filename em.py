@@ -8,6 +8,7 @@ from scipy.stats import norm
 from sklearn.cluster import KMeans
 from sklearn.metrics import roc_auc_score
 from IPython.display import HTML
+from collections import Counter
 from gmm_types import *
 from typing import Tuple, List, Dict
 
@@ -208,6 +209,20 @@ def plot_auc(n, auc, *, labels, legend_title):
     plt.show()
 
 
+def plot_gmm_accuracy(num_modes_estimated: List[int], num_modes_expected: int):
+    counts = Counter(num_modes_estimated)
+    accuracy = (counts[num_modes_expected] / len(num_modes_estimated)) * 100
+
+    plt.figure()
+    plt.hist(num_modes_estimated, bins=[0.5, 1.5, 2.5, 3.5], rwidth=0.8, align="mid")
+    plt.title(
+        f"{round(accuracy, 2)}% Accuracy For Estimating {num_modes_expected} Mode(s)"
+    )
+    plt.xlabel("Number of Modes")
+    plt.ylabel("Count")
+    plt.show()
+
+
 """
 GMM/EM helper functions
 """
@@ -356,23 +371,6 @@ def init_em(
     return n, mu, vr, p, logL
 
 
-def identify_outliers(x, mu, vr):
-    outliers = []
-    for i, x_i in enumerate(x):
-        contributions = norm.pdf(x[i], mu, np.sqrt(vr))
-        poss_outlier = np.all(contributions < OUTLIER_THRESHOLD / len(x))
-        if poss_outlier:
-            outliers.append((i, x_i))
-    return outliers
-
-
-def remove_outliers(outliers, x, gz):
-    for i, _ in outliers[::-1]:
-        x = np.delete(x, i)
-        gz = np.delete(gz, i, axis=0)
-    return x, gz
-
-
 def em(
     x: np.ndarray,
     num_modes: int,
@@ -406,7 +404,7 @@ def em(
 def run_em(
     x: np.ndarray,  # data
     num_modes: int,
-    plot: bool,
+    plot: bool = False,
 ) -> List[GMM]:
     all_params: List[GMM] = []
 
@@ -433,19 +431,6 @@ def run_em(
             )
         i += 1
 
-    last_logL = all_params[-1].logL
-
-    outliers = identify_outliers(x, mu, vr)
-    outlier_values = [x_i for _, x_i in outliers]
-    n -= len(outliers)
-    if len(outliers) > 0:
-        x, gz = remove_outliers(outliers, x, gz)
-        gmm = em(x, num_modes, n, mu, vr, p, gz)
-        logL.append(gmm.logL)
-        gmm.outliers = outlier_values
-        all_params.append(gmm)
-        mu, vr, p = gmm.mu, gmm.vr, gmm.p
-
     if plot:
         # Visualize the final model
         plot_distributions(
@@ -455,7 +440,35 @@ def run_em(
     return all_params
 
 
+def identify_outliers(x, mu, vr):
+    outliers = []
+    for i, x_i in enumerate(x):
+        contributions = norm.pdf(x[i], mu, np.sqrt(vr))
+        poss_outlier = np.all(contributions < OUTLIER_THRESHOLD / len(x))
+        if poss_outlier:
+            outliers.append((i, x_i))
+    return outliers
+
+
+def remove_outliers(outliers, x):
+    for i, _ in outliers[::-1]:
+        x = np.delete(x, i)
+    return x
+
+
+def resize_data_window(data: np.ndarray) -> Tuple[np.ndarray, List[int]]:
+    x = data[:]
+    params = run_em(x, 1)
+    mu, vr = params[-1].mu, params[-1].vr
+    outliers = identify_outliers(x, mu, vr)
+    outlier_values = [x_i for _, x_i in outliers]
+    if len(outliers) > 0:
+        x = remove_outliers(outliers, x)
+    return x, outlier_values
+
+
 def run_gmm(x: np.ndarray, *, plot: bool = False, pr: bool = False) -> EstimatedGMM:
+    n = len(x)
     if len(x) == 0:
         warnings.warn("Input data is empty")
         return None
@@ -464,12 +477,14 @@ def run_gmm(x: np.ndarray, *, plot: bool = False, pr: bool = False) -> Estimated
         return None
 
     opt_params = None
+    outliers = None
     num_sv = 0
     aic_vals = []
     if len(x) <= 10:  # small number of SVs detected
         opt_params = run_em(x, 1, plot)
         num_sv = 1
     else:
+        x, outliers = resize_data_window(x)
         all_params = []
         for num_modes in range(1, 4):
             params = run_em(x, num_modes, plot)
@@ -499,7 +514,9 @@ def run_gmm(x: np.ndarray, *, plot: bool = False, pr: bool = False) -> Estimated
         num_modes=num_sv,
         logL=final_params.logL,
         aic=min(aic_vals) if len(aic_vals) > 0 else None,
-        outliers=final_params.outliers,
+        outliers=outliers,
+        percent_data_removed=len(outliers) / n,
+        window_size=(min(x), max(x)),
     )
 
 
