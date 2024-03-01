@@ -13,7 +13,7 @@ class GaussianDistribution:
 @dataclass
 class SampleData(GaussianDistribution):
     x: np.ndarray
-    x_by_mu: np.ndarray
+    x_by_mu: List[List[float]]
 
 
 @dataclass

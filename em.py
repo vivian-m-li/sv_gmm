@@ -7,7 +7,6 @@ import matplotlib.cm as cm
 from scipy.stats import norm
 from sklearn.cluster import KMeans
 from sklearn.metrics import roc_auc_score
-from IPython.display import HTML
 from collections import Counter
 from gmm_types import *
 from typing import Tuple, List, Dict
@@ -55,9 +54,9 @@ def plot_distributions(
     p: np.ndarray[float],
     *,
     title: str = None,
+    outliers: List[float] = [],
 ) -> None:
     # visualize the data and the generative model
-    # TODO: plot outliers
     ux, hx = get_scatter_data(x)
     plt.figure()
     plt.scatter(ux, hx, marker=".", color="blue")
@@ -68,6 +67,8 @@ def plot_distributions(
             linestyle="-",
             color=cm.Set1.colors[i],
         )
+    if outliers is not None:
+        plt.scatter(outliers, len(outliers) * [1], marker=".", color="blue")
     if title is not None:
         plt.title(title)
     plt.xlabel("x value")
@@ -130,9 +131,6 @@ def animate_distribution(x: np.ndarray, gmms: List[GMM]) -> None:
 
     plt.xlabel("x value")
     plt.ylabel("density")
-    plt.title("animation")
-
-    # HTML(anim.to_html5_video())
     plt.show()
 
 
@@ -346,7 +344,7 @@ def generate_data(
         )
     elif pr:
         print(title)
-    return SampleData(mu, vr, p, np.array(x), np.array(x_by_mu))
+    return SampleData(mu, vr, p, np.array(x), x_by_mu)
 
 
 def init_em(
@@ -505,7 +503,7 @@ def run_gmm(x: np.ndarray, *, plot: bool = False, pr: bool = False) -> Estimated
     if plot:
         # Plot the likelihood function over time
         plot_likelihood([x.logL for x in opt_params])
-        # animate_distribution(x, opt_params) # TODO: will removing outlier points mess up the animation?
+        animate_distribution(x, opt_params)
 
     return EstimatedGMM(
         mu=final_params.mu,
@@ -549,5 +547,10 @@ def calc_mae(true_mus, sample_mus):
 
 
 if __name__ == "__main__":
-    x = generate_data(10000, num_modes=3).x
-    run_gmm(x)
+    data = generate_data(
+        10000,
+        mode_means=np.array([10, 20, 27]),
+        mode_variances=np.array([2, 2, 1]),
+        weights=np.array([0.35, 0.45, 0.2]),
+    )
+    run_gmm(data.x, plot=True)
