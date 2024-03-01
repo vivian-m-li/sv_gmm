@@ -465,7 +465,10 @@ def resize_data_window(data: np.ndarray) -> Tuple[np.ndarray, List[int]]:
     return x, outlier_values
 
 
-def run_gmm(x: np.ndarray, *, plot: bool = False, pr: bool = False) -> EstimatedGMM:
+def run_gmm(
+    x: List | np.ndarray, *, plot: bool = False, pr: bool = False
+) -> EstimatedGMM:
+    x = np.array(x, dtype=float)
     n = len(x)
     if len(x) == 0:
         warnings.warn("Input data is empty")
