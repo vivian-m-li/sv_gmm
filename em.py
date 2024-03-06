@@ -243,6 +243,25 @@ def plot_gmm_accuracy(num_modes_estimated: List[int], num_modes_expected: int) -
     plt.show()
 
 
+def get_left_right_coords(y_intercepts):
+    pass
+
+
+def plot_fitted_lines(y_intercepts):
+    xrange = [1000000, 1000200]
+    plt.figure(figsize=(10, 8))
+    for b in y_intercepts:
+        y_values = [x + b for x in xrange]
+        plt.plot(xrange, y_values, "r-")
+    plt.plot(xrange, xrange, "k--", linewidth=5)
+    plt.ylabel("Forward position", fontsize=16)
+    plt.xlabel("Reverse position", fontsize=16)
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.ylim(xrange)
+    plt.show()
+
+
 """
 GMM/EM helper functions
 """
@@ -480,7 +499,7 @@ def run_em(
     all_params.append(GMM(mu, vr, p, logL[0]))
 
     gz = np.zeros((n, len(mu)))
-    max_iterations = 15
+    max_iterations = 30
     i = 0
     while i < max_iterations:
         # update likelihood
@@ -606,9 +625,10 @@ def run_gmm(
 
 if __name__ == "__main__":
     data = generate_data(
-        10000,
-        mode_means=np.array([10, 20, 27]),
+        1000,
+        mode_means=np.array([-7, 3, 10]),
         mode_variances=np.array([2, 2, 1]),
         weights=np.array([0.35, 0.45, 0.2]),
     )
-    run_gmm(data.x, plot=True)
+    plot_fitted_lines(data.x)
+    run_gmm(data.x, plot=False)
