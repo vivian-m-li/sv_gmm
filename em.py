@@ -71,12 +71,13 @@ def plot_distributions(
             (n * p[i] / 4) * norm.pdf(ux, mu[i], np.sqrt(vr[i])),
             linestyle="-",
             color=cm.Set1.colors[i],
+            alpha=0,
         )
     if outliers is not None:
         plt.scatter(outliers, len(outliers) * [1], marker=".", color="blue")
     if title is not None:
         plt.title(title)
-    plt.xlabel("x value")
+    plt.xlabel("y intercept")
     plt.ylabel("density")
     plt.show()
 
@@ -243,11 +244,8 @@ def plot_gmm_accuracy(num_modes_estimated: List[int], num_modes_expected: int) -
     plt.show()
 
 
-def get_left_right_coords(y_intercepts):
-    pass
-
-
-def plot_fitted_lines(y_intercepts):
+def plot_fitted_lines(y_intercepts: List[float]):
+    """Plots the L-R coordinate of each structural variant given their y-intercept."""
     xrange = [1000000, 1000200]
     plt.figure(figsize=(10, 8))
     for b in y_intercepts:
@@ -259,6 +257,18 @@ def plot_fitted_lines(y_intercepts):
     plt.xticks(fontsize=16)
     plt.yticks(fontsize=16)
     plt.ylim(xrange)
+    plt.show()
+
+
+def plot_clusters(x: np.ndarray, kmeans_labels: List[int]):
+    """Plots and colors each data point according to the k-means cluster they're inferred to belong in."""
+    labels = set(kmeans_labels)
+    color_lookup = {label: cm.Set1.colors[i] for i, label in enumerate(labels)}
+    colors = [color_lookup[label] for label in kmeans_labels]
+    plt.figure(figsize=(8, 6))
+    plt.scatter(list(range(len(x))), x, c=colors)
+    plt.xlabel("index")
+    plt.ylabel("x value")
     plt.show()
 
 
@@ -429,6 +439,7 @@ def generate_data(
 def init_em(
     x: np.ndarray,
     num_modes: int,
+    plot: bool,
 ) -> Tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Initializes the expectation-maximization algorithm using k-means clustering on the data.
@@ -436,8 +447,11 @@ def init_em(
     """
     # initial conditions
     kmeans_data = np.ravel(x).astype(float).reshape(-1, 1)
-    kmeans = KMeans(n_init=3, n_clusters=num_modes)
+    kmeans = KMeans(n_init=1, n_clusters=num_modes)
     kmeans.fit(kmeans_data)
+    kmeans_labels = kmeans.labels_
+    # if plot:
+    #     plot_clusters(x, kmeans_labels)
 
     mu = np.sort(np.ravel(kmeans.cluster_centers_))  # initial means
     vr = [np.var(x)] * num_modes  # initial variances
@@ -490,12 +504,12 @@ def run_em(
 ) -> List[GMM]:
     """
     Given a dataset and an estimated number of modes for the GMM, estimates the parameters for each distribution.
-    The algorithm is initialized using the k-means clustering approach, then the EM algorithm is run for up to 15 iterations, or a convergence of the log-likelihood; whichever comes first.
+    The algorithm is initialized using the k-means clustering approach, then the EM algorithm is run for up to 30 iterations, or a convergence of the log-likelihood; whichever comes first.
     Returns the GMM estimated by each iteration of the EM algorithm.
     """
     all_params: List[GMM] = []
 
-    n, mu, vr, p, logL = init_em(x, num_modes)  # initialize parameters
+    n, mu, vr, p, logL = init_em(x, num_modes, plot)  # initialize parameters
     all_params.append(GMM(mu, vr, p, logL[0]))
 
     gz = np.zeros((n, len(mu)))
@@ -566,7 +580,7 @@ def run_gmm(
     x: List | np.ndarray, *, plot: bool = False, pr: bool = False
 ) -> EstimatedGMM:
     """
-    Runs the GMM estimation process to determine the number of structural varaints in a DNA reading frame.
+    Runs the GMM estimation process to determine the number of structural variants in a DNA reading frame.
     x is a list of data points corresponding to the y-intercept of the L-R position calculated after a shift in the genome due to a deletion of greater than 1 base pair.
     If x contains 10 or fewer data points, then 1 structural variant is estimated. If x has more than 10 data points, then outliers are first identified, and the reading frame is resized to exclude these outliers. The EM algorithm is then run for a 1, 2, or 3 mode GMM, and the resulting AIC scores are calculated and compared across the estimated GMMs. The GMM with the lowest AIC score is returned as the optimal fit to the data.
     """
@@ -602,11 +616,12 @@ def run_gmm(
 
     if pr:
         print(
-            f"\nNumber of SVs: {num_sv}\n{print_stats(final_params.logL, final_params.mu, final_params.vr, final_params.p)}"
+            f"\nNumber of SVs: {num_sv}\n{print_stats(final_params.logL, final_params.mu, final_params.vr, final_params.p)}. {len(outliers)} outliers removed."
         )
 
     if plot:
         # Plot the likelihood function over time
+        # TODO: save plots instead of showing
         plot_likelihood([x.logL for x in opt_params])
         animate_distribution(x, opt_params)
 
@@ -626,9 +641,8 @@ def run_gmm(
 if __name__ == "__main__":
     data = generate_data(
         1000,
-        mode_means=np.array([-7, 3, 10]),
-        mode_variances=np.array([2, 2, 1]),
-        weights=np.array([0.35, 0.45, 0.2]),
+        mode_means=np.array([5, 10]),
+        mode_variances=np.array([2, 3]),
+        weights=np.array([0.25, 0.75]),
     )
-    plot_fitted_lines(data.x)
-    run_gmm(data.x, plot=False)
+    run_gmm(data.x, plot=True)
