@@ -8,6 +8,7 @@ from scipy.stats import norm
 from sklearn.cluster import KMeans
 from sklearn.metrics import roc_auc_score
 from collections import Counter
+from pprint import pprint
 from gmm_types import *
 from typing import Tuple, List, Dict
 
@@ -357,20 +358,25 @@ def generate_weights(num_modes: int) -> np.ndarray[float]:
         return np.array([1.0])
 
     while True:
-        random_numbers = [random.uniform(0.1, 0.9) for _ in range(num_modes - 1)]
+        upper_weight = 1 - (num_modes * 0.05)
+        random_numbers = [
+            random.uniform(0.05, upper_weight) for _ in range(num_modes - 1)
+        ]
         last_num = 1 - sum(random_numbers)
-        if last_num >= 0.1:
+        if last_num >= 0.05:
             random_numbers.append(last_num)
             return np.array(random_numbers)
 
 
-def generate_means(num_modes: int) -> np.ndarray[int]:
+def generate_means(num_modes: int, x_range: List[int]) -> np.ndarray[int]:
     """
     Generates means between 0 and 100, inclusive, for multiple modes in a GMM.
     Means are guaranteed to be different values.
     """
     while True:
-        mu = np.array([random.randint(0, 100) for _ in range(num_modes)])
+        mu = np.array(
+            [random.randint(x_range[0], x_range[1]) for _ in range(num_modes)]
+        )
         if len(mu) == len(set(mu)):
             return mu
 
@@ -382,11 +388,13 @@ def generate_data(
     mode_variances: np.ndarray[float] | List[float] = None,
     weights: np.ndarray[float] | List[float] = None,
     num_modes: int = None,
+    x_range: List[int] = [0, 100],
+    vr_range: List[int] = [1, 5],
     plot: bool = False,
     pr: bool = False,
 ) -> SampleData:
     """
-    Generates sample data according to a 1, 2, or 3 mode GMM.
+    Generates sample data.
     """
     assert mode_means is not None or num_modes is not None
 
@@ -394,13 +402,15 @@ def generate_data(
     if mode_means is not None:
         mu = np.array(mode_means, dtype=float)
     else:
-        mu = generate_means(num_modes)
+        mu = generate_means(num_modes, x_range)
     mu = sorted(mu)
 
     if mode_variances is not None:
         vr = np.array(mode_variances, dtype=float)
     else:
-        vr = np.array([random.randint(1, 5) for _ in range(num_modes)])
+        vr = np.array(
+            [random.randint(vr_range[0], vr_range[1]) for _ in range(num_modes)]
+        )
 
     p = (
         np.array([1 / num_modes] * num_modes)
@@ -588,10 +598,31 @@ def run_gmm(
     n = len(x)
     if len(x) == 0:
         warnings.warn("Input data is empty")
-        return None
+        return EstimatedGMM(
+            mu=[],
+            vr=[],
+            p=[],
+            num_modes=0,
+            logL=0,
+            aic=0,
+            outliers=[],
+            percent_data_removed=0,
+            window_size=(0, 0),
+        )
     if len(x) == 1:
         warnings.warn("Input data contains one SV")
-        return None
+        singleton = x[0]
+        return EstimatedGMM(
+            mu=[singleton],
+            vr=[0],
+            p=[1],
+            num_modes=1,
+            logL=0,
+            aic=0,
+            outliers=[],
+            percent_data_removed=0,
+            window_size=(singleton, singleton),
+        )
 
     opt_params = None
     outliers = None
@@ -621,7 +652,6 @@ def run_gmm(
 
     if plot:
         # Plot the likelihood function over time
-        # TODO: save plots instead of showing
         plot_likelihood([x.logL for x in opt_params])
         animate_distribution(x, opt_params)
 
@@ -639,10 +669,5 @@ def run_gmm(
 
 
 if __name__ == "__main__":
-    data = generate_data(
-        1000,
-        mode_means=np.array([5, 10]),
-        mode_variances=np.array([2, 3]),
-        weights=np.array([0.25, 0.75]),
-    )
-    run_gmm(data.x, plot=True)
+    data = generate_data(n=500, num_modes=8, x_range=[0, 500], vr_range=[1, 10])
+    gmm = run_gmm(data.x, plot=False)
