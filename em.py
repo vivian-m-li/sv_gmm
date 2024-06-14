@@ -12,9 +12,13 @@ from pprint import pprint
 from gmm_types import *
 from typing import Tuple, List, Dict
 
+LOG_LIKELIHOOD_THRESHOLD = 0.05
 OUTLIER_THRESHOLD = 0.01
 RESPONSIBILITY_THRESHOLD = 1e-10
 MODE_WEIGHT_THRESHOLD = 0.05
+VARIANCE_THRESHOLD = 10
+
+COLORS = list(cm.Set1.colors) + list(cm.Set2.colors)
 
 
 def round_lst(lst: List[float]) -> List[float]:
@@ -71,7 +75,7 @@ def plot_distributions(
             ux,
             (n * p[i] / 4) * norm.pdf(ux, mu[i], np.sqrt(vr[i])),
             linestyle="-",
-            color=cm.Set1.colors[i],
+            color=COLORS[i],
             alpha=0,
         )
     if outliers is not None:
@@ -85,6 +89,8 @@ def plot_distributions(
 
 def calc_y_vals(ux: np.ndarray, n: int, gmm: GMM, i: int) -> List[float]:
     """Calculates the density for each x value in the GMM."""
+    if i >= len(gmm.mu):
+        return [0] * len(ux)
     return (n * gmm.p[i] / 4) * norm.pdf(ux, gmm.mu[i], np.sqrt(gmm.vr[i]))
 
 
@@ -95,7 +101,7 @@ class UpdateDist:
         self.ax = ax
         self.x = x
         self.gmms = gmms
-        self.num_modes = len(gmms[0].mu)
+        self.num_modes = max([len(gmm.mu) for gmm in gmms])
         self.n = len(x)
 
         self.ux, self.hx = get_scatter_data(x)
@@ -107,7 +113,7 @@ class UpdateDist:
                 [],
                 [],
                 linestyle="-",
-                color=cm.Set1.colors[i],
+                color=COLORS[i],
             )
             self.lines = self.lines + (line,)
 
@@ -120,7 +126,7 @@ class UpdateDist:
                 self.ux,
                 calc_y_vals(self.ux, self.n, self.gmms[0], i),
                 linestyle="-",
-                color=cm.Set1.colors[i],
+                color=COLORS[i],
             )
             lines = lines + (line,)
         self.lines = lines
@@ -198,7 +204,7 @@ def plot_mae(
         plt.loglog(
             n,
             avg_mae,
-            color=cm.Set1.colors[i],
+            color=COLORS[i],
             label=labels[i],
         )
 
@@ -218,7 +224,7 @@ def plot_auc(
         plt.plot(
             n,
             avg_auc,
-            color=cm.Set1.colors[i],
+            color=COLORS[i],
             label=labels[i],
         )
 
@@ -264,7 +270,7 @@ def plot_fitted_lines(y_intercepts: List[float]):
 def plot_clusters(x: np.ndarray, kmeans_labels: List[int]):
     """Plots and colors each data point according to the k-means cluster they're inferred to belong in."""
     labels = set(kmeans_labels)
-    color_lookup = {label: cm.Set1.colors[i] for i, label in enumerate(labels)}
+    color_lookup = {label: COLORS[i] for i, label in enumerate(labels)}
     colors = [color_lookup[label] for label in kmeans_labels]
     plt.figure(figsize=(8, 6))
     plt.scatter(list(range(len(x))), x, c=colors)
@@ -412,13 +418,8 @@ def generate_data(
             [random.randint(vr_range[0], vr_range[1]) for _ in range(num_modes)]
         )
 
-    p = (
-        np.array([1 / num_modes] * num_modes)
-        if weights is None
-        else np.array(weights, dtype=float)
-    )
     if weights is not None:
-        p = weights
+        p = np.array(weights, dtype=float)
     else:
         p = generate_weights(num_modes)
 
@@ -476,6 +477,38 @@ def init_em(
     return n, mu, vr, p, logL
 
 
+def calc_responsibility(
+    x: np.ndarray,
+    n: int,
+    mu: np.ndarray,
+    vr: np.ndarray,
+    p: np.ndarray,
+):
+    """Calculates the responsibility matrix for each point/mode."""
+    gz = np.zeros((n, len(mu)))
+    for i in range(len(x)):
+        # For each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
+        gz[i, :] = p * norm.pdf(x[i], mu, np.sqrt(vr))
+        gz[i, :] /= np.sum(gz[i, :])
+    return gz
+
+
+def assign_values_to_modes(
+    x: np.ndarray,
+    num_modes: int,
+    mu: np.ndarray,
+    vr: np.ndarray,
+    p: np.ndarray,
+):
+    gz = calc_responsibility(x, len(x), mu, vr, p)
+    assignments = np.argmax(gz, axis=1)
+    x_by_mode = [[] for _ in range(num_modes)]
+    for i, mode in enumerate(assignments):
+        x_by_mode[mode].append(x[i])
+    x_by_mode = [np.array(data_points) for data_points in x_by_mode]
+    return x_by_mode
+
+
 def em(
     x: np.ndarray,
     num_modes: int,
@@ -483,14 +516,10 @@ def em(
     mu: np.ndarray,
     vr: np.ndarray,
     p: np.ndarray,
-    gz: np.ndarray,
 ) -> GMM:
     """Performs one iteration of the expectation-maximization algorithm."""
     # Expectation step: calculate the posterior probabilities
-    for i in range(len(x)):
-        # For each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
-        gz[i, :] = p * norm.pdf(x[i], mu, np.sqrt(vr))
-        gz[i, :] /= np.sum(gz[i, :])
+    gz = calc_responsibility(x, n, mu, vr, p)
 
     # Ensure that each point contributes to the responsibility matrix above some threshold
     gz[(gz < RESPONSIBILITY_THRESHOLD) | np.isnan(gz)] = RESPONSIBILITY_THRESHOLD
@@ -500,7 +529,7 @@ def em(
     nk = np.sum(gz, axis=0)
     mu = [(1.0 / nk[j]) * np.sum(gz[:, j] * x) for j in range(num_modes)]
     vr = [(1.0 / nk[j]) * np.sum(gz[:, j] * (x - mu[j]) ** 2) for j in range(num_modes)]
-    p = nk / n
+    p = list(nk / n)
 
     # update likelihood
     logL = calc_log_likelihood(x, mu, vr, p)
@@ -522,18 +551,17 @@ def run_em(
     n, mu, vr, p, logL = init_em(x, num_modes, plot)  # initialize parameters
     all_params.append(GMM(mu, vr, p, logL[0]))
 
-    gz = np.zeros((n, len(mu)))
     max_iterations = 30
     i = 0
     while i < max_iterations:
         # update likelihood
-        gmm = em(x, num_modes, n, mu, vr, p, gz)  # mutates gz
+        gmm = em(x, num_modes, n, mu, vr, p)
         logL.append(gmm.logL)
         all_params.append(gmm)
         mu, vr, p = gmm.mu, gmm.vr, gmm.p
 
         # Convergence check
-        if abs(logL[-1] - logL[-2]) < 0.05:
+        if abs(logL[-1] - logL[-2]) < LOG_LIKELIHOOD_THRESHOLD:
             break
 
         if i == max_iterations - 1:
@@ -586,9 +614,7 @@ def resize_data_window(data: np.ndarray) -> Tuple[np.ndarray, List[int]]:
     return x, outlier_values
 
 
-def run_gmm(
-    x: List | np.ndarray, *, plot: bool = False, pr: bool = False
-) -> EstimatedGMM:
+def run_gmm(x: List | np.ndarray, prev_logL: Optional[float] = None) -> EstimatedGMM:
     """
     Runs the GMM estimation process to determine the number of structural variants in a DNA reading frame.
     x is a list of data points corresponding to the y-intercept of the L-R position calculated after a shift in the genome due to a deletion of greater than 1 base pair.
@@ -597,7 +623,6 @@ def run_gmm(
     x = np.array(x, dtype=float)
     n = len(x)
     if len(x) == 0:
-        warnings.warn("Input data is empty")
         return EstimatedGMM(
             mu=[],
             vr=[],
@@ -610,7 +635,6 @@ def run_gmm(
             window_size=(0, 0),
         )
     if len(x) == 1:
-        warnings.warn("Input data contains one SV")
         singleton = x[0]
         return EstimatedGMM(
             mu=[singleton],
@@ -625,17 +649,17 @@ def run_gmm(
         )
 
     opt_params = None
-    outliers = None
+    outliers = []
     num_sv = 0
     aic_vals = []
     if len(x) <= 10:  # small number of SVs detected
-        opt_params = run_em(x, 1, plot)
+        opt_params = run_em(x, 1)
         num_sv = 1
     else:
         x, outliers = resize_data_window(x)
         all_params = []
         for num_modes in range(1, 4):
-            params = run_em(x, num_modes, plot)
+            params = run_em(x, num_modes)
             aic = calc_aic(params[-1].logL, num_modes)
             all_params.append(params)
             aic_vals.append(aic)
@@ -645,29 +669,131 @@ def run_gmm(
 
     final_params = opt_params[-1]
 
-    if pr:
-        print(
-            f"\nNumber of SVs: {num_sv}\n{print_stats(final_params.logL, final_params.mu, final_params.vr, final_params.p)}. {len(outliers)} outliers removed."
+    mus = []
+    vrs = []
+    ps = []
+    added_params = [[] for _ in range(num_sv)]
+
+    x_by_mode = assign_values_to_modes(
+        x, num_sv, final_params.mu, final_params.vr, final_params.p
+    )
+
+    for i, (mode_mu, mode_vr, mode_p) in enumerate(
+        zip(final_params.mu, final_params.vr, final_params.p)
+    ):
+        if mode_vr > VARIANCE_THRESHOLD and (
+            prev_logL is None
+            or abs(prev_logL - final_params.logL) > LOG_LIKELIHOOD_THRESHOLD
+        ):
+            gmm, params = run_gmm(x_by_mode[i], final_params.logL)
+            mus.append(gmm.mu)
+            vrs.append(gmm.vr)
+            ps.append(gmm.p)
+            added_params[i] = params
+            if len(gmm.outliers) > 0:
+                outliers.extend(gmm.outliers)
+        else:
+            mus.append([mode_mu])
+            vrs.append([mode_vr])
+            ps.append([mode_p])
+            added_params[i] = [
+                GMM(
+                    mu=[mode_mu],
+                    vr=[mode_vr],
+                    p=[1],
+                    logL=calc_log_likelihood(x_by_mode[i], [mode_mu], [mode_vr], [1]),
+                )
+            ]
+
+    # remove outliers from dataset
+    x = x[np.isin(x, outliers, invert=True)]
+
+    final_mu = []
+    final_vr = []
+    final_p = []
+    for i in range(num_sv):
+        final_mu.extend(mus[i])
+        final_vr.extend(vrs[i])
+        if prev_logL is None:
+            final_p.append([p_i * final_params.p[i] for p_i in ps[i]])
+        else:
+            final_p.append(ps[i])
+    final_p = [i for lst in final_p for i in lst]
+
+    for i in range(max([len(params) for params in added_params])):
+        combined_params = []
+        for params in added_params:
+            idx = -1 if i >= len(params) else i
+            combined_params.append(params[idx])
+
+        combined_mus = [mu for gmm in combined_params for mu in gmm.mu]
+        combined_vrs = [vr for gmm in combined_params for vr in gmm.vr]
+        combined_ps = [
+            p * final_params.p[j]
+            for j, gmm in enumerate(combined_params)
+            for p in gmm.p
+        ]
+        opt_params.append(
+            GMM(
+                mu=combined_mus,
+                vr=combined_vrs,
+                p=combined_ps,
+                logL=calc_log_likelihood(x, combined_mus, combined_vrs, combined_ps),
+            )
         )
 
-    if plot:
-        # Plot the likelihood function over time
-        plot_likelihood([x.logL for x in opt_params])
-        animate_distribution(x, opt_params)
-
-    return EstimatedGMM(
-        mu=final_params.mu,
-        vr=final_params.vr,
-        p=final_params.p,
-        num_modes=num_sv,
-        logL=final_params.logL,
-        aic=min(aic_vals) if len(aic_vals) > 0 else None,
+    logL = calc_log_likelihood(x, final_mu, final_vr, final_p)
+    final_gmm = EstimatedGMM(
+        mu=final_mu,
+        vr=final_vr,
+        p=final_p,
+        num_modes=len(final_mu),
+        logL=logL,
+        aic=calc_aic(logL, len(final_mu)),
         outliers=outliers,
         percent_data_removed=len(outliers) / n,
         window_size=(min(x), max(x)),
     )
 
+    return final_gmm, opt_params
+
+
+def estimate_structural_variants(
+    x: List | np.ndarray, *, plot: bool = False, pr: bool = False
+) -> EstimatedGMM:
+    gmm, params = run_gmm(x)
+    pprint(gmm)
+
+    # Plot the likelihood function over time
+    if plot:
+        plot_likelihood([x.logL for x in params])
+        animate_distribution(x, params)
+    if pr:
+        print(
+            f"\nNumber of SVs: {gmm.num_modes}\n{print_stats(gmm.logL, gmm.mu, gmm.vr, gmm.p)}. {len(gmm.outliers)} outliers removed."
+        )
+    return gmm
+
 
 if __name__ == "__main__":
-    data = generate_data(n=500, num_modes=8, x_range=[0, 500], vr_range=[1, 10])
-    gmm = run_gmm(data.x, plot=False)
+    data = generate_data(n=500, num_modes=9, x_range=[0, 1000], vr_range=[1, 10])
+    # data = generate_data(n=100, num_modes=3, x_range=[0, 500], vr_range=[1, 10])
+
+    # data = generate_data(
+    #     n=500,
+    #     mode_means=[34, 50, 399, 468],
+    #     mode_variances=[4, 9, 1, 4],
+    #     weights=[0.05543711, 0.26963795, 0.31906844, 0.35585649],
+    # )
+    # x = np.append(data.x, 200)
+    # x = np.append(x, 1000)
+
+    # data = generate_data(
+    #     n=100,
+    #     mode_means=[34, 50, 80, 468],
+    #     mode_variances=[4, 9, 1, 4],
+    #     weights=[0.05543711, 0.26963795, 0.31906844, 0.35585649],
+    # )
+
+    print(data.mu, data.vr, data.p)
+    gmm = estimate_structural_variants(data.x, plot=True)
