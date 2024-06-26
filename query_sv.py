@@ -1,15 +1,16 @@
+import os
 import sys
 import subprocess
 import argparse
 import pandas as pd
-from parse_raw_data import *
 
 STIX_SCRIPT = "./query_stix.sh"
+OUTPUT_FILE = "stix_output.txt"
 
 
-def write_txt_to_csv(filename: str):
+def txt_to_df(filename: str):
     column_names = ["l_chr", "l_start", "l_end", "r_chr", "r_start", "r_end", "type"]
-    df = pd.read_csv(f"{filename}.txt", sep="\s+", names=column_names)
+    df = pd.read_csv(filename, sep="\s+", names=column_names)
     return df
 
 
@@ -26,9 +27,9 @@ def parse_input(input: str) -> str:
 
 def query_stix(l: str, r: str):
     result = subprocess.run(
-        ["bash", STIX_SCRIPT] + [l, r], capture_output=True, text=True
+        ["bash", STIX_SCRIPT] + [l, r, OUTPUT_FILE], capture_output=True, text=True
     )
-    df = write_txt_to_csv("stix_output.txt")
+    df = txt_to_df(OUTPUT_FILE)
     squiggle_data = df[["l_start", "r_end"]]
     # TODO: now that we've processed the df, pass into squiggle code
 
@@ -52,6 +53,8 @@ def main():
     l = parse_input(args.l)
     r = parse_input(args.r)
     query_stix(l, r)
+
+    os.remove(OUTPUT_FILE)
 
 
 if __name__ == "__main__":
