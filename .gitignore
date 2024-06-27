@@ -1,2 +1,4 @@
 /__pycache__
 .venv
+stix_output
+plots
