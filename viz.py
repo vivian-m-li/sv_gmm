@@ -8,7 +8,7 @@ from typing import Optional, List
 
 # First Visualization with ALL points
 def bokeh_scatterplot(
-    arrays_list: List[np.ndarray],
+    data: List[np.ndarray],
     *,
     file_name: str,
     lower_bound: int,
@@ -21,12 +21,8 @@ def bokeh_scatterplot(
 ):
     """Creates a scatterplot with an SV region polygon using Bokeh, taking a list of arrays as input."""
 
-    # Prepare the output
-    output_file(
-        f"{file_name}_SVregion.html"
-    )  # Display plots inline in a Jupyter notebook. Use output_file() for standalone HTML.
+    output_file(f"{file_name}_SVregion.html")
 
-    # Create a Bokeh figure with the given dimensions
     p = figure(
         width=800,
         height=600,
@@ -44,49 +40,41 @@ def bokeh_scatterplot(
             [R - 2 * sig, R + l, R + l + 2 * sig, R],
             color=gg,
             alpha=0.5,
-        )  # alpha for transparency
+        )
 
-    # Iterate through list of arrays
-    for array in arrays_list:
-        # Ensure array is not empty and has enough elements to reshape
-        if array.size > 0:
-            # Reshape the array to (x, y) points
-            points = array.reshape(-1, 2)
+    for sample_data in data:
+        if sample_data.size > 0:
+            # Reshape pairs of points in each row
+            points = sample_data.reshape(-1, 2)
 
-            # Extract x and y coordinates
+            # Extract x and y coordinates (left-start and right-end of the paired end)
             x = points[:, 0]
             y = points[:, 1]
 
-            # Create a ColumnDataSource for each line segment/point group
             source = ColumnDataSource(data=dict(x=x, y=y))
 
-            # Plot the points and line segment
             p.line("x", "y", source=source, line_width=2)
             p.scatter("x", "y", source=source, size=10, fill_color="blue")
 
-    # Add grid for better readability
     p.grid.grid_line_alpha = 0.3
-
     save(p)
 
 
 # Second Viz deviations from the line
 def plot_deviation_bokeh(
-    data,
+    data: List[np.ndarray],
     *,
-    file_name,
-    L,
-    l,
-    R,
-    lower_x_lim=130,
-    upper_x_lim=600,
-    lower_y_lim=-400,
-    upper_y_lim=200,
+    file_name: str,
+    L: int,
+    l: int,
+    R: int,
+    lower_x_lim: int = 130,
+    upper_x_lim: int = 600,
+    lower_y_lim: int = -400,
+    upper_y_lim: int = 200,
 ):
 
-    output_file(
-        f"{file_name}_deviations.html"
-    )  # Render plot inline in Jupyter notebook, remove if not using notebooks
+    output_file(f"{file_name}_deviations.html")
     p = figure(
         x_range=(lower_x_lim, upper_x_lim),
         y_range=(lower_y_lim, upper_y_lim),
@@ -95,8 +83,7 @@ def plot_deviation_bokeh(
     p.width = 600
     p.height = 400
 
-    ux = np.array([])  # Array to store unique x values
-
+    ux = np.array([])
     for yi in data:
         ux = np.union1d(ux, yi[0::2])  # Collect unique x values
 
@@ -120,7 +107,6 @@ def plot_deviation_bokeh(
         line_dash="dashed",
         line_width=2,
     )
-
     save(p)
 
 
@@ -136,7 +122,6 @@ def get_unique_x_values(data):
 def filter_and_plot_sequences_bokeh(
     y: List[np.ndarray], *, file_name: str, L: int, l: int, R: int, sig: int = 50
 ):
-
     ux = get_unique_x_values(y)
 
     output_file(f"{file_name}_sequences.html")
@@ -151,7 +136,7 @@ def filter_and_plot_sequences_bokeh(
     # Background rectangle
     p.quad(top=sig, bottom=-sig, left=0, right=max(ux) - min(ux), color="#F0F0F0")
 
-    # Plot y=x line
+    # y=x line
     p.line(ux - min(ux), ux - ux, line_dash="dashed", line_width=1, color="black")
 
     mb = np.zeros((len(y), 4))  # [ #pts | length | intercept | sv-flag]
@@ -181,22 +166,17 @@ def filter_and_plot_sequences_bokeh(
 
                 if sdl >= 3:
                     p.line(xp, yp, line_width=2, color=colors[i % len(colors)])
-                    p.scatter(
-                        xp, yp, size=6, color=colors[i % len(colors)], alpha=0.6
-                    )  # Add points
+                    p.scatter(xp, yp, size=6, color=colors[i % len(colors)], alpha=0.6)
                     mb[i, 3] = 1
                 else:
-                    p.line(xp, yp, line_width=2, color="#999999")  # Gray
-                    p.scatter(xp, yp, size=6, color="#999999", alpha=0.6)  # Gray points
+                    p.line(xp, yp, line_width=2, color="#999999")
+                    p.scatter(xp, yp, size=6, color="#999999", alpha=0.6)
             else:
                 mb[i, :] = [-np.inf, len(z) // 2, -np.inf, 0]
-                p.line(z[0::2], z[1::2], line_width=2, color="#999999")  # Gray
-                p.scatter(
-                    z[0::2], z[1::2], size=6, color="#999999", alpha=0.6
-                )  # Gray points
+                p.line(z[0::2], z[1::2], line_width=2, color="#999999")
+                p.scatter(z[0::2], z[1::2], size=6, color="#999999", alpha=0.6)
 
     p.grid.grid_line_alpha = 0.3
-
     save(p)
 
     return mb
@@ -208,8 +188,6 @@ def plot_fitted_lines_bokeh(
 ):
 
     output_file(f"{file_name}_fitted_lines.html")
-
-    # Create a new plot with a title and axis labels
     p = figure(
         title="Fitted Lines Plot",
         x_axis_label="Reverse position",
@@ -238,29 +216,20 @@ def plot_fitted_lines_bokeh(
             start_x = L - l
             start_y = (L - l) + row[2]
             p.line([start_x, L], [start_y, L + row[2]], line_width=2, color="red")
-
-            # Add a point at the start of the line
             p.scatter([start_x], [start_y], size=2, color="red", alpha=0.6)
-
-            # Append the start point to the list
             start_points.append((start_x, start_y))
 
-    # Convert start_points list to a NumPy array
     start_points_array = np.array(start_points)
 
-    # Add a dashed black line
-    p.line([L - l, L], [R, R + l], line_width=5, color="black", line_dash="dashed")
-
-    # Set the tick label font size
+    p.line(
+        [L - l, L], [R, R + l], line_width=5, color="black", line_dash="dashed"
+    )  # y=x dashed line
     p.xaxis.major_label_text_font_size = "16pt"
     p.yaxis.major_label_text_font_size = "16pt"
-
-    # Set the plot range
     p.x_range.start = L - l
     p.x_range.end = L
     p.y_range.start = R
     p.y_range.end = R + l
-
     save(p)
 
     return start_points_array
