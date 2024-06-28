@@ -2,16 +2,28 @@ import os
 import sys
 import subprocess
 import argparse
+import csv
 import pandas as pd
 from viz import *
+from em import run_gmm
 
 STIX_SCRIPT = "./query_stix.sh"
 FILE_DIR = "stix_output"
+PROCESSED_FILE_DIR = "processed_stix_output"
 PLOT_DIR = "plots"
 
 
 def txt_to_df(filename: str):
-    column_names = ["l_chr", "l_start", "l_end", "r_chr", "r_start", "r_end", "type"]
+    column_names = [
+        "file_id",
+        "l_chr",
+        "l_start",
+        "l_end",
+        "r_chr",
+        "r_start",
+        "r_end",
+        "type",
+    ]
     df = pd.read_csv(filename, sep="\s+", names=column_names)
     return df
 
@@ -32,28 +44,40 @@ def parse_input(input: str) -> str:
 
 
 def query_stix(l: str, r: str):
-    if not os.path.exists(FILE_DIR):
-        os.mkdir(FILE_DIR)
+    for directory in [FILE_DIR, PROCESSED_FILE_DIR, PLOT_DIR]:
+        if not os.path.exists(directory):
+            os.mkdir(directory)
 
-    file_name=f"{l}_{r}"
+    file_name = f"{l}_{r}"
     output_file = f"{FILE_DIR}/{file_name}.txt"
-    
+
     if not os.path.isfile(output_file):
         subprocess.run(
             ["bash", STIX_SCRIPT] + [l, r, output_file], capture_output=True, text=True
         )
     df = txt_to_df(output_file)
-    squiggle_data = df[["l_start", "r_end"]].to_numpy()
+
+    grouped = df.groupby("file_id")
+    squiggle_data = []
+    left_squiggle_data = []
+    for _, group in grouped:
+        l_starts = group["l_start"].tolist()
+        r_ends = group["r_end"].tolist()
+        sv_evidence = [item for pair in zip(l_starts, r_ends) for item in pair]
+        squiggle_data.append(np.array(sv_evidence))
+        left_squiggle_data.append(np.array(l_starts))
 
     if len(squiggle_data) == 0:
         print("No structural variants found in this region.")
         return
-    
-    if not os.path.exists(PLOT_DIR):
-        os.mkdir(PLOT_DIR)
+
+    with open(f"{PROCESSED_FILE_DIR}/{file_name}.csv", "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerows(squiggle_data)
 
     L = int(l.split("-")[1])
     R = int(r.split("-")[1])
+
     bokeh_scatterplot(
         squiggle_data,
         file_name=f"{PLOT_DIR}/{file_name}",
@@ -63,11 +87,14 @@ def query_stix(l: str, r: str):
         l=450,
         R=R,
     )
-    # TODO: this function takes in a file
-    mb = filter_and_plot_sequences_bokeh()
-    intercepts = plot_fitted_lines_bokeh(mb, L=L, l=450, R=R)
-
-    # os.remove(output_file)
+    mb = filter_and_plot_sequences_bokeh(
+        squiggle_data, file_name=f"{PLOT_DIR}/{file_name}", L=L, l=450, R=R, sig=50
+    )
+    intercepts = plot_fitted_lines_bokeh(
+        mb, file_name=f"{PLOT_DIR}/{file_name}", L=L, l=450, R=R, sig=50
+    )
+    points = [np.array(i)[1] for i in intercepts if len(i) > 1]
+    gmm = run_gmm(points)
 
 
 def main():

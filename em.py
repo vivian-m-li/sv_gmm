@@ -10,7 +10,7 @@ from sklearn.metrics import roc_auc_score
 from collections import Counter
 from pprint import pprint
 from gmm_types import *
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Union
 
 OUTLIER_THRESHOLD = 0.01
 RESPONSIBILITY_THRESHOLD = 1e-10
@@ -22,7 +22,7 @@ def round_lst(lst: List[float]) -> List[float]:
     return [round(x, 2) for x in lst]
 
 
-def print_lst(lst: List[str | float]) -> str:
+def print_lst(lst: List[Union[str, float]]) -> str:
     """Formats and prints a list of items."""
     return ", ".join([str(x) for x in round_lst(lst)])
 
@@ -384,9 +384,9 @@ def generate_means(num_modes: int, x_range: List[int]) -> np.ndarray[int]:
 def generate_data(
     n: int,  # sample size
     *,
-    mode_means: np.ndarray[float] | List[float] = None,
-    mode_variances: np.ndarray[float] | List[float] = None,
-    weights: np.ndarray[float] | List[float] = None,
+    mode_means: Union[np.ndarray[float], List[float]] = None,
+    mode_variances: Union[np.ndarray[float], List[float]] = None,
+    weights: Union[np.ndarray[float], List[float]] = None,
     num_modes: int = None,
     x_range: List[int] = [0, 100],
     vr_range: List[int] = [1, 5],
@@ -587,7 +587,7 @@ def resize_data_window(data: np.ndarray) -> Tuple[np.ndarray, List[int]]:
 
 
 def run_gmm(
-    x: List | np.ndarray, *, plot: bool = False, pr: bool = False
+    x: Union[List[int], np.ndarray], *, plot: bool = False, pr: bool = False
 ) -> EstimatedGMM:
     """
     Runs the GMM estimation process to determine the number of structural variants in a DNA reading frame.

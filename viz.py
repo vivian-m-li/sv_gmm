@@ -3,12 +3,12 @@ from bokeh.models import ColumnDataSource
 from bokeh.models import Range1d
 from bokeh.models import HoverTool
 import numpy as np
-from typing import Optional
+from typing import Optional, List
 
 
 # First Visualization with ALL points
 def bokeh_scatterplot(
-    arrays_list: np.ndarray,
+    arrays_list: List[np.ndarray],
     *,
     file_name: str,
     lower_bound: int,
@@ -124,8 +124,6 @@ def plot_deviation_bokeh(
     save(p)
 
 
-
-
 def get_unique_x_values(data):
     all_x_values = []
     for array in data:
@@ -135,7 +133,9 @@ def get_unique_x_values(data):
 
 
 # Third Viz with 3 + more point
-def filter_and_plot_sequences_bokeh(file_name, y, L, l, R, sig=50):
+def filter_and_plot_sequences_bokeh(
+    y: List[np.ndarray], *, file_name: str, L: int, l: int, R: int, sig: int = 50
+):
 
     ux = get_unique_x_values(y)
 
@@ -171,10 +171,9 @@ def filter_and_plot_sequences_bokeh(file_name, y, L, l, R, sig=50):
         z = z[~np.isnan(z)]
 
         if len(z) > 0:
-            b = np.mean(z[1::2]) - np.mean(z[0::2])
+            b = int(np.mean(z[1::2]) - np.mean(z[0::2]))
             z[1::2] -= z[0::2] + b
             z[0::2] -= min(ux)
-
             if len(z) >= 6:
                 xp, yp = z[0::2], z[1::2]
                 sdl = np.sum(np.abs(yp) <= sig)
@@ -204,9 +203,11 @@ def filter_and_plot_sequences_bokeh(file_name, y, L, l, R, sig=50):
 
 
 # Viz 4 with the intercepts
-def plot_fitted_lines_bokeh(file_name, mb, L, l, R, sig):
+def plot_fitted_lines_bokeh(
+    mb: List[np.ndarray], *, file_name: str, L: int, l: int, R: int, sig: int
+):
 
-    output_file(f"{file_name}_sequences.html")
+    output_file(f"{file_name}_fitted_lines.html")
 
     # Create a new plot with a title and axis labels
     p = figure(
@@ -230,9 +231,7 @@ def plot_fitted_lines_bokeh(file_name, mb, L, l, R, sig):
         line_color="grey",
     )
 
-    # Initialize a list to store start points of lines
     start_points = []
-
     # Loop through each row in mb to add lines and points at the start of each line
     for row in mb:
         if row[3] == 1:  # Assuming the 4th column (index 3) indicates 'on target'
@@ -264,5 +263,4 @@ def plot_fitted_lines_bokeh(file_name, mb, L, l, R, sig):
 
     save(p)
 
-    # Return the NumPy array of start points
     return start_points_array

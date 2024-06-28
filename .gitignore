@@ -1,4 +1,5 @@
 /__pycache__
 .venv
 stix_output
+processed_stix_output
 plots
