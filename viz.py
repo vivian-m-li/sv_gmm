@@ -4,6 +4,28 @@ from bokeh.models import Range1d
 from bokeh.models import HoverTool
 import numpy as np
 from typing import Optional, List
+import matplotlib.cm as cm
+
+
+def sv_viz(data: List[np.ndarray], *, file_name: str):
+    p = figure(width=800, height=600)
+    colors = cm.Set1.colors
+    for i, sample_data in enumerate(data):
+        if sample_data.size > 0:
+            points = sample_data.reshape(-1, 2)
+            x = points[:, 0]
+            y = points[:, 1]
+            rgb = colors[i % len(colors)]
+            color = "#{:02x}{:02x}{:02x}".format(
+                int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255)
+            )
+            p.circle(x, i * 2, color=color, size=5)
+            p.circle(y, i * 2, color=color, size=5)
+            for l, r in zip(x, y):
+                p.line([l, r], [i * 2, i * 2], line_width=2, color=color)
+
+    output_file(f"{file_name}_horizontal_sequences.html")
+    save(p)
 
 
 # First Visualization with ALL points
@@ -14,14 +36,11 @@ def bokeh_scatterplot(
     lower_bound: int,
     upper_bound: int,
     L: Optional[int] = None,
-    l: Optional[int] = None,
     R: Optional[int] = None,
-    sig=50,
-    gg="grey",
+    read_length: Optional[int] = None,
+    sig: int = 50,  # allowed error in short reads
 ):
     """Creates a scatterplot with an SV region polygon using Bokeh, taking a list of arrays as input."""
-
-    output_file(f"{file_name}_SVregion.html")
 
     p = figure(
         width=800,
@@ -34,11 +53,11 @@ def bokeh_scatterplot(
     )
 
     # Plot SV_region polygon if parameters are provided
-    if L is not None and l is not None and R is not None:
+    if L is not None and read_length is not None and R is not None:
         p.patch(
-            [L - l - sig, L + sig, L + sig, L - l - sig],
-            [R - 2 * sig, R + l, R + l + 2 * sig, R],
-            color=gg,
+            [L - read_length - sig, L + sig, L + sig, L - read_length - sig],
+            [R - 2 * sig, R + read_length, R + read_length + 2 * sig, R],
+            color="grey",
             alpha=0.5,
         )
 
@@ -57,6 +76,8 @@ def bokeh_scatterplot(
             p.scatter("x", "y", source=source, size=10, fill_color="blue")
 
     p.grid.grid_line_alpha = 0.3
+
+    output_file(f"{file_name}_SVregion.html")
     save(p)
 
 
@@ -73,15 +94,13 @@ def plot_deviation_bokeh(
     lower_y_lim: int = -400,
     upper_y_lim: int = 200,
 ):
-
-    output_file(f"{file_name}_deviations.html")
     p = figure(
+        width=600,
+        height=400,
         x_range=(lower_x_lim, upper_x_lim),
         y_range=(lower_y_lim, upper_y_lim),
         title="Deviation Plot",
     )
-    p.width = 600
-    p.height = 400
 
     ux = np.array([])
     for yi in data:
@@ -107,6 +126,8 @@ def plot_deviation_bokeh(
         line_dash="dashed",
         line_width=2,
     )
+
+    output_file(f"{file_name}_deviations.html")
     save(p)
 
 
@@ -124,14 +145,13 @@ def filter_and_plot_sequences_bokeh(
 ):
     ux = get_unique_x_values(y)
 
-    output_file(f"{file_name}_sequences.html")
     p = figure(
         title=f"L = {L}, R = {R}",
+        width=800,
+        height=600,
         x_axis_label="distance from L",
         y_axis_label="deviation from y=x+b",
     )
-    p.width = 800
-    p.height = 600
 
     # Background rectangle
     p.quad(top=sig, bottom=-sig, left=0, right=max(ux) - min(ux), color="#F0F0F0")
@@ -177,6 +197,8 @@ def filter_and_plot_sequences_bokeh(
                 p.scatter(z[0::2], z[1::2], size=6, color="#999999", alpha=0.6)
 
     p.grid.grid_line_alpha = 0.3
+
+    output_file(f"{file_name}_sequences.html")
     save(p)
 
     return mb
@@ -186,16 +208,14 @@ def filter_and_plot_sequences_bokeh(
 def plot_fitted_lines_bokeh(
     mb: List[np.ndarray], *, file_name: str, L: int, l: int, R: int, sig: int
 ):
-
-    output_file(f"{file_name}_fitted_lines.html")
     p = figure(
         title="Fitted Lines Plot",
+        width=800,
+        height=600,
         x_axis_label="Reverse position",
         y_axis_label="Forward position",
         tools="pan, wheel_zoom, box_zoom, reset",
     )
-    p.width = 800
-    p.height = 600
     hover_tool = HoverTool(
         tooltips=[("x", "$x{0,0}"), ("y", "$y{0,0}")]
     )  # Corrected tooltips for hover display
@@ -230,6 +250,8 @@ def plot_fitted_lines_bokeh(
     p.x_range.end = L
     p.y_range.start = R
     p.y_range.end = R + l
+
+    output_file(f"{file_name}_fitted_lines.html")
     save(p)
 
     return start_points_array

@@ -78,6 +78,8 @@ def query_stix(l: str, r: str):
     L = int(l.split("-")[1])
     R = int(r.split("-")[1])
 
+    # plots that don't update data format
+    sv_viz(squiggle_data, file_name=f"{PLOT_DIR}/{file_name}")
     bokeh_scatterplot(
         squiggle_data,
         file_name=f"{PLOT_DIR}/{file_name}",
@@ -87,6 +89,8 @@ def query_stix(l: str, r: str):
         l=450,
         R=R,
     )
+
+    # functions that transform data
     mb = filter_and_plot_sequences_bokeh(
         squiggle_data, file_name=f"{PLOT_DIR}/{file_name}", L=L, l=450, R=R, sig=50
     )
