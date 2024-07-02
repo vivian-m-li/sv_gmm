@@ -4,8 +4,8 @@ import subprocess
 import argparse
 import csv
 import pandas as pd
-from viz import *
-from em import run_gmm
+from viz import run_viz_gmm
+
 
 STIX_SCRIPT = "./query_stix.sh"
 FILE_DIR = "stix_output"
@@ -75,30 +75,12 @@ def query_stix(l: str, r: str):
         writer = csv.writer(csvfile)
         writer.writerows(squiggle_data)
 
-    L = int(l.split("-")[1])
-    R = int(r.split("-")[1])
-
-    # plots that don't update data format
-    sv_viz(squiggle_data, file_name=f"{PLOT_DIR}/{file_name}")
-    bokeh_scatterplot(
+    run_viz_gmm(
         squiggle_data,
         file_name=f"{PLOT_DIR}/{file_name}",
-        lower_bound=L - 1900,
-        upper_bound=R + 1900,
-        L=L,
-        l=450,
-        R=R,
+        L=int(l.split("-")[1]),
+        r=int(r.split("-")[1]),
     )
-
-    # functions that transform data
-    mb = filter_and_plot_sequences_bokeh(
-        squiggle_data, file_name=f"{PLOT_DIR}/{file_name}", L=L, l=450, R=R, sig=50
-    )
-    intercepts = plot_fitted_lines_bokeh(
-        mb, file_name=f"{PLOT_DIR}/{file_name}", L=L, l=450, R=R, sig=50
-    )
-    points = [np.array(i)[1] for i in intercepts if len(i) > 1]
-    gmm = run_gmm(points)
 
 
 def main():

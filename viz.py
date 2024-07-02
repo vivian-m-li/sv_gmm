@@ -1,13 +1,12 @@
 from bokeh.plotting import figure, show, output_notebook, output_file, save
-from bokeh.models import ColumnDataSource
-from bokeh.models import Range1d
-from bokeh.models import HoverTool
+from bokeh.models import HoverTool, Range1d, ColumnDataSource, NumeralTickFormatter
 import numpy as np
 from typing import Optional, List
 import matplotlib.cm as cm
+from em import run_gmm
 
 
-def sv_viz(data: List[np.ndarray], *, file_name: str):
+def sv_viz(data: List[np.ndarray[int]], *, file_name: str):
     p = figure(width=800, height=600)
     colors = cm.Set1.colors
     for i, sample_data in enumerate(data):
@@ -21,8 +20,8 @@ def sv_viz(data: List[np.ndarray], *, file_name: str):
             )
             p.circle(x, i * 2, color=color, size=5)
             p.circle(y, i * 2, color=color, size=5)
-            for l, r in zip(x, y):
-                p.line([l, r], [i * 2, i * 2], line_width=2, color=color)
+            for read_length, r in zip(x, y):
+                p.line([read_length, r], [i * 2, i * 2], line_width=2, color=color)
 
     output_file(f"{file_name}_horizontal_sequences.html")
     save(p)
@@ -30,7 +29,7 @@ def sv_viz(data: List[np.ndarray], *, file_name: str):
 
 # First Visualization with ALL points
 def bokeh_scatterplot(
-    data: List[np.ndarray],
+    data: List[np.ndarray[int]],
     *,
     file_name: str,
     lower_bound: int,
@@ -83,12 +82,12 @@ def bokeh_scatterplot(
 
 # Second Viz deviations from the line
 def plot_deviation_bokeh(
-    data: List[np.ndarray],
+    data: List[np.ndarray[int]],
     *,
     file_name: str,
     L: int,
-    l: int,
     R: int,
+    read_length: int,
     lower_x_lim: int = 130,
     upper_x_lim: int = 600,
     lower_y_lim: int = -400,
@@ -108,7 +107,7 @@ def plot_deviation_bokeh(
 
         # Detrend y-coordinates
         zi = np.copy(yi)
-        zi[1::2] = yi[1::2] - (yi[0::2] + (R - (L - l)))
+        zi[1::2] = yi[1::2] - (yi[0::2] + (R - (L - read_length)))
 
         # Shift x-values to the left by min(x) units
         zi[0::2] = yi[0::2] - np.min(ux)
@@ -121,7 +120,7 @@ def plot_deviation_bokeh(
     xp = np.linspace(np.min(ux), np.max(ux), 100)
     p.line(
         xp - np.min(ux),
-        (xp + (R - L + l)) - (xp + (R - (L - l))),
+        (xp + (R - L + read_length)) - (xp + (R - (L - read_length))),
         line_color="black",
         line_dash="dashed",
         line_width=2,
@@ -131,7 +130,7 @@ def plot_deviation_bokeh(
     save(p)
 
 
-def get_unique_x_values(data):
+def get_unique_x_values(data: List[np.ndarray]) -> np.ndarray[int]:
     all_x_values = []
     for array in data:
         x_values = array[0::2]
@@ -141,15 +140,21 @@ def get_unique_x_values(data):
 
 # Third Viz with 3 + more point
 def filter_and_plot_sequences_bokeh(
-    y: List[np.ndarray], *, file_name: str, L: int, l: int, R: int, sig: int = 50
-):
+    y: List[np.ndarray[int]],
+    *,
+    file_name: str,
+    L: int,
+    R: int,
+    read_length: int,
+    sig: int = 50,
+) -> np.ndarray[np.ndarray[float]]:
     ux = get_unique_x_values(y)
 
     p = figure(
         title=f"L = {L}, R = {R}",
         width=800,
         height=600,
-        x_axis_label="distance from L",
+        x_axis_label="distance from L",  # TODO: this only applies if we know L is the start of the SV - otherwise, why do we care?
         y_axis_label="deviation from y=x+b",
     )
 
@@ -159,39 +164,44 @@ def filter_and_plot_sequences_bokeh(
     # y=x line
     p.line(ux - min(ux), ux - ux, line_dash="dashed", line_width=1, color="black")
 
-    mb = np.zeros((len(y), 4))  # [ #pts | length | intercept | sv-flag]
+    mb = np.zeros(
+        (len(y), 4)
+    )  # [# of pts that indicate sv | # of pieces of evidence returned by stix for the sample | average intercept for all pairs of points | sv-flag]
     colors = ["#0000FF", "#FF0000", "#00FF00", "#00FFFF", "#FF00FF", "#000000"]
 
     for i, yi in enumerate(y):
         z = yi.copy()
         for j in range(0, len(yi), 2):
             if (
-                yi[j] < (L - 2 * l)
-                or yi[j] > (L + 1.5 * l)
-                or yi[j + 1] < (R - 2 * l)
-                or yi[j + 1] > (R + 5 * l)
+                yi[j] < (L - 2 * read_length)
+                or yi[j] > (L + 1.5 * read_length)
+                or yi[j + 1] < (R - 2 * read_length)
+                or yi[j + 1] > (R + 5 * read_length)
             ):
                 z[j] = z[j + 1] = np.nan
 
         z = z[~np.isnan(z)]
 
         if len(z) > 0:
-            b = int(np.mean(z[1::2]) - np.mean(z[0::2]))
+            b = int(
+                np.mean(z[1::2]) - np.mean(z[0::2])
+            )  # TODO: we don't know that these evidence points all belong to the same SV, but we're calculating one intercept for all of them
             z[1::2] -= z[0::2] + b
             z[0::2] -= min(ux)
-            if len(z) >= 6:
+            if len(z) >= 6:  # if there are more than 3 pairs of points
                 xp, yp = z[0::2], z[1::2]
                 sdl = np.sum(np.abs(yp) <= sig)
                 mb[i, :] = [sdl, len(xp), b, 0]
 
+                # if more than 3 pieces of evidence (paired read_length-r ends), then there is an SV here for this sample
                 if sdl >= 3:
                     p.line(xp, yp, line_width=2, color=colors[i % len(colors)])
                     p.scatter(xp, yp, size=6, color=colors[i % len(colors)], alpha=0.6)
                     mb[i, 3] = 1
-                else:
+                else:  # this sample does not have an SV
                     p.line(xp, yp, line_width=2, color="#999999")
                     p.scatter(xp, yp, size=6, color="#999999", alpha=0.6)
-            else:
+            else:  # not enough evidence for an SV
                 mb[i, :] = [-np.inf, len(z) // 2, -np.inf, 0]
                 p.line(z[0::2], z[1::2], line_width=2, color="#999999")
                 p.scatter(z[0::2], z[1::2], size=6, color="#999999", alpha=0.6)
@@ -206,8 +216,14 @@ def filter_and_plot_sequences_bokeh(
 
 # Viz 4 with the intercepts
 def plot_fitted_lines_bokeh(
-    mb: List[np.ndarray], *, file_name: str, L: int, l: int, R: int, sig: int
-):
+    mb: np.ndarray[np.ndarray[float]],
+    *,
+    file_name: str,
+    L: int,
+    read_length: int,
+    R: int,
+    sig: int,
+) -> np.ndarray[np.ndarray[float]]:
     p = figure(
         title="Fitted Lines Plot",
         width=800,
@@ -223,8 +239,8 @@ def plot_fitted_lines_bokeh(
     p.add_tools(hover_tool)
     # Add a grey polygon for background
     p.patch(
-        [L - l - sig, L + sig, L + sig, L - l - sig],
-        [R - 2 * sig, R + l, R + l + 2 * sig, R],
+        [L - read_length - sig, L + sig, L + sig, L - read_length - sig],
+        [R - 2 * sig, R + read_length, R + read_length + 2 * sig, R],
         color="grey",
         line_color="grey",
     )
@@ -232,9 +248,9 @@ def plot_fitted_lines_bokeh(
     start_points = []
     # Loop through each row in mb to add lines and points at the start of each line
     for row in mb:
-        if row[3] == 1:  # Assuming the 4th column (index 3) indicates 'on target'
-            start_x = L - l
-            start_y = (L - l) + row[2]
+        if row[3] == 1:  # sv-flag is True
+            start_x = L - read_length
+            start_y = (L - read_length) + row[2]  # intercept
             p.line([start_x, L], [start_y, L + row[2]], line_width=2, color="red")
             p.scatter([start_x], [start_y], size=2, color="red", alpha=0.6)
             start_points.append((start_x, start_y))
@@ -242,16 +258,55 @@ def plot_fitted_lines_bokeh(
     start_points_array = np.array(start_points)
 
     p.line(
-        [L - l, L], [R, R + l], line_width=5, color="black", line_dash="dashed"
+        [L - read_length, L],
+        [R, R + read_length],
+        line_width=5,
+        color="black",
+        line_dash="dashed",
     )  # y=x dashed line
-    p.xaxis.major_label_text_font_size = "16pt"
-    p.yaxis.major_label_text_font_size = "16pt"
-    p.x_range.start = L - l
+    p.x_range.start = L - read_length
     p.x_range.end = L
     p.y_range.start = R
-    p.y_range.end = R + l
+    p.y_range.end = R + read_length
+    p.xaxis.major_label_text_font_size = "12pt"
+    p.yaxis.major_label_text_font_size = "12pt"
+    p.xaxis.formatter = NumeralTickFormatter(format="0")
+    p.yaxis.formatter = NumeralTickFormatter(format="0")
 
     output_file(f"{file_name}_fitted_lines.html")
     save(p)
 
     return start_points_array
+
+
+def run_viz_gmm(
+    squiggle_data: List[np.ndarray[float]], *, file_name: str, L: int, R: int
+):
+    # plots that don't update data format
+    sv_viz(squiggle_data, file_name=file_name)
+    bokeh_scatterplot(
+        squiggle_data,
+        file_name=file_name,
+        lower_bound=L - 1900,
+        upper_bound=R + 1900,
+        L=L,
+        read_length=450,
+        R=R,
+    )
+
+    # functions that transform data
+    mb = filter_and_plot_sequences_bokeh(
+        squiggle_data,
+        file_name=file_name,
+        L=L,
+        R=R,
+        read_length=450,
+        sig=50,
+    )
+    intercepts = plot_fitted_lines_bokeh(
+        mb, file_name=file_name, L=L, read_length=450, R=R, sig=50
+    )
+    # points = [np.array(i)[1] for i in intercepts if len(i) > 1]
+    points = mb[:, 2]
+    points = points[points != -np.inf]
+    gmm = run_gmm(points)
