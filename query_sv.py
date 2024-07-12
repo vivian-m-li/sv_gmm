@@ -4,7 +4,8 @@ import subprocess
 import argparse
 import csv
 import pandas as pd
-from viz import run_viz_gmm
+import numpy as np
+from viz import run_viz_gmm, run_gmm_l_r
 
 
 STIX_SCRIPT = "./query_stix.sh"
@@ -24,7 +25,7 @@ def txt_to_df(filename: str):
         "r_end",
         "type",
     ]
-    df = pd.read_csv(filename, sep="\s+", names=column_names)
+    df = pd.read_csv(filename, names=column_names, delim_whitespace=True)
     return df
 
 
@@ -50,36 +51,43 @@ def query_stix(l: str, r: str):
 
     file_name = f"{l}_{r}"
     output_file = f"{FILE_DIR}/{file_name}.txt"
+    processed_output_file = f"{PROCESSED_FILE_DIR}/{file_name}.csv"
 
-    if not os.path.isfile(output_file):
-        subprocess.run(
-            ["bash", STIX_SCRIPT] + [l, r, output_file], capture_output=True, text=True
-        )
-    df = txt_to_df(output_file)
-
-    grouped = df.groupby("file_id")
     squiggle_data = []
-    left_squiggle_data = []
-    for _, group in grouped:
-        l_starts = group["l_start"].tolist()
-        r_ends = group["r_end"].tolist()
-        sv_evidence = [item for pair in zip(l_starts, r_ends) for item in pair]
-        squiggle_data.append(np.array(sv_evidence))
-        left_squiggle_data.append(np.array(l_starts))
+    if os.path.isfile(processed_output_file):
+        with open(processed_output_file, newline="") as csvfile:
+            reader = csv.reader(csvfile)
+            for row in reader:
+                squiggle_data.append(np.array([float(x) for x in row]))
+    else:
+        if not os.path.isfile(output_file):
+            subprocess.run(
+                ["bash", STIX_SCRIPT] + [l, r, output_file],
+                capture_output=True,
+                text=True,
+            )
+        df = txt_to_df(output_file)
+
+        grouped = df.groupby("file_id")
+        for _, group in grouped:
+            l_starts = group["l_start"].tolist()
+            r_ends = group["r_end"].tolist()
+            sv_evidence = [item for pair in zip(l_starts, r_ends) for item in pair]
+            squiggle_data.append(np.array(sv_evidence))
+
+        with open(processed_output_file, "w", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerows(squiggle_data)
 
     if len(squiggle_data) == 0:
         print("No structural variants found in this region.")
         return
 
-    with open(f"{PROCESSED_FILE_DIR}/{file_name}.csv", "w", newline="") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerows(squiggle_data)
-
     run_viz_gmm(
         squiggle_data,
         file_name=f"{PLOT_DIR}/{file_name}",
         L=int(l.split("-")[1]),
-        r=int(r.split("-")[1]),
+        R=int(r.split("-")[1]),
     )
 
 

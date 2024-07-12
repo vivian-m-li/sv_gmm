@@ -52,7 +52,7 @@ def get_scatter_data(x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def plot_distributions(
-    x: np.ndarray[float],
+    x: np.ndarray[int],
     n: int,
     mu: np.ndarray[float],
     vr: np.ndarray[float],
@@ -134,7 +134,7 @@ class UpdateDist:
         return (self.scatter,) + self.lines
 
 
-def animate_distribution(x: np.ndarray, gmms: List[GMM]) -> None:
+def animate_distribution(x: np.ndarray[int], gmms: List[GMM]) -> None:
     """
     Animates the change in the GMM over each iteration of the EM algorithm.
     Note: This function does not produce an animation in Jupyter Notebook.
@@ -261,7 +261,7 @@ def plot_fitted_lines(y_intercepts: List[float]):
     plt.show()
 
 
-def plot_clusters(x: np.ndarray, kmeans_labels: List[int]):
+def plot_clusters(x: np.ndarray[int], kmeans_labels: List[int]):
     """Plots and colors each data point according to the k-means cluster they're inferred to belong in."""
     labels = set(kmeans_labels)
     color_lookup = {label: cm.Set1.colors[i] for i, label in enumerate(labels)}
@@ -279,7 +279,7 @@ GMM/EM helper functions
 
 
 def calc_log_likelihood(
-    x: np.ndarray[float],
+    x: np.ndarray[int],
     mu: np.ndarray[float],
     vr: np.ndarray[float],
     p: np.ndarray[float],
@@ -447,7 +447,7 @@ def generate_data(
 
 
 def init_em(
-    x: np.ndarray,
+    x: np.ndarray[int],
     num_modes: int,
     plot: bool,
 ) -> Tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -476,21 +476,49 @@ def init_em(
     return n, mu, vr, p, logL
 
 
-def em(
-    x: np.ndarray,
-    num_modes: int,
+def calc_responsibility(
+    x: np.ndarray[int],
     n: int,
-    mu: np.ndarray,
-    vr: np.ndarray,
-    p: np.ndarray,
-    gz: np.ndarray,
-) -> GMM:
-    """Performs one iteration of the expectation-maximization algorithm."""
-    # Expectation step: calculate the posterior probabilities
+    mu: np.ndarray[float],
+    vr: np.ndarray[float],
+    p: np.ndarray[float],
+):
+    """Calculates the responsibility matrix for each point/mode."""
+    gz = np.zeros((n, len(mu)))
     for i in range(len(x)):
         # For each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
         gz[i, :] = p * norm.pdf(x[i], mu, np.sqrt(vr))
         gz[i, :] /= np.sum(gz[i, :])
+    return gz
+
+
+def assign_values_to_modes(
+    x: np.ndarray[int],
+    num_modes: int,
+    mu: np.ndarray[float],
+    vr: np.ndarray[float],
+    p: np.ndarray[float],
+) -> List[np.ndarray[int]]:
+    gz = calc_responsibility(x, len(x), mu, vr, p)
+    assignments = np.argmax(gz, axis=1)
+    x_by_mode = [[] for _ in range(num_modes)]
+    for i, mode in enumerate(assignments):
+        x_by_mode[mode].append(x[i])
+    x_by_mode = [np.array(data_points) for data_points in x_by_mode]
+    return x_by_mode
+
+
+def em(
+    x: np.ndarray[int],
+    num_modes: int,
+    n: int,
+    mu: np.ndarray[float],
+    vr: np.ndarray[float],
+    p: np.ndarray[float],
+) -> GMM:
+    """Performs one iteration of the expectation-maximization algorithm."""
+    # Expectation step: calculate the posterior probabilities
+    gz = calc_responsibility(x, n, mu, vr, p)
 
     # Ensure that each point contributes to the responsibility matrix above some threshold
     gz[(gz < RESPONSIBILITY_THRESHOLD) | np.isnan(gz)] = RESPONSIBILITY_THRESHOLD
@@ -508,7 +536,7 @@ def em(
 
 
 def run_em(
-    x: np.ndarray,  # data
+    x: np.ndarray[int],  # data
     num_modes: int,
     plot: bool = False,
 ) -> List[GMM]:
@@ -522,12 +550,11 @@ def run_em(
     n, mu, vr, p, logL = init_em(x, num_modes, plot)  # initialize parameters
     all_params.append(GMM(mu, vr, p, logL[0]))
 
-    gz = np.zeros((n, len(mu)))
     max_iterations = 30
     i = 0
     while i < max_iterations:
         # update likelihood
-        gmm = em(x, num_modes, n, mu, vr, p, gz)  # mutates gz
+        gmm = em(x, num_modes, n, mu, vr, p)
         logL.append(gmm.logL)
         all_params.append(gmm)
         mu, vr, p = gmm.mu, gmm.vr, gmm.p
@@ -552,7 +579,7 @@ def run_em(
 
 
 def identify_outliers(
-    x: np.ndarray, mu: np.ndarray, vr: np.ndarray
+    x: np.ndarray[int], mu: np.ndarray[float], vr: np.ndarray
 ) -> List[Tuple[int, float]]:
     """
     Given the data and distribution, identifies the outlier values based on their contribution to each mode in the GMM.
@@ -608,6 +635,7 @@ def run_gmm(
             outliers=[],
             percent_data_removed=0,
             window_size=(0, 0),
+            x_by_mode=[],
         )
     if len(x) == 1:
         warnings.warn("Input data contains one SV")
@@ -622,6 +650,7 @@ def run_gmm(
             outliers=[],
             percent_data_removed=0,
             window_size=(singleton, singleton),
+            x_by_mode=[],
         )
 
     opt_params = None
@@ -645,6 +674,10 @@ def run_gmm(
 
     final_params = opt_params[-1]
 
+    x_by_mode = assign_values_to_modes(
+        x, num_sv, final_params.mu, final_params.vr, final_params.p
+    )
+
     if pr:
         print(
             f"\nNumber of SVs: {num_sv}\n{print_stats(final_params.logL, final_params.mu, final_params.vr, final_params.p)}. {len(outliers)} outliers removed."
@@ -665,9 +698,10 @@ def run_gmm(
         outliers=outliers,
         percent_data_removed=len(outliers) / n,
         window_size=(min(x), max(x)),
+        x_by_mode=x_by_mode,
     )
 
 
 if __name__ == "__main__":
-    data = generate_data(n=500, num_modes=8, x_range=[0, 500], vr_range=[1, 10])
+    data = generate_data(n=100, num_modes=2)
     gmm = run_gmm(data.x, plot=False)

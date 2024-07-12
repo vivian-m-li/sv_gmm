@@ -24,6 +24,7 @@ class EstimatedGMM(GaussianDistribution):
     outliers: List[float]
     percent_data_removed: float
     window_size: Tuple[int, int]
+    x_by_mode: List[np.ndarray[int]]
 
 
 @dataclass

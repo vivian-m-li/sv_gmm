@@ -6,7 +6,7 @@ import matplotlib.cm as cm
 from em import run_gmm
 
 
-def sv_viz(data: List[np.ndarray[int]], *, file_name: str):
+def sv_viz(data: List[np.ndarray[float]], *, file_name: str):
     p = figure(width=800, height=600)
     colors = cm.Set1.colors
     for i, sample_data in enumerate(data):
@@ -29,7 +29,7 @@ def sv_viz(data: List[np.ndarray[int]], *, file_name: str):
 
 # First Visualization with ALL points
 def bokeh_scatterplot(
-    data: List[np.ndarray[int]],
+    data: List[np.ndarray[float]],
     *,
     file_name: str,
     lower_bound: int,
@@ -82,7 +82,7 @@ def bokeh_scatterplot(
 
 # Second Viz deviations from the line
 def plot_deviation_bokeh(
-    data: List[np.ndarray[int]],
+    data: List[np.ndarray[float]],
     *,
     file_name: str,
     L: int,
@@ -140,7 +140,7 @@ def get_unique_x_values(data: List[np.ndarray]) -> np.ndarray[int]:
 
 # Third Viz with 3 + more point
 def filter_and_plot_sequences_bokeh(
-    y: List[np.ndarray[int]],
+    y: List[np.ndarray[float]],
     *,
     file_name: str,
     L: int,
@@ -250,7 +250,7 @@ def plot_fitted_lines_bokeh(
     for row in mb:
         if row[3] == 1:  # sv-flag is True
             start_x = L - read_length
-            start_y = (L - read_length) + row[2]  # intercept
+            start_y = start_x + row[2]  # intercept
             p.line([start_x, L], [start_y, L + row[2]], line_width=2, color="red")
             p.scatter([start_x], [start_y], size=2, color="red", alpha=0.6)
             start_points.append((start_x, start_y))
@@ -306,7 +306,29 @@ def run_viz_gmm(
     intercepts = plot_fitted_lines_bokeh(
         mb, file_name=file_name, L=L, read_length=450, R=R, sig=50
     )
-    # points = [np.array(i)[1] for i in intercepts if len(i) > 1]
-    points = mb[:, 2]
-    points = points[points != -np.inf]
-    gmm = run_gmm(points)
+    points = np.array([np.array(i)[1] for i in intercepts if len(i) > 1]) - R
+    gmm = run_gmm(points, plot=True)
+
+
+def run_gmm_l_r(
+    squiggle_data: List[np.ndarray[float]], *, file_name: str, L: int, R: int
+):
+    all_xp = []
+    for row in squiggle_data:
+        all_xp.extend(row[0::2] - L)
+    gmm_l = run_gmm(all_xp)
+
+    for i in range(gmm_l.num_modes):
+        xp = gmm_l.x_by_mode[i] + L
+        yp = []
+        for row in squiggle_data:
+            for j in range(0, len(row), 2):
+                x = row[j]
+                y = row[j + 1]
+                if x in xp:
+                    yp.append(y)
+        yp = np.array(yp) - L
+
+        gmm_r = run_gmm(yp)
+        for mu_r in gmm_r.mu:
+            print((gmm_l.mu[i], mu_r))
