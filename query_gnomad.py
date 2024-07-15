@@ -2,6 +2,9 @@ import os
 import time
 import csv
 import requests
+import multiprocessing
+import pandas as pd
+from query_sv import query_stix
 
 # for human genome assembly GRCh37, https://www.ncbi.nlm.nih.gov/grc/human/data?asm=GRCh37
 CHR_LENGTHS = {
@@ -35,8 +38,6 @@ FILE_DIR = "gnomad_svs"
 
 
 def query_gnomad(chr: str, start: int, stop: int):
-    if not os.path.exists(FILE_DIR):
-        os.mkdir(FILE_DIR)
 
     payload = {
         "operationName": "StructuralVariantsInRegion",
@@ -75,5 +76,28 @@ def get_all_sv():
         time.sleep(5)
 
 
+def validate_against_stix():
+    for chr in CHR_LENGTHS.keys():
+        df = pd.read_csv(f"{FILE_DIR}/{chr}.csv")
+        with multiprocessing.Manager() as manager:
+            p = multiprocessing.Pool(multiprocessing.cpu_count())
+            args = []
+            for _, row in df.iterrows():
+                start = f"{chr}:{row.pos}-{row.pos}"
+                end = f"{chr}:{row.end}-{row.end}"
+                args.append((start, end, False))
+
+            p.starmap(query_stix, args)
+            p.close()
+            p.join()
+
+
+def main():
+    if not os.path.exists(FILE_DIR):
+        os.mkdir(FILE_DIR)
+        get_all_sv()
+    validate_against_stix()
+
+
 if __name__ == "__main__":
-    get_all_sv()
+    main()

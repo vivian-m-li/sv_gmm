@@ -44,7 +44,7 @@ def parse_input(input: str) -> str:
     return f"{chromosome}:{position}-{position}"
 
 
-def query_stix(l: str, r: str):
+def query_stix(l: str, r: str, run_gmm: bool = True):
     for directory in [FILE_DIR, PROCESSED_FILE_DIR, PLOT_DIR]:
         if not os.path.exists(directory):
             os.mkdir(directory)
@@ -79,16 +79,17 @@ def query_stix(l: str, r: str):
             writer = csv.writer(csvfile)
             writer.writerows(squiggle_data)
 
-    if len(squiggle_data) == 0:
-        print("No structural variants found in this region.")
-        return
+    if run_gmm:
+        if len(squiggle_data) == 0:
+            print("No structural variants found in this region.")
+            return
 
-    run_viz_gmm(
-        squiggle_data,
-        file_name=f"{PLOT_DIR}/{file_name}",
-        L=int(l.split("-")[1]),
-        R=int(r.split("-")[1]),
-    )
+        run_viz_gmm(
+            squiggle_data,
+            file_name=f"{PLOT_DIR}/{file_name}",
+            L=int(l.split("-")[1]),
+            R=int(r.split("-")[1]),
+        )
 
 
 def main():
