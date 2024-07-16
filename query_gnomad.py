@@ -4,6 +4,7 @@ import csv
 import requests
 import multiprocessing
 import pandas as pd
+import matplotlib.pyplot as plt
 from query_sv import *
 from viz import *
 from typing import Dict
@@ -103,26 +104,38 @@ def get_num_samples(row_index: int, row, chr: str, lookup: Dict[int, int]):
         lookup[row_index] = len(intercepts)
 
 
+def plot_af_num_samples(chr: str, df: pd.DataFrame):
+    plt.figure()
+    plt.scatter(df["af"], df["num_samples"])
+    plt.title(f"Chromosome {chr}")
+    plt.xlabel("Allele Frequency")
+    plt.ylabel("Number of Samples in STIX")
+    plt.show()
+
+
 def get_num_sv():
     for chr in CHR_LENGTHS.keys():
         filename = f"{FILE_DIR}/{chr}.csv"
         df = pd.read_csv(filename)
-        df["num_samples"] = 0
-        with multiprocessing.Manager() as manager:
-            p = multiprocessing.Pool(multiprocessing.cpu_count())
-            lookup = manager.dict()
-            args = []
-            for i, row in df.iterrows():
-                args.append((i, row, chr, lookup))
+        if "num_samples" not in df.columns:
+            df["num_samples"] = 0
+            with multiprocessing.Manager() as manager:
+                p = multiprocessing.Pool(multiprocessing.cpu_count())
+                lookup = manager.dict()
+                args = []
+                for i, row in df.iterrows():
+                    args.append((i, row, chr, lookup))
 
-            p.starmap(get_num_samples, args)
-            p.close()
-            p.join()
+                p.starmap(get_num_samples, args)
+                p.close()
+                p.join()
 
-            for row_index, num_samples in lookup.items():
-                df.loc[row_index, "num_samples"] = num_samples
+                for row_index, num_samples in lookup.items():
+                    df.loc[row_index, "num_samples"] = num_samples
 
-        df.to_csv(filename, index=False)
+            df.to_csv(filename, index=False)
+
+        plot_af_num_samples(df)
 
 
 def main():
