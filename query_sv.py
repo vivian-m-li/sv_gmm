@@ -29,6 +29,20 @@ def txt_to_df(filename: str):
     return df
 
 
+def giggle_format(chromosome: int, position: int):
+    return f"{chromosome}:{position}-{position}"
+
+
+def load_squiggle_data(filename: str):
+    squiggle_data = []
+    if os.path.isfile(filename):
+        with open(filename, newline="") as csvfile:
+            reader = csv.reader(csvfile)
+            for row in reader:
+                squiggle_data.append(np.array([float(x) for x in row]))
+    return squiggle_data
+
+
 def parse_input(input: str) -> str:
     parts = input.split(":")
     if len(parts) != 2:
@@ -40,8 +54,7 @@ def parse_input(input: str) -> str:
     except ValueError:
         print("Input string must be in the format 'chromosome:position'")
         sys.exit(1)
-
-    return f"{chromosome}:{position}-{position}"
+    return giggle_format(chromosome, position)
 
 
 def query_stix(l: str, r: str, run_gmm: bool = True):
@@ -53,12 +66,8 @@ def query_stix(l: str, r: str, run_gmm: bool = True):
     output_file = f"{FILE_DIR}/{file_name}.txt"
     processed_output_file = f"{PROCESSED_FILE_DIR}/{file_name}.csv"
 
-    squiggle_data = []
     if os.path.isfile(processed_output_file):
-        with open(processed_output_file, newline="") as csvfile:
-            reader = csv.reader(csvfile)
-            for row in reader:
-                squiggle_data.append(np.array([float(x) for x in row]))
+        squiggle_data = load_squiggle_data(processed_output_file)
     else:
         if not os.path.isfile(output_file):
             subprocess.run(
@@ -69,6 +78,7 @@ def query_stix(l: str, r: str, run_gmm: bool = True):
         df = txt_to_df(output_file)
 
         grouped = df.groupby("file_id")
+        squiggle_data = []
         for _, group in grouped:
             l_starts = group["l_start"].tolist()
             r_ends = group["r_end"].tolist()

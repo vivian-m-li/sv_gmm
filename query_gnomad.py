@@ -4,7 +4,9 @@ import csv
 import requests
 import multiprocessing
 import pandas as pd
-from query_sv import query_stix
+from query_sv import *
+from viz import *
+from typing import Dict
 
 # for human genome assembly GRCh37, https://www.ncbi.nlm.nih.gov/grc/human/data?asm=GRCh37
 CHR_LENGTHS = {
@@ -76,27 +78,59 @@ def get_all_sv():
         time.sleep(5)
 
 
-def validate_against_stix():
+def query_gnomad_stix():
     for chr in CHR_LENGTHS.keys():
         df = pd.read_csv(f"{FILE_DIR}/{chr}.csv")
         with multiprocessing.Manager() as manager:
             p = multiprocessing.Pool(multiprocessing.cpu_count())
             args = []
             for _, row in df.iterrows():
-                start = f"{chr}:{row.pos}-{row.pos}"
-                end = f"{chr}:{row.end}-{row.end}"
-                args.append((start, end, False))
+                args.append(
+                    (giggle_format(chr, row.pos), giggle_format(chr, row.end), False)
+                )
 
             p.starmap(query_stix, args)
             p.close()
             p.join()
 
 
+def get_num_samples(row_index: int, row, chr: str, lookup: Dict[int, int]):
+    start = giggle_format(chr, row.pos)
+    end = giggle_format(chr, row.end)
+    squiggle_data = load_squiggle_data(f"{PROCESSED_FILE_DIR}/{start}_{end}.csv")
+    if len(squiggle_data) > 0:
+        intercepts = get_intercepts(squiggle_data, file_name=None, L=row.pos, R=row.end)
+        lookup[row_index] = len(intercepts)
+
+
+def get_num_sv():
+    for chr in CHR_LENGTHS.keys():
+        filename = f"{FILE_DIR}/{chr}.csv"
+        df = pd.read_csv(filename)
+        df["num_samples"] = 0
+        with multiprocessing.Manager() as manager:
+            p = multiprocessing.Pool(multiprocessing.cpu_count())
+            lookup = manager.dict()
+            args = []
+            for i, row in df.iterrows():
+                args.append((i, row, chr, lookup))
+
+            p.starmap(get_num_samples, args)
+            p.close()
+            p.join()
+
+            for row_index, num_samples in lookup.items():
+                df.loc[row_index, "num_samples"] = num_samples
+
+        df.to_csv(filename, index=False)
+
+
 def main():
     if not os.path.exists(FILE_DIR):
         os.mkdir(FILE_DIR)
         get_all_sv()
-    validate_against_stix()
+        query_gnomad_stix()
+    get_num_sv()
 
 
 if __name__ == "__main__":

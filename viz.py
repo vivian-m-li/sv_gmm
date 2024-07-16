@@ -142,7 +142,7 @@ def get_unique_x_values(data: List[np.ndarray]) -> np.ndarray[int]:
 def filter_and_plot_sequences_bokeh(
     y: List[np.ndarray[float]],
     *,
-    file_name: str,
+    file_name: Optional[str],
     L: int,
     R: int,
     read_length: int,
@@ -208,8 +208,9 @@ def filter_and_plot_sequences_bokeh(
 
     p.grid.grid_line_alpha = 0.3
 
-    output_file(f"{file_name}_sequences.html")
-    save(p)
+    if file_name is not None:
+        output_file(f"{file_name}_sequences.html")
+        save(p)
 
     return mb
 
@@ -218,7 +219,7 @@ def filter_and_plot_sequences_bokeh(
 def plot_fitted_lines_bokeh(
     mb: np.ndarray[np.ndarray[float]],
     *,
-    file_name: str,
+    file_name: Optional[str],
     L: int,
     read_length: int,
     R: int,
@@ -273,10 +274,28 @@ def plot_fitted_lines_bokeh(
     p.xaxis.formatter = NumeralTickFormatter(format="0")
     p.yaxis.formatter = NumeralTickFormatter(format="0")
 
-    output_file(f"{file_name}_fitted_lines.html")
-    save(p)
+    if file_name is not None:
+        output_file(f"{file_name}_fitted_lines.html")
+        save(p)
 
     return start_points_array
+
+
+def get_intercepts(
+    squiggle_data: List[np.ndarray[float]], *, file_name: Optional[str], L: int, R: int
+):
+    mb = filter_and_plot_sequences_bokeh(
+        squiggle_data,
+        file_name=file_name,
+        L=L,
+        R=R,
+        read_length=450,
+        sig=50,
+    )
+    intercepts = plot_fitted_lines_bokeh(
+        mb, file_name=file_name, L=L, read_length=450, R=R, sig=50
+    )
+    return intercepts
 
 
 def run_viz_gmm(
@@ -295,19 +314,10 @@ def run_viz_gmm(
     )
 
     # functions that transform data
-    mb = filter_and_plot_sequences_bokeh(
-        squiggle_data,
-        file_name=file_name,
-        L=L,
-        R=R,
-        read_length=450,
-        sig=50,
-    )
-    intercepts = plot_fitted_lines_bokeh(
-        mb, file_name=file_name, L=L, read_length=450, R=R, sig=50
-    )
+    intercepts = get_intercepts(squiggle_data, file_name=file_name, L=L, R=R)
     points = np.array([np.array(i)[1] for i in intercepts if len(i) > 1]) - R
     gmm = run_gmm(points, plot=True)
+    return gmm
 
 
 def run_gmm_l_r(
