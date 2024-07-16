@@ -604,12 +604,15 @@ def remove_outliers(outliers: List[Tuple[int, float]], x: np.ndarray) -> np.ndar
 def resize_data_window(data: np.ndarray) -> Tuple[np.ndarray, List[int]]:
     """Identifies and removes the outliers from the dataset."""
     x = data[:]
-    params = run_em(x, 1)
-    mu, vr = params[-1].mu, params[-1].vr
-    outliers = identify_outliers(x, mu, vr)
-    outlier_values = [x_i for _, x_i in outliers]
-    if len(outliers) > 0:
-        x = remove_outliers(outliers, x)
+    outlier_values = []
+    for num_modes in [1, 2]:
+        params = run_em(x, num_modes)
+        mu, vr = params[-1].mu, params[-1].vr
+        outliers = identify_outliers(x, mu, vr)
+        outlier_values.extend([x_i for _, x_i in outliers])
+        if len(outliers) > 0:
+            x = remove_outliers(outliers, x)
+
     return x, outlier_values
 
 
