@@ -132,10 +132,9 @@ def get_num_sv():
 
                 for row_index, num_samples in lookup.items():
                     df.loc[row_index, "num_samples"] = num_samples
-
             df.to_csv(filename, index=False)
 
-        plot_af_num_samples(df)
+        plot_af_num_samples(chr, df)
 
 
 def main():
