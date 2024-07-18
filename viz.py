@@ -186,7 +186,10 @@ def filter_and_plot_sequences_bokeh(
             b = int(
                 np.mean(z[1::2]) - np.mean(z[0::2])
             )  # TODO: we don't know that these evidence points all belong to the same SV, but we're calculating one intercept for all of them
-            z[1::2] -= z[0::2] + b
+            try:
+                z[1::2] -= z[0::2] + b
+            except ValueError:
+                return []
             z[0::2] -= min(ux)
             if len(z) >= 6:  # if there are more than 3 pairs of points
                 xp, yp = z[0::2], z[1::2]
