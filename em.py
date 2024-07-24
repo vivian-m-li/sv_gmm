@@ -12,7 +12,7 @@ from pprint import pprint
 from gmm_types import *
 from typing import Tuple, List, Dict, Union
 
-OUTLIER_THRESHOLD = 0.01
+OUTLIER_THRESHOLD = 0.001
 RESPONSIBILITY_THRESHOLD = 1e-10
 MODE_WEIGHT_THRESHOLD = 0.05
 
@@ -83,9 +83,14 @@ def plot_distributions(
     plt.show()
 
 
-def calc_y_vals(ux: np.ndarray, n: int, gmm: GMM, i: int) -> List[float]:
+def calc_y_vals(
+    ux: np.ndarray,
+    n: int,
+    gmm: GMM,
+    i: int,
+) -> List[float]:
     """Calculates the density for each x value in the GMM."""
-    return (n * gmm.p[i] / 4) * norm.pdf(ux, gmm.mu[i], np.sqrt(gmm.vr[i]))
+    return 2 * (n * gmm.p[i]) * norm.pdf(ux, gmm.mu[i], np.sqrt(gmm.vr[i]))
 
 
 class UpdateDist:
@@ -417,10 +422,6 @@ def generate_data(
         if weights is None
         else np.array(weights, dtype=float)
     )
-    if weights is not None:
-        p = weights
-    else:
-        p = generate_weights(num_modes)
 
     nk = (p * n).astype(int)
 
@@ -449,7 +450,6 @@ def generate_data(
 def init_em(
     x: np.ndarray[int],
     num_modes: int,
-    plot: bool,
 ) -> Tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Initializes the expectation-maximization algorithm using k-means clustering on the data.
@@ -459,9 +459,6 @@ def init_em(
     kmeans_data = np.ravel(x).astype(float).reshape(-1, 1)
     kmeans = KMeans(n_init=1, n_clusters=num_modes)
     kmeans.fit(kmeans_data)
-    kmeans_labels = kmeans.labels_
-    # if plot:
-    #     plot_clusters(x, kmeans_labels)
 
     mu = np.sort(np.ravel(kmeans.cluster_centers_))  # initial means
     vr = [np.var(x)] * num_modes  # initial variances
@@ -547,7 +544,7 @@ def run_em(
     """
     all_params: List[GMM] = []
 
-    n, mu, vr, p, logL = init_em(x, num_modes, plot)  # initialize parameters
+    n, mu, vr, p, logL = init_em(x, num_modes)  # initialize parameters
     all_params.append(GMM(mu, vr, p, logL[0]))
 
     max_iterations = 30
@@ -569,11 +566,11 @@ def run_em(
             )
         i += 1
 
-    if plot:
-        # Visualize the final model
-        plot_distributions(
-            x, n, mu, vr, p, title=f"Final Stats: {print_stats(logL[-1], mu, vr, p)}"
-        )
+    # if plot:
+    #     # Visualize the final model
+    #     plot_distributions(
+    #         x, n, mu, vr, p, title=f"Final Stats: {print_stats(logL[-1], mu, vr, p)}"
+    #     )
 
     return all_params
 
@@ -587,7 +584,7 @@ def identify_outliers(
     """
     outliers: List[Tuple[int, float]] = []
     for i, x_i in enumerate(x):
-        contributions = norm.pdf(x[i], mu, np.sqrt(vr))
+        contributions = norm.pdf(x_i, mu, np.sqrt(vr))
         poss_outlier = np.all(contributions < OUTLIER_THRESHOLD / len(x))
         if poss_outlier:
             outliers.append((i, x_i))
@@ -612,7 +609,6 @@ def resize_data_window(data: np.ndarray) -> Tuple[np.ndarray, List[int]]:
         outlier_values.extend([x_i for _, x_i in outliers])
         if len(outliers) > 0:
             x = remove_outliers(outliers, x)
-
     return x, outlier_values
 
 
@@ -687,8 +683,8 @@ def run_gmm(
         )
 
     if plot:
-        # Plot the likelihood function over time
-        plot_likelihood([x.logL for x in opt_params])
+        #     # Plot the likelihood function over time
+        #     plot_likelihood([x.logL for x in opt_params])
         animate_distribution(x, opt_params)
 
     return EstimatedGMM(

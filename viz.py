@@ -1,9 +1,10 @@
 from bokeh.plotting import figure, show, output_notebook, output_file, save
 from bokeh.models import HoverTool, Range1d, ColumnDataSource, NumeralTickFormatter
 import numpy as np
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import matplotlib.cm as cm
 from em import run_gmm
+from gmm_types import *
 
 
 def sv_viz(data: List[np.ndarray[float]], *, file_name: str):
@@ -147,7 +148,7 @@ def filter_and_plot_sequences_bokeh(
     R: int,
     read_length: int,
     sig: int = 50,
-) -> np.ndarray[np.ndarray[float]]:
+) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
     ux = get_unique_x_values(y)
 
     p = figure(
@@ -167,6 +168,7 @@ def filter_and_plot_sequences_bokeh(
     mb = np.zeros(
         (len(y), 4)
     )  # [# of pts that indicate sv | # of pieces of evidence returned by stix for the sample | average intercept for all pairs of points | sv-flag]
+    sv_evidence = [None] * len(y)
     colors = ["#0000FF", "#FF0000", "#00FF00", "#00FFFF", "#FF00FF", "#000000"]
 
     for i, yi in enumerate(y):
@@ -181,20 +183,25 @@ def filter_and_plot_sequences_bokeh(
                 z[j] = z[j + 1] = np.nan
 
         z = z[~np.isnan(z)]
+        z_filtered = z.copy()
 
         if len(z) > 0:
             b = int(
                 np.mean(z[1::2]) - np.mean(z[0::2])
             )  # TODO: we don't know that these evidence points all belong to the same SV, but we're calculating one intercept for all of them
-            try:
-                z[1::2] -= z[0::2] + b
-            except ValueError:
-                return []
+            z[1::2] -= z[0::2] + b
             z[0::2] -= min(ux)
             if len(z) >= 6:  # if there are more than 3 pairs of points
                 xp, yp = z[0::2], z[1::2]
                 sdl = np.sum(np.abs(yp) <= sig)
                 mb[i, :] = [sdl, len(xp), b, 0]
+                sv_evidence[i] = Evidence(
+                    intercept=b,
+                    paired_ends=[
+                        [z_filtered[i], z_filtered[i + 1]]
+                        for i in range(0, len(z_filtered), 2)
+                    ],
+                )
 
                 # if more than 3 pieces of evidence (paired read_length-r ends), then there is an SV here for this sample
                 if sdl >= 3:
@@ -215,12 +222,13 @@ def filter_and_plot_sequences_bokeh(
         output_file(f"{file_name}_sequences.html")
         save(p)
 
-    return mb
+    return mb, sv_evidence
 
 
 # Viz 4 with the intercepts
 def plot_fitted_lines_bokeh(
     mb: np.ndarray[np.ndarray[float]],
+    sv_evidence_unfiltered: List[Evidence],
     *,
     file_name: Optional[str],
     L: int,
@@ -250,14 +258,16 @@ def plot_fitted_lines_bokeh(
     )
 
     start_points = []
+    sv_evidence = []
     # Loop through each row in mb to add lines and points at the start of each line
-    for row in mb:
+    for i, row in enumerate(mb):
         if row[3] == 1:  # sv-flag is True
             start_x = L - read_length
             start_y = start_x + row[2]  # intercept
             p.line([start_x, L], [start_y, L + row[2]], line_width=2, color="red")
             p.scatter([start_x], [start_y], size=2, color="red", alpha=0.6)
             start_points.append((start_x, start_y))
+            sv_evidence.append(sv_evidence_unfiltered[i])
 
     start_points_array = np.array(start_points)
 
@@ -281,13 +291,19 @@ def plot_fitted_lines_bokeh(
         output_file(f"{file_name}_fitted_lines.html")
         save(p)
 
-    return start_points_array
+    return start_points_array, sv_evidence
+
+
+def plot_evidence_by_mode(gmm: GMM, sv_evidence: List[Evidence]):
+    # sort sv evidence
+    # split sv evidence up by gmm intercept
+    pass
 
 
 def get_intercepts(
     squiggle_data: List[np.ndarray[float]], *, file_name: Optional[str], L: int, R: int
-):
-    mb = filter_and_plot_sequences_bokeh(
+) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
+    mb, sv_evidence_unfiltered = filter_and_plot_sequences_bokeh(
         squiggle_data,
         file_name=file_name,
         L=L,
@@ -295,10 +311,16 @@ def get_intercepts(
         read_length=450,
         sig=50,
     )
-    intercepts = plot_fitted_lines_bokeh(
-        mb, file_name=file_name, L=L, read_length=450, R=R, sig=50
+    intercepts, sv_evidence = plot_fitted_lines_bokeh(
+        mb,
+        sv_evidence_unfiltered,
+        file_name=file_name,
+        L=L,
+        read_length=450,
+        R=R,
+        sig=50,
     )
-    return intercepts
+    return intercepts, sv_evidence
 
 
 def run_viz_gmm(
@@ -317,9 +339,11 @@ def run_viz_gmm(
     )
 
     # functions that transform data
-    intercepts = get_intercepts(squiggle_data, file_name=file_name, L=L, R=R)
+    intercepts, sv_evidence = get_intercepts(
+        squiggle_data, file_name=file_name, L=L, R=R
+    )
     points = np.array([np.array(i)[1] for i in intercepts if len(i) > 1]) - R
-    gmm = run_gmm(points, plot=True)
+    gmm = run_gmm(points, plot=True, pr=True)
     return gmm
 
 

@@ -100,7 +100,9 @@ def get_num_samples(row_index: int, row, chr: str, lookup: Dict[int, int]):
     end = giggle_format(chr, row.end)
     squiggle_data = load_squiggle_data(f"{PROCESSED_FILE_DIR}/{start}_{end}.csv")
     if len(squiggle_data) > 0:
-        intercepts = get_intercepts(squiggle_data, file_name=None, L=row.pos, R=row.end)
+        intercepts, _ = get_intercepts(
+            squiggle_data, file_name=None, L=row.pos, R=row.end
+        )
         lookup[row_index] = len(intercepts)
 
 

@@ -25,7 +25,7 @@ def txt_to_df(filename: str):
         "r_end",
         "type",
     ]
-    df = pd.read_csv(filename, names=column_names, sep="\s+")
+    df = pd.read_csv(filename, names=column_names, sep=r"\s+")
     return df
 
 

@@ -30,3 +30,9 @@ class EstimatedGMM(GaussianDistribution):
 @dataclass
 class GMM(GaussianDistribution):
     logL: float  # log-likelihood
+
+
+@dataclass
+class Evidence:
+    intercept: float
+    paired_ends: List[List[float]]
