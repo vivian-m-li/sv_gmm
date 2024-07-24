@@ -36,3 +36,4 @@ class GMM(GaussianDistribution):
 class Evidence:
     intercept: float
     paired_ends: List[List[float]]
+    start_y: float = 0

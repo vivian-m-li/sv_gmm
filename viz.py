@@ -1,6 +1,8 @@
 from bokeh.plotting import figure, show, output_notebook, output_file, save
 from bokeh.models import HoverTool, Range1d, ColumnDataSource, NumeralTickFormatter
 import numpy as np
+import random
+import matplotlib.pyplot as plt
 from typing import Optional, List, Tuple
 import matplotlib.cm as cm
 from em import run_gmm
@@ -267,7 +269,10 @@ def plot_fitted_lines_bokeh(
             p.line([start_x, L], [start_y, L + row[2]], line_width=2, color="red")
             p.scatter([start_x], [start_y], size=2, color="red", alpha=0.6)
             start_points.append((start_x, start_y))
-            sv_evidence.append(sv_evidence_unfiltered[i])
+
+            evidence = sv_evidence_unfiltered[i]
+            evidence.start_y = start_y
+            sv_evidence.append(evidence)
 
     start_points_array = np.array(start_points)
 
@@ -294,10 +299,42 @@ def plot_fitted_lines_bokeh(
     return start_points_array, sv_evidence
 
 
-def plot_evidence_by_mode(gmm: GMM, sv_evidence: List[Evidence]):
-    # sort sv evidence
-    # split sv evidence up by gmm intercept
-    pass
+def random_color():
+    return (random.random(), random.random(), random.random())
+
+
+def add_noise(value, scale=0.1):
+    return value + np.random.normal(scale=scale)
+
+
+def plot_evidence_by_mode(gmm: GMM, sv_evidence: List[Evidence], R: int):
+    sv_evidence = np.array(sv_evidence)
+    x_by_mode = [sorted(x + R) for x in gmm.x_by_mode]
+    evidence_by_mode = [[] for _ in range(len(x_by_mode))]
+    for evidence in sv_evidence:
+        for i, mode in enumerate(x_by_mode):
+            if evidence.start_y in mode:  # assumes that each mode has unique values
+                evidence_by_mode[i].append(evidence)
+                continue
+
+    for i, mode in enumerate(evidence_by_mode):
+        for evidence in mode:
+            color = random_color()
+            y = add_noise(i)
+            for paired_end in evidence.paired_ends:
+                x_values = [paired_end[0], paired_end[1]]
+                y_values = [y, y]
+                plt.plot(
+                    x_values,
+                    y_values,
+                    marker="o",
+                    linestyle="-",
+                    color=color,
+                )
+
+    plt.xlabel("Paired Ends")
+    plt.ylabel("Modes")
+    plt.show()
 
 
 def get_intercepts(
@@ -320,7 +357,8 @@ def get_intercepts(
         R=R,
         sig=50,
     )
-    return intercepts, sv_evidence
+    points = np.array([np.array(i)[1] for i in intercepts if len(i) > 1]) - R
+    return points, sv_evidence
 
 
 def run_viz_gmm(
@@ -339,11 +377,9 @@ def run_viz_gmm(
     )
 
     # functions that transform data
-    intercepts, sv_evidence = get_intercepts(
-        squiggle_data, file_name=file_name, L=L, R=R
-    )
-    points = np.array([np.array(i)[1] for i in intercepts if len(i) > 1]) - R
-    gmm = run_gmm(points, plot=True, pr=True)
+    points, sv_evidence = get_intercepts(squiggle_data, file_name=file_name, L=L, R=R)
+    gmm = run_gmm(points, plot=False, pr=True)
+    plot_evidence_by_mode(gmm, sv_evidence, R)
     return gmm
 
 
