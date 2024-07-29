@@ -69,16 +69,15 @@ def plot_distributions(
     for i in range(len(mu)):
         plt.plot(
             ux,
-            (n * p[i] / 4) * norm.pdf(ux, mu[i], np.sqrt(vr[i])),
+            2 * (n * p[i]) * norm.pdf(ux, mu[i], np.sqrt(vr[i])),
             linestyle="-",
             color=cm.Set1.colors[i],
-            alpha=0,
         )
     if outliers is not None:
         plt.scatter(outliers, len(outliers) * [1], marker=".", color="blue")
     if title is not None:
         plt.title(title)
-    plt.xlabel("y intercept")
+    plt.xlabel("intercept")
     plt.ylabel("density")
     plt.show()
 
@@ -150,7 +149,7 @@ def animate_distribution(x: np.ndarray[int], gmms: List[GMM]) -> None:
         fig=fig, func=ud, init_func=ud.start, frames=len(gmms), interval=300, blit=True
     )
 
-    plt.xlabel("x value")
+    plt.xlabel("intercept")
     plt.ylabel("density")
     plt.show()
 
@@ -299,12 +298,30 @@ def calc_log_likelihood(
     return logL
 
 
-def calc_aic(logL: float, num_modes: int) -> float:
+def calc_aic(
+    logL: float, num_modes: int, mu: np.ndarray[float], vr: np.ndarray[float]
+) -> float:
     """Calculates the penalized log-likelihood using AIC."""
     num_params = (
         num_modes * 3
     ) - 1  # mu, vr, and p as the params to predict, - 1 because the last p value is determined by the other(s)
     aic = (2 * num_params) - (2 * logL)
+
+    # Penalize model for any modes that have std > 25
+    high_vr_penalty = sum([10 for variance in vr if variance > 625])
+    aic += high_vr_penalty
+
+    # Penalize model if 2+ modes have too much overlap
+    overlap_threshold = 1 / 3
+    overlap_penalty = 0
+    for i in range(num_modes):
+        for j in range(i + 1, num_modes):
+            mean_diff = abs(mu[i] - mu[j])
+            avg_var = (vr[i] + vr[j]) / 2
+            if mean_diff < overlap_threshold * 2 * np.sqrt(avg_var):
+                overlap_penalty += 10
+    aic += overlap_penalty
+
     return aic
 
 
@@ -652,9 +669,7 @@ def run_gmm(
             x_by_mode=[],
         )
 
-    opt_params = None
-    outliers = None
-    num_sv = 0
+    outliers = []
     aic_vals = []
     if len(x) <= 10:  # small number of SVs detected
         opt_params = run_em(x, 1, plot)
@@ -664,9 +679,10 @@ def run_gmm(
         all_params = []
         for num_modes in range(1, 4):
             params = run_em(x, num_modes, plot)
-            aic = calc_aic(params[-1].logL, num_modes)
+            aic = calc_aic(params[-1].logL, num_modes, params[-1].mu, params[-1].vr)
             all_params.append(params)
             aic_vals.append(aic)
+        print(aic_vals)
         min_aic_idx = aic_vals.index(min(aic_vals))
         opt_params = all_params[min_aic_idx]
         num_sv = len(opt_params[0].mu)
@@ -683,9 +699,10 @@ def run_gmm(
         )
 
     if plot:
-        #     # Plot the likelihood function over time
-        #     plot_likelihood([x.logL for x in opt_params])
-        animate_distribution(x, opt_params)
+        # Plot the likelihood function over time
+        # plot_likelihood([x.logL for x in opt_params])
+        # animate_distribution(x, opt_params)
+        plot_distributions(x, len(x), final_params.mu, final_params.vr, final_params.p)
 
     return EstimatedGMM(
         mu=final_params.mu,

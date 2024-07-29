@@ -414,7 +414,7 @@ def run_viz_gmm(
 
     # functions that transform data
     points, sv_evidence = get_intercepts(squiggle_data, file_name=file_name, L=L, R=R)
-    gmm = run_gmm(points, plot=False, pr=True)
+    gmm = run_gmm(points, plot=True, pr=True)
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
     get_sv_stats(evidence_by_mode)
     plot_evidence_by_mode(evidence_by_mode)
