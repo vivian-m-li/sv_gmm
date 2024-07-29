@@ -29,8 +29,8 @@ def txt_to_df(filename: str):
     return df
 
 
-def giggle_format(chromosome: int, position: int):
-    return f"{chromosome}:{position}-{position}"
+def giggle_format(chromosome: str, position: int):
+    return f"{chromosome.lower()}:{position}-{position}"
 
 
 def load_squiggle_data(filename: str):
@@ -49,7 +49,7 @@ def parse_input(input: str) -> str:
         print("Input string must be in the format 'chromosome:position'")
         sys.exit(1)
     try:
-        chromosome = int(parts[0])
+        chromosome = parts[0]
         position = int(parts[1])
     except ValueError:
         print("Input string must be in the format 'chromosome:position'")
