@@ -37,3 +37,10 @@ class Evidence:
     intercept: float
     paired_ends: List[List[float]]
     start_y: float = 0
+
+
+@dataclass
+class SVStat:
+    length: int
+    start: int
+    end: int

@@ -2,6 +2,7 @@ from bokeh.plotting import figure, show, output_notebook, output_file, save
 from bokeh.models import HoverTool, Range1d, ColumnDataSource, NumeralTickFormatter
 import numpy as np
 import random
+import math
 import matplotlib.pyplot as plt
 from typing import Optional, List, Tuple
 import matplotlib.cm as cm
@@ -307,7 +308,9 @@ def add_noise(value, scale=0.1):
     return value + np.random.normal(scale=scale)
 
 
-def plot_evidence_by_mode(gmm: GMM, sv_evidence: List[Evidence], R: int):
+def get_evidence_by_mode(
+    gmm: GMM, sv_evidence: List[Evidence], R: int
+) -> List[List[Evidence]]:
     sv_evidence = np.array(sv_evidence)
     x_by_mode = [sorted(x + R) for x in gmm.x_by_mode]
     evidence_by_mode = [[] for _ in range(len(x_by_mode))]
@@ -316,7 +319,34 @@ def plot_evidence_by_mode(gmm: GMM, sv_evidence: List[Evidence], R: int):
             if evidence.start_y in mode:  # assumes that each mode has unique values
                 evidence_by_mode[i].append(evidence)
                 continue
+    return evidence_by_mode
 
+
+def get_mean_std(label: str, values: List[int]):
+    return f"{label}(mu)={math.floor(np.mean(values))}, {label}(sd)={round(np.std(values), 2)}"
+
+
+def get_sv_stats(evidence_by_mode: List[List[Evidence]]):
+    for i, mode in enumerate(evidence_by_mode):
+        stats = []
+        for evidence in mode:
+            lengths = [
+                max(paired_end) - min(paired_end) for paired_end in evidence.paired_ends
+            ]
+            stats.append(
+                SVStat(
+                    length=np.mean(lengths),
+                    start=max([paired_end[0] for paired_end in evidence.paired_ends]),
+                    end=min([paired_end[1] for paired_end in evidence.paired_ends]),
+                )
+            )
+        mode_lengths = [stat.length for stat in stats]
+        starts = [stat.start for stat in stats]
+        ends = [stat.end for stat in stats]
+        print(f"Mode {i + 1}\n{get_mean_std("Length", mode_lengths)}, Min={math.floor(min(mode_lengths))}, Max={math.floor(max(mode_lengths))}\n{get_mean_std("Start", starts)}\n{get_mean_std("End", ends)}\n")
+
+
+def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
     for i, mode in enumerate(evidence_by_mode):
         for evidence in mode:
             color = random_color()
@@ -361,6 +391,12 @@ def get_intercepts(
     return points, sv_evidence
 
 
+def query_genome_assembly():
+    # open grch37__p13.fna for the reference genome
+    # then need to query stix again for people's individual genomes?
+    pass
+
+
 def run_viz_gmm(
     squiggle_data: List[np.ndarray[float]], *, file_name: str, L: int, R: int
 ):
@@ -379,8 +415,9 @@ def run_viz_gmm(
     # functions that transform data
     points, sv_evidence = get_intercepts(squiggle_data, file_name=file_name, L=L, R=R)
     gmm = run_gmm(points, plot=False, pr=True)
-    plot_evidence_by_mode(gmm, sv_evidence, R)
-    return gmm
+    evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
+    get_sv_stats(evidence_by_mode)
+    plot_evidence_by_mode(evidence_by_mode)
 
 
 def run_gmm_l_r(
