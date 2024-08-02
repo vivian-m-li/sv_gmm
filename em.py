@@ -305,7 +305,7 @@ def calc_aic(
     num_params = (
         num_modes * 3
     ) - 1  # mu, vr, and p as the params to predict, - 1 because the last p value is determined by the other(s)
-    aic = (2 * num_params) - (2 * logL)
+    aic = (5 * num_params) - (2 * logL)
 
     # Penalize model for any modes that have std > 25
     high_vr_penalty = sum([10 for variance in vr if variance > 625])
