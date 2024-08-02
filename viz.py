@@ -6,7 +6,7 @@ import math
 import matplotlib.pyplot as plt
 from Bio import SeqIO
 import gzip
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 import matplotlib.cm as cm
 from em import run_gmm
 from gmm_types import *
@@ -149,7 +149,7 @@ def get_unique_x_values(data: List[np.ndarray]) -> np.ndarray[int]:
 
 # Third Viz with 3 + more point
 def filter_and_plot_sequences_bokeh(
-    y: List[np.ndarray[float]],
+    y: Dict[str, np.ndarray[float]],
     *,
     file_name: Optional[str],
     L: int,
@@ -157,7 +157,7 @@ def filter_and_plot_sequences_bokeh(
     read_length: int,
     sig: int = 50,
 ) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
-    ux = get_unique_x_values(y)
+    ux = get_unique_x_values(list(y.values()))
 
     p = figure(
         title=f"L = {L}, R = {R}",
@@ -179,7 +179,7 @@ def filter_and_plot_sequences_bokeh(
     sv_evidence = [None] * len(y)
     colors = ["#0000FF", "#FF0000", "#00FF00", "#00FFFF", "#FF00FF", "#000000"]
 
-    for i, yi in enumerate(y):
+    for i, (sample_id, yi) in enumerate(y.items()):
         z = yi.copy()
         for j in range(0, len(yi), 2):
             if (
@@ -204,6 +204,7 @@ def filter_and_plot_sequences_bokeh(
                 sdl = np.sum(np.abs(yp) <= sig)
                 mb[i, :] = [sdl, len(xp), b, 0]
                 sv_evidence[i] = Evidence(
+                    sample_id=sample_id,
                     intercept=b,
                     paired_ends=[
                         [z_filtered[i], z_filtered[i + 1]]
@@ -328,7 +329,7 @@ def get_evidence_by_mode(
 
 
 def get_mean_std(label: str, values: List[int]):
-    return f"{label}(mu)={math.floor(np.mean(values))}, {label}(sd)={round(np.std(values), 2)}"
+    return f"{label}={math.floor(np.mean(values))} +/- {round(np.std(values), 2)}"
 
 
 def get_sv_stats(evidence_by_mode: List[List[Evidence]]):
@@ -348,7 +349,7 @@ def get_sv_stats(evidence_by_mode: List[List[Evidence]]):
         mode_lengths = [stat.length for stat in stats]
         starts = [stat.start for stat in stats]
         ends = [stat.end for stat in stats]
-        print(f"Mode {i + 1}\n{get_mean_std("Length", mode_lengths)}, Min={math.floor(min(mode_lengths))}, Max={math.floor(max(mode_lengths))}\n{get_mean_std("Start", starts)}\n{get_mean_std("End", ends)}\n")
+        print(f"Mode {i + 1}\n{get_mean_std('Length', mode_lengths)}\nMin, Max=[{math.floor(min(mode_lengths))}, {math.floor(max(mode_lengths))}]\n{get_mean_std('Start', starts)}\n{get_mean_std('End', ends)}\n")
 
 
 def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
@@ -373,7 +374,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
 
 
 def get_intercepts(
-    squiggle_data: List[np.ndarray[float]], *, file_name: Optional[str], L: int, R: int
+    squiggle_data: Dict[str, np.ndarray[float]], *, file_name: Optional[str], L: int, R: int
 ) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
     mb, sv_evidence_unfiltered = filter_and_plot_sequences_bokeh(
         squiggle_data,
@@ -412,12 +413,13 @@ def query_genome_assembly(chr: str, L: int, R: int, samples: List[str]):
 
 
 def run_viz_gmm(
-    squiggle_data: List[np.ndarray[float]], *, file_name: str, chr: str, L: int, R: int
+    squiggle_data: Dict[str, np.ndarray[float]], *, file_name: str, chr: str, L: int, R: int
 ):
     # plots that don't update data format
-    sv_viz(squiggle_data, file_name=file_name)
+    data = list(squiggle_data.values())
+    sv_viz(data, file_name=file_name)
     bokeh_scatterplot(
-        squiggle_data,
+        data,
         file_name=file_name,
         lower_bound=L - 1900,
         upper_bound=R + 1900,
@@ -425,6 +427,7 @@ def run_viz_gmm(
         read_length=450,
         R=R,
     )
+
     # transforms data
     points, sv_evidence = get_intercepts(squiggle_data, file_name=file_name, L=L, R=R)
 
@@ -432,11 +435,10 @@ def run_viz_gmm(
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
     plot_evidence_by_mode(evidence_by_mode)
     get_sv_stats(evidence_by_mode)
-
-    # TODO: need to get all sample names that correspond to squiggle data
-    query_genome_assembly(chr, L, R)
+    query_genome_assembly(chr, L, R, sv_evidence)
 
 
+# DEPRECATED
 def run_gmm_l_r(
     squiggle_data: List[np.ndarray[float]], *, file_name: str, L: int, R: int
 ):

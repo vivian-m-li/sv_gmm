@@ -5,7 +5,7 @@ import argparse
 import csv
 import pandas as pd
 import numpy as np
-from viz import run_viz_gmm, run_gmm_l_r
+from viz import run_viz_gmm
 
 
 STIX_SCRIPT = "./query_stix.sh"
@@ -17,6 +17,7 @@ PLOT_DIR = "plots"
 def txt_to_df(filename: str):
     column_names = [
         "file_id",
+        "sample_id",
         "l_chr",
         "l_start",
         "l_end",
@@ -26,6 +27,7 @@ def txt_to_df(filename: str):
         "type",
     ]
     df = pd.read_csv(filename, names=column_names, sep=r"\s+")
+    df['sample_id'] = df['sample_id'].str.extract(r'/([^/]+)\.bed\.gz', expand=False)
     return df
 
 
@@ -34,12 +36,12 @@ def giggle_format(chromosome: str, position: int):
 
 
 def load_squiggle_data(filename: str):
-    squiggle_data = []
+    squiggle_data = {}
     if os.path.isfile(filename):
         with open(filename, newline="") as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:
-                squiggle_data.append(np.array([float(x) for x in row]))
+                squiggle_data[row[0]] = np.array([float(x) for x in row[1:]])
     return squiggle_data
 
 
@@ -79,16 +81,21 @@ def query_stix(l: str, r: str, run_gmm: bool = True):
         df = txt_to_df(output_file)
 
         grouped = df.groupby("file_id")
-        squiggle_data = []
+        squiggle_data = {}
+        processed_stix_output = []
         for _, group in grouped:
             l_starts = group["l_start"].tolist()
             r_ends = group["r_end"].tolist()
+            sample_id = group["sample_id"].iloc[0]
             sv_evidence = [item for pair in zip(l_starts, r_ends) for item in pair]
-            squiggle_data.append(np.array(sv_evidence))
+
+            squiggle_data[sample_id] = np.array(sv_evidence)
+            sv_evidence = [sample_id] + sv_evidence
+            processed_stix_output.append(sv_evidence)
 
         with open(processed_output_file, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerows(squiggle_data)
+            writer.writerows(processed_stix_output)
 
     if run_gmm:
         if len(squiggle_data) == 0:

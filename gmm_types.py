@@ -34,6 +34,7 @@ class GMM(GaussianDistribution):
 
 @dataclass
 class Evidence:
+    sample_id: str
     intercept: float
     paired_ends: List[List[float]]
     start_y: float = 0
