@@ -6,7 +6,7 @@
 #SBATCH -N 1
 #SBATCH -c 192
 #SBATCH --mem=1500gb                # Memory limit
-#SBATCH --time=24:00:00               # Time limit hrs:min:sec
+#SBATCH --time=48:00:00               # Time limit hrs:min:sec
 #SBATCH --output=/Users/vili4418/sv/eofiles/%x_%j.out
 #SBATCH --error=/Users/vili4418/sv/eofiles/%x_%j.err
 

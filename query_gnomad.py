@@ -1,5 +1,6 @@
 import os
 import time
+import datetime
 import csv
 import requests
 import multiprocessing
@@ -81,6 +82,7 @@ def get_all_sv():
 
 def query_gnomad_stix():
     for chr in CHR_LENGTHS.keys():
+        start = time.time()
         df = pd.read_csv(f"{FILE_DIR}/{chr}.csv")
         with multiprocessing.Manager() as manager:
             p = multiprocessing.Pool(multiprocessing.cpu_count())
@@ -93,6 +95,8 @@ def query_gnomad_stix():
             p.starmap(query_stix, args)
             p.close()
             p.join()
+        end = time.time()
+        print(f"Time to query chromosome {chr}: {datetime.timedelta(seconds = end - start)}")
 
 
 def get_num_samples(row_index: int, row, chr: str, lookup: Dict[int, int]):
