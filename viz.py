@@ -4,10 +4,15 @@ import numpy as np
 import random
 import math
 import matplotlib.pyplot as plt
+from Bio import SeqIO
+import gzip
 from typing import Optional, List, Tuple
 import matplotlib.cm as cm
 from em import run_gmm
 from gmm_types import *
+
+REFERENCE_FILE = "hs37d5.fa.gz"
+SAMPLES_DIR = "samples"
 
 
 def sv_viz(data: List[np.ndarray[float]], *, file_name: str):
@@ -390,15 +395,24 @@ def get_intercepts(
     points = np.array([np.array(i)[1] for i in intercepts if len(i) > 1]) - R
     return points, sv_evidence
 
+def query_ref_genome(chr: str, L: int, R: int):
+    with gzip.open(REFERENCE_FILE, "rt") as handle:
+        record_dict = SeqIO.to_dict(SeqIO.parse(handle, "fasta"))
+    sequence = record_dict[chr].seq[L:R]
+    return sequence
 
-def query_genome_assembly():
-    # open grch37__p13.fna for the reference genome
-    # then need to query stix again for people's individual genomes?
+def query_sample(sample:str, chr: str, L: int, R: int):
+    record_dict = SeqIO.to_dict(SeqIO.parse(f"{SAMPLES_DIR}/{sample}_consensus.fa", "fasta"))
+    sequence = record_dict[chr].seq[L:R]
+    return sequence
+
+
+def query_genome_assembly(chr: str, L: int, R: int, samples: List[str]):
     pass
 
 
 def run_viz_gmm(
-    squiggle_data: List[np.ndarray[float]], *, file_name: str, L: int, R: int
+    squiggle_data: List[np.ndarray[float]], *, file_name: str, chr: str, L: int, R: int
 ):
     # plots that don't update data format
     sv_viz(squiggle_data, file_name=file_name)
@@ -411,13 +425,16 @@ def run_viz_gmm(
         read_length=450,
         R=R,
     )
-
-    # functions that transform data
+    # transforms data
     points, sv_evidence = get_intercepts(squiggle_data, file_name=file_name, L=L, R=R)
+
     gmm = run_gmm(points, plot=True, pr=True)
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
-    get_sv_stats(evidence_by_mode)
     plot_evidence_by_mode(evidence_by_mode)
+    get_sv_stats(evidence_by_mode)
+
+    # TODO: need to get all sample names that correspond to squiggle data
+    query_genome_assembly(chr, L, R)
 
 
 def run_gmm_l_r(

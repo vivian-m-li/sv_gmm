@@ -98,6 +98,7 @@ def query_stix(l: str, r: str, run_gmm: bool = True):
         run_viz_gmm(
             squiggle_data,
             file_name=f"{PLOT_DIR}/{file_name}",
+            chr=l.split(":")[0],
             L=int(l.split("-")[1]),
             R=int(r.split("-")[1]),
         )
