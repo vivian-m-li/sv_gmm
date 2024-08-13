@@ -331,15 +331,25 @@ def get_evidence_by_mode(
     return evidence_by_mode
 
 
-def get_mean_std(label: str, values: List[int]):
+def get_mean_std(label: str, values: List[float]):
     return f"{label}={math.floor(np.mean(values))} +/- {round(np.std(values), 2)}"
 
 
-def get_sv_stats(evidence_by_mode: List[List[Evidence]]):
-    all_starts = []
-    all_ends = []
+def print_sv_stats(sv_stats: List[List[SVStat]]):
+    stats = []
+    for i, lst in enumerate(sv_stats):
+        lengths = [sv.length for sv in lst]
+        starts = [sv.start for sv in lst]
+        ends = [sv.end for sv in lst]
+        stats.append(
+            f"Mode {i + 1}\n{get_mean_std('Length', lengths)}\nMin, Max=[{math.floor(min(lengths))}, {math.floor(max(lengths))}]\n{get_mean_std('Start', starts)}\n{get_mean_std('End', ends)}\n"
+        )
+    return stats
+
+
+def get_sv_stats(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
     all_stats = []
-    for i, mode in enumerate(evidence_by_mode):
+    for mode in evidence_by_mode:
         stats = []
         for evidence in mode:
             lengths = [
@@ -352,15 +362,8 @@ def get_sv_stats(evidence_by_mode: List[List[Evidence]]):
                     end=min([paired_end[1] for paired_end in evidence.paired_ends]),
                 )
             )
-        mode_lengths = [stat.length for stat in stats]
-        starts = [stat.start for stat in stats]
-        ends = [stat.end for stat in stats]
-        all_starts.append(np.mean(starts))
-        all_ends.append(np.mean(ends))
-        all_stats.append(
-            f"Mode {i + 1}\n{get_mean_std('Length', mode_lengths)}\nMin, Max=[{math.floor(min(mode_lengths))}, {math.floor(max(mode_lengths))}]\n{get_mean_std('Start', starts)}\n{get_mean_std('End', ends)}\n"
-        )
-    return all_starts, all_ends, all_stats
+        all_stats.append(stats)
+    return all_stats
 
 
 def add_color_noise(hex_color: str):
@@ -376,7 +379,7 @@ def add_color_noise(hex_color: str):
 
 
 def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
-    starts, ends, stats = get_sv_stats(evidence_by_mode)
+    sv_stats = get_sv_stats(evidence_by_mode)
     mode_indices = list(range(len(evidence_by_mode)))
     mode_indices_reversed = mode_indices[::-1]
 
@@ -424,8 +427,16 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
         plt.ylim(min_y - 0.1, max_y + 0.65)
 
     for i in range(len(evidence_by_mode)):
-        plt.axvline(starts[i], color=COLORS[mode_indices[i]], linestyle="--")
-        plt.axvline(ends[i], color=COLORS[mode_indices[i]], linestyle="--")
+        plt.axvline(
+            np.mean([sv.start for sv in sv_stats[i]]),
+            color=COLORS[mode_indices[i]],
+            linestyle="--",
+        )
+        plt.axvline(
+            np.mean([sv.end for sv in sv_stats[i]]),
+            color=COLORS[mode_indices[i]],
+            linestyle="--",
+        )
 
     plt.xlabel("Paired Ends")
     plt.ylabel("Modes")
@@ -436,10 +447,11 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
 
     text_x = 0.92
     text_y = 0.5
+    mean_length = int(np.mean([sv.length for lst in sv_stats for sv in lst]))
     fig.text(
         text_x,
         text_y,
-        "\n\n".join(stats),
+        f"Average SV Length={mean_length}\n\n{'\n\n'.join(print_sv_stats(sv_stats))}",
         ha="left",
         va="center",
         fontsize=10,
@@ -448,7 +460,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
 
 
 def plot_sequence(evidence_by_mode: List[List[Evidence]], ref_sequence: Seq.Seq):
-    starts, ends, stats = get_sv_stats(evidence_by_mode)
+    sv_stats = get_sv_stats(evidence_by_mode)
     mode_indices = list(range(len(evidence_by_mode)))
     mode_indices_reversed = mode_indices[::-1]
     for i, mode in enumerate(reversed(evidence_by_mode)):
@@ -492,8 +504,16 @@ def plot_sequence(evidence_by_mode: List[List[Evidence]], ref_sequence: Seq.Seq)
         )
 
     for i in range(len(evidence_by_mode)):
-        plt.axvline(starts[i], color=COLORS[mode_indices_reversed[i]], linestyle="--")
-        plt.axvline(ends[i], color=COLORS[mode_indices_reversed[i]], linestyle="--")
+        plt.axvline(
+            np.mean([sv.start for sv in sv_stats[i]]),
+            color=COLORS[mode_indices_reversed[i]],
+            linestyle="--",
+        )
+        plt.axvline(
+            np.mean([sv.end for sv in sv_stats[i]]),
+            color=COLORS[mode_indices_reversed[i]],
+            linestyle="--",
+        )
 
     plt.xlabel("Paired Ends")
     plt.ylabel("Modes")
@@ -606,12 +626,12 @@ def run_viz_gmm(
 
     ref_sequence = query_ref_genome(chr)
 
-    gmm = run_gmm(points, plot=True, pr=False)
+    gmm = run_gmm(points, plot=False, pr=False)
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
     plot_evidence_by_mode(evidence_by_mode)
+    # plot_sv_lengths(evidence_by_mode)
     sv_sequences = query_genome_assembly(chr, L, R, sv_evidence)
     # plot_sequence(evidence_by_mode, ref_sequence)
-    plot_sv_lengths(evidence_by_mode)
 
 
 # DEPRECATED
