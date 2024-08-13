@@ -2,12 +2,14 @@ from bokeh.plotting import figure, show, output_notebook, output_file, save
 from bokeh.models import HoverTool, Range1d, ColumnDataSource, NumeralTickFormatter
 import numpy as np
 import random
+import colorsys
 import math
 import matplotlib.pyplot as plt
 from Bio import SeqIO
 import gzip
 from typing import Optional, List, Tuple, Dict
 import matplotlib.cm as cm
+from matplotlib.ticker import MaxNLocator
 from em import run_gmm
 from gmm_types import *
 
@@ -310,7 +312,7 @@ def random_color():
     return (random.random(), random.random(), random.random())
 
 
-def add_noise(value, scale=0.1):
+def add_noise(value, scale=0.07):
     return value + np.random.normal(scale=scale)
 
 
@@ -333,6 +335,9 @@ def get_mean_std(label: str, values: List[int]):
 
 
 def get_sv_stats(evidence_by_mode: List[List[Evidence]]):
+    all_starts = []
+    all_ends = []
+    all_stats = []
     for i, mode in enumerate(evidence_by_mode):
         stats = []
         for evidence in mode:
@@ -349,14 +354,40 @@ def get_sv_stats(evidence_by_mode: List[List[Evidence]]):
         mode_lengths = [stat.length for stat in stats]
         starts = [stat.start for stat in stats]
         ends = [stat.end for stat in stats]
-        print(f"Mode {i + 1}\n{get_mean_std('Length', mode_lengths)}\nMin, Max=[{math.floor(min(mode_lengths))}, {math.floor(max(mode_lengths))}]\n{get_mean_std('Start', starts)}\n{get_mean_std('End', ends)}\n")
+        all_starts.append(np.mean(starts))
+        all_ends.append(np.mean(ends))
+        all_stats.append(
+            f"Mode {i + 1}\n{get_mean_std('Length', mode_lengths)}\nMin, Max=[{math.floor(min(mode_lengths))}, {math.floor(max(mode_lengths))}]\n{get_mean_std('Start', starts)}\n{get_mean_std('End', ends)}\n"
+        )
+    return all_starts, all_ends, all_stats
+
+
+def add_color_noise(hex_color: str):
+    hex_color = hex_color.lstrip("#")
+    rgb = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    hls = colorsys.rgb_to_hls(rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)
+    hue, lightness, saturation = hls
+    new_saturation = saturation + random.uniform(-0.3, 0.3)
+    new_saturation = min(max(new_saturation, 0), 1)
+    new_rgb = colorsys.hls_to_rgb(hue, lightness, new_saturation)
+    new_rgb = tuple(int(c * 255) for c in new_rgb)
+    return "#{:02x}{:02x}{:02x}".format(*new_rgb)
 
 
 def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
+    starts, ends, stats = get_sv_stats(evidence_by_mode)
+
+    fig, ax = plt.subplots()
+    min_y = np.inf
     for i, mode in enumerate(evidence_by_mode):
+        max_y = -np.inf
+        all_paired_ends = []
+
         for evidence in mode:
-            color = random_color()
-            y = add_noise(i)
+            color = add_color_noise(COLORS[i])
+            y = add_noise(i + 1)
+            max_y = max(y, max_y)
+            min_y = min(y, min_y)
             for paired_end in evidence.paired_ends:
                 x_values = [paired_end[0], paired_end[1]]
                 y_values = [y, y]
@@ -364,17 +395,58 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
                     x_values,
                     y_values,
                     marker="o",
+                    markersize=5,
                     linestyle="-",
+                    linewidth=1,
                     color=color,
                 )
+                max_l = max([paired_end[0] for paired_end in evidence.paired_ends])
+                min_r = min([paired_end[1] for paired_end in evidence.paired_ends])
+                all_paired_ends.extend([max_l, min_r])
+
+        n, bins, patches = plt.hist(
+            all_paired_ends,
+            bins=30,
+            color=COLORS[i],
+            alpha=0.8,
+            range=(min(all_paired_ends), max(all_paired_ends)),
+            orientation="vertical",
+            align="mid",
+        )
+        max_hist_height = max(n)
+        scale_factor = 0.5 / max_hist_height
+        for patch in patches:
+            patch.set_height(patch.get_height() * scale_factor)
+            patch.set_y(patch.get_y() + max_y + 0.05)
+        plt.ylim(min_y - 0.1, max_y + 0.65)
+
+    for i in range(len(evidence_by_mode)):
+        plt.axvline(starts[i], color=COLORS[i], linestyle="--")
+        plt.axvline(ends[i], color=COLORS[i], linestyle="--")
 
     plt.xlabel("Paired Ends")
     plt.ylabel("Modes")
+    plt.gca().yaxis.set_major_locator(MaxNLocator(integer=True))
+
+    text_x = 0.92
+    text_y = 0.5
+    fig.text(
+        text_x,
+        text_y,
+        "\n\n".join(stats[::-1]),
+        ha="left",
+        va="center",
+        fontsize=10,
+    )
     plt.show()
 
 
 def get_intercepts(
-    squiggle_data: Dict[str, np.ndarray[float]], *, file_name: Optional[str], L: int, R: int
+    squiggle_data: Dict[str, np.ndarray[float]],
+    *,
+    file_name: Optional[str],
+    L: int,
+    R: int,
 ) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
     mb, sv_evidence_unfiltered = filter_and_plot_sequences_bokeh(
         squiggle_data,
@@ -396,24 +468,38 @@ def get_intercepts(
     points = np.array([np.array(i)[1] for i in intercepts if len(i) > 1]) - R
     return points, sv_evidence
 
+
 def query_ref_genome(chr: str, L: int, R: int):
     with gzip.open(REFERENCE_FILE, "rt") as handle:
         record_dict = SeqIO.to_dict(SeqIO.parse(handle, "fasta"))
     sequence = record_dict[chr].seq[L:R]
     return sequence
 
-def query_sample(sample:str, chr: str, L: int, R: int):
-    record_dict = SeqIO.to_dict(SeqIO.parse(f"{SAMPLES_DIR}/{sample}_consensus.fa", "fasta"))
+
+def query_sample(sample: str, chr: str, L: int, R: int):
+    record_dict = SeqIO.to_dict(
+        SeqIO.parse(f"{SAMPLES_DIR}/{sample}_consensus.fa", "fasta")
+    )
     sequence = record_dict[chr].seq[L:R]
     return sequence
 
 
-def query_genome_assembly(chr: str, L: int, R: int, samples: List[str]):
-    pass
+def query_genome_assembly(chr: str, L: int, R: int, sv_evidence: List[Evidence]):
+    ref_sequence = query_ref_genome(chr, L, R)
+    # for evidence in sv_evidence:
+    #     sample_sequence = query_sample(
+    #         evidence.sample_id, chr, L, R
+    #     )  # TODO: these consensus sequences are incomplete
+    return ref_sequence
 
 
 def run_viz_gmm(
-    squiggle_data: Dict[str, np.ndarray[float]], *, file_name: str, chr: str, L: int, R: int
+    squiggle_data: Dict[str, np.ndarray[float]],
+    *,
+    file_name: str,
+    chr: str,
+    L: int,
+    R: int,
 ):
     # plots that don't update data format
     data = list(squiggle_data.values())
@@ -431,11 +517,10 @@ def run_viz_gmm(
     # transforms data
     points, sv_evidence = get_intercepts(squiggle_data, file_name=file_name, L=L, R=R)
 
-    gmm = run_gmm(points, plot=True, pr=True)
+    gmm = run_gmm(points, plot=False, pr=False)
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
     plot_evidence_by_mode(evidence_by_mode)
-    get_sv_stats(evidence_by_mode)
-    query_genome_assembly(chr, L, R, sv_evidence)
+    ref_sequence = query_genome_assembly(chr, L, R, sv_evidence)
 
 
 # DEPRECATED

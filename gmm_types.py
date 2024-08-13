@@ -2,6 +2,8 @@ import numpy as np
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+COLORS = ["#459395", "#EB7C69", "#FDA638"]
+
 
 @dataclass
 class GaussianDistribution:

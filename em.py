@@ -71,7 +71,7 @@ def plot_distributions(
             ux,
             2 * (n * p[i]) * norm.pdf(ux, mu[i], np.sqrt(vr[i])),
             linestyle="-",
-            color=cm.Set1.colors[i],
+            color=COLORS[i],
         )
     if outliers is not None:
         plt.scatter(outliers, len(outliers) * [1], marker=".", color="blue")
@@ -111,7 +111,7 @@ class UpdateDist:
                 [],
                 [],
                 linestyle="-",
-                color=cm.Set1.colors[i],
+                color=COLORS[i],
             )
             self.lines = self.lines + (line,)
 
@@ -124,7 +124,7 @@ class UpdateDist:
                 self.ux,
                 calc_y_vals(self.ux, self.n, self.gmms[0], i),
                 linestyle="-",
-                color=cm.Set1.colors[i],
+                color=COLORS[i],
             )
             lines = lines + (line,)
         self.lines = lines
@@ -268,7 +268,7 @@ def plot_fitted_lines(y_intercepts: List[float]):
 def plot_clusters(x: np.ndarray[int], kmeans_labels: List[int]):
     """Plots and colors each data point according to the k-means cluster they're inferred to belong in."""
     labels = set(kmeans_labels)
-    color_lookup = {label: cm.Set1.colors[i] for i, label in enumerate(labels)}
+    color_lookup = {label: COLORS[i] for i, label in enumerate(labels)}
     colors = [color_lookup[label] for label in kmeans_labels]
     plt.figure(figsize=(8, 6))
     plt.scatter(list(range(len(x))), x, c=colors)
@@ -682,7 +682,6 @@ def run_gmm(
             aic = calc_aic(params[-1].logL, num_modes, params[-1].mu, params[-1].vr)
             all_params.append(params)
             aic_vals.append(aic)
-        print(aic_vals)
         min_aic_idx = aic_vals.index(min(aic_vals))
         opt_params = all_params[min_aic_idx]
         num_sv = len(opt_params[0].mu)
