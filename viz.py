@@ -5,12 +5,13 @@ import random
 import colorsys
 import math
 import matplotlib.pyplot as plt
-from Bio import SeqIO
+from scipy.stats import norm
+from Bio import SeqIO, Seq
 import gzip
 from typing import Optional, List, Tuple, Dict
 import matplotlib.cm as cm
 from matplotlib.ticker import MaxNLocator
-from em import run_gmm
+from em import run_gmm, run_em, get_scatter_data
 from gmm_types import *
 
 REFERENCE_FILE = "hs37d5.fa.gz"
@@ -376,15 +377,17 @@ def add_color_noise(hex_color: str):
 
 def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
     starts, ends, stats = get_sv_stats(evidence_by_mode)
+    mode_indices = list(range(len(evidence_by_mode)))
+    mode_indices_reversed = mode_indices[::-1]
 
     fig, ax = plt.subplots()
     min_y = np.inf
-    for i, mode in enumerate(evidence_by_mode):
+    for i, mode in enumerate(reversed(evidence_by_mode)):
+        mode_color = COLORS[mode_indices_reversed[i]]
         max_y = -np.inf
         all_paired_ends = []
-
         for evidence in mode:
-            color = add_color_noise(COLORS[i])
+            color = add_color_noise(mode_color)
             y = add_noise(i + 1)
             max_y = max(y, max_y)
             min_y = min(y, min_y)
@@ -400,14 +403,14 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
                     linewidth=1,
                     color=color,
                 )
-                max_l = max([paired_end[0] for paired_end in evidence.paired_ends])
-                min_r = min([paired_end[1] for paired_end in evidence.paired_ends])
-                all_paired_ends.extend([max_l, min_r])
+            max_l = max([paired_end[0] for paired_end in evidence.paired_ends])
+            min_r = min([paired_end[1] for paired_end in evidence.paired_ends])
+            all_paired_ends.extend([max_l, min_r])
 
         n, bins, patches = plt.hist(
             all_paired_ends,
-            bins=30,
-            color=COLORS[i],
+            bins=20,
+            color=mode_color,
             alpha=0.8,
             range=(min(all_paired_ends), max(all_paired_ends)),
             orientation="vertical",
@@ -421,23 +424,109 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
         plt.ylim(min_y - 0.1, max_y + 0.65)
 
     for i in range(len(evidence_by_mode)):
-        plt.axvline(starts[i], color=COLORS[i], linestyle="--")
-        plt.axvline(ends[i], color=COLORS[i], linestyle="--")
+        plt.axvline(starts[i], color=COLORS[mode_indices[i]], linestyle="--")
+        plt.axvline(ends[i], color=COLORS[mode_indices[i]], linestyle="--")
 
     plt.xlabel("Paired Ends")
     plt.ylabel("Modes")
-    plt.gca().yaxis.set_major_locator(MaxNLocator(integer=True))
+    plt.yticks(
+        ticks=[mode + 1 for mode in mode_indices],
+        labels=[y_label + 1 for y_label in mode_indices_reversed],
+    )
 
     text_x = 0.92
     text_y = 0.5
     fig.text(
         text_x,
         text_y,
-        "\n\n".join(stats[::-1]),
+        "\n\n".join(stats),
         ha="left",
         va="center",
         fontsize=10,
     )
+    plt.show()
+
+
+def plot_sequence(evidence_by_mode: List[List[Evidence]], ref_sequence: Seq.Seq):
+    starts, ends, stats = get_sv_stats(evidence_by_mode)
+    mode_indices = list(range(len(evidence_by_mode)))
+    mode_indices_reversed = mode_indices[::-1]
+    for i, mode in enumerate(reversed(evidence_by_mode)):
+        lefts = []
+        rights = []
+        for evidence in mode:
+            lefts.append(max([paired_end[0] for paired_end in evidence.paired_ends]))
+            rights.append(min([paired_end[1] for paired_end in evidence.paired_ends]))
+        all_paired_ends = lefts + rights
+        max_left = max(lefts)
+        min_right = min(rights)
+
+        n, bins, patches = plt.hist(
+            all_paired_ends,
+            bins=20,
+            color=COLORS[mode_indices_reversed[i]],
+            alpha=0.8,
+            range=(min(all_paired_ends), max(all_paired_ends)),
+            orientation="vertical",
+            align="mid",
+        )
+        max_hist_height = max(n)
+        scale_factor = 0.8 / max_hist_height
+        for patch in patches:
+            patch.set_height(patch.get_height() * scale_factor)
+            patch.set_y(patch.get_y() + i + 1)
+        plt.ylim(i + 0.9, i + 2)
+
+        ref_seq = ref_sequence.seq[int(max_left) : int(min_right)]
+        if len(ref_seq) > 20:
+            truncated_ref_seq = f"{ref_seq[:10]}......{ref_seq[-10:]}"
+        else:
+            truncated_ref_seq = ref_seq
+
+        plt.text(
+            x=(max_left + min_right) / 2,
+            y=i + 1.01,
+            s=truncated_ref_seq,
+            ha="center",
+            fontsize=10,
+        )
+
+    for i in range(len(evidence_by_mode)):
+        plt.axvline(starts[i], color=COLORS[mode_indices_reversed[i]], linestyle="--")
+        plt.axvline(ends[i], color=COLORS[mode_indices_reversed[i]], linestyle="--")
+
+    plt.xlabel("Paired Ends")
+    plt.ylabel("Modes")
+    plt.yticks(
+        ticks=[mode + 1 for mode in mode_indices],
+        labels=[y_label + 1 for y_label in mode_indices_reversed],
+    )
+    plt.show()
+
+
+def plot_sv_lengths(evidence_by_mode: List[List[Evidence]]):
+    plt.figure()
+    for i, mode in enumerate(evidence_by_mode):
+        all_lengths = []
+        for evidence in mode:
+            lengths = [
+                max(paired_end) - min(paired_end) for paired_end in evidence.paired_ends
+            ]
+            all_lengths.append(np.mean(lengths))
+
+        gmm = run_em(all_lengths, 1)[-1]
+        ux, hx = get_scatter_data(all_lengths)
+        plt.plot(
+            ux,
+            2
+            * (len(all_lengths) * gmm.p[0])
+            * norm.pdf(ux, gmm.mu[0], np.sqrt(gmm.vr[0])),
+            linestyle="-",
+            color=COLORS[i],
+        )
+        plt.hist(all_lengths, bins=10, color=COLORS[i], alpha=0.5)
+    plt.xlabel("SV Length")
+    plt.ylabel("Frequency")
     plt.show()
 
 
@@ -469,11 +558,10 @@ def get_intercepts(
     return points, sv_evidence
 
 
-def query_ref_genome(chr: str, L: int, R: int):
+def query_ref_genome(chr: str) -> Seq.Seq:
     with gzip.open(REFERENCE_FILE, "rt") as handle:
         record_dict = SeqIO.to_dict(SeqIO.parse(handle, "fasta"))
-    sequence = record_dict[chr].seq[L:R]
-    return sequence
+    return record_dict[chr]
 
 
 def query_sample(sample: str, chr: str, L: int, R: int):
@@ -485,12 +573,11 @@ def query_sample(sample: str, chr: str, L: int, R: int):
 
 
 def query_genome_assembly(chr: str, L: int, R: int, sv_evidence: List[Evidence]):
-    ref_sequence = query_ref_genome(chr, L, R)
     # for evidence in sv_evidence:
     #     sample_sequence = query_sample(
     #         evidence.sample_id, chr, L, R
     #     )  # TODO: these consensus sequences are incomplete
-    return ref_sequence
+    pass
 
 
 def run_viz_gmm(
@@ -517,10 +604,14 @@ def run_viz_gmm(
     # transforms data
     points, sv_evidence = get_intercepts(squiggle_data, file_name=file_name, L=L, R=R)
 
-    gmm = run_gmm(points, plot=False, pr=False)
+    ref_sequence = query_ref_genome(chr)
+
+    gmm = run_gmm(points, plot=True, pr=False)
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
     plot_evidence_by_mode(evidence_by_mode)
-    ref_sequence = query_genome_assembly(chr, L, R, sv_evidence)
+    sv_sequences = query_genome_assembly(chr, L, R, sv_evidence)
+    # plot_sequence(evidence_by_mode, ref_sequence)
+    plot_sv_lengths(evidence_by_mode)
 
 
 # DEPRECATED

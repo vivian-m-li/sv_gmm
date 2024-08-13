@@ -517,7 +517,15 @@ def assign_values_to_modes(
     assignments = np.argmax(gz, axis=1)
     x_by_mode = [[] for _ in range(num_modes)]
     for i, mode in enumerate(assignments):
-        x_by_mode[mode].append(x[i])
+        if mode is not None:
+            mean = mu[mode]
+            std_dev = np.sqrt(vr[mode])
+            if vr[mode] < 625 or (
+                abs(x[i] - mean) <= 2 * std_dev
+            ):  # remove points from a mode if they're too far out
+                x_by_mode[mode].append(x[i])
+            else:
+                print(f"throwing out {x[i]} for mode {mode + 1}")
     x_by_mode = [np.array(data_points) for data_points in x_by_mode]
     return x_by_mode
 
