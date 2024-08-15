@@ -35,6 +35,13 @@ def giggle_format(chromosome: str, position: int):
     return f"{chromosome.lower()}:{position}-{position}"
 
 
+def reverse_giggle_format(l: str, r: str):
+    chr = l.split(":")[0]
+    start = int(l.split("-")[1])
+    stop = int(r.split("-")[1])
+    return chr, start, stop
+
+
 def load_squiggle_data(filename: str):
     squiggle_data = {}
     if os.path.isfile(filename):
@@ -59,7 +66,9 @@ def parse_input(input: str) -> str:
     return giggle_format(chromosome, position)
 
 
-def query_stix(l: str, r: str, run_gmm: bool = True):
+def query_stix(
+    l: str, r: str, run_gmm: bool = True, *, filter_nonreference: bool = False
+):
     for directory in [FILE_DIR, PROCESSED_FILE_DIR, PLOT_DIR]:
         if not os.path.exists(directory):
             os.mkdir(directory)
@@ -97,6 +106,17 @@ def query_stix(l: str, r: str, run_gmm: bool = True):
             writer = csv.writer(csvfile)
             writer.writerows(processed_stix_output)
 
+    chr, start, stop = reverse_giggle_format(l, r)
+    if filter_nonreference:
+        df = pd.read_csv("1000genomes/deletions_df.csv")
+        row = df[(df["start"] == start) & (df["stop"] == stop)]
+        samples = [
+            sample_id for sample_id in df.columns[11:-1] if sample_id in squiggle_data
+        ]
+        non_ref_samples = [col for col in samples if row[col][0] == "(0, 0)"]
+        for non_ref in non_ref_samples:
+            squiggle_data.pop(non_ref, None)
+
     if run_gmm:
         if len(squiggle_data) == 0:
             print("No structural variants found in this region.")
@@ -105,9 +125,9 @@ def query_stix(l: str, r: str, run_gmm: bool = True):
         run_viz_gmm(
             squiggle_data,
             file_name=f"{PLOT_DIR}/{file_name}",
-            chr=l.split(":")[0],
-            L=int(l.split("-")[1]),
-            R=int(r.split("-")[1]),
+            chr=chr,
+            L=start,
+            R=stop,
         )
 
     return squiggle_data

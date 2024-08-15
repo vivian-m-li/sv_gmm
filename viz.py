@@ -648,13 +648,14 @@ def run_viz_gmm(
 
     # transforms data
     points, sv_evidence = get_intercepts(squiggle_data, file_name=file_name, L=L, R=R)
-
-    ref_sequence = query_ref_genome(chr)
+    if len(points) == 0:
+        print("No structural variants found in this region.")
+        return
 
     gmm = run_gmm(points, plot=False, pr=False)
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
     plot_evidence_by_mode(evidence_by_mode)
-    # plot_sv_lengths(evidence_by_mode)
+    plot_sv_lengths(evidence_by_mode)
 
 
 # DEPRECATED
