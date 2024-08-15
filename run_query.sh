@@ -11,5 +11,5 @@
 #SBATCH --error=/Users/vili4418/sv/eofiles/%x_%j.err
 
 source $HOME/.venv/bin/activate
-python3 $HOME/sv/sv_gmm/query_gnomad.py
+python3 $HOME/sv/sv_gmm/query_1000genomes.py
 deactivate

@@ -22,10 +22,12 @@ def load_vcf():
         "alt",
         "qual",
         "filter",
-        "f",
+        "af",
+        "info",
     ] + list(vcf_in.header.samples)
     data = []
     for record in vcf_in.fetch():
+        info = dict(record.info)
         row = [
             record.id,
             record.chrom,
@@ -36,7 +38,8 @@ def load_vcf():
             ",".join([str(alt) for alt in record.alts]),
             record.qual,
             record.filter.keys(),
-            dict(record.info),
+            info["AF"],
+            info,
         ]
         for sample in record.samples:
             row.append(record.samples[sample]["GT"])
@@ -49,12 +52,12 @@ def load_vcf():
 
 # TODO: toss out all samples that are nonreference before putting them in the gmm
 def get_num_samples(row_index: int, row, lookup: Dict[int, int]):
-    start = giggle_format(row.chr, row.start)
-    end = giggle_format(row.chr, row.end)
+    start = giggle_format(str(row.chr), row.start)
+    end = giggle_format(str(row.chr), row.stop)
     squiggle_data = query_stix(start, end, False)
     if len(squiggle_data) > 0:
         intercepts, _ = get_intercepts(
-            squiggle_data, file_name=None, L=row.pos, R=row.end
+            squiggle_data, file_name=None, L=row.start, R=row.stop,
         )
         lookup[row_index] = len(intercepts)
 
