@@ -10,7 +10,8 @@ from Bio import SeqIO, Seq
 import gzip
 from typing import Optional, List, Tuple, Dict
 import matplotlib.cm as cm
-from matplotlib.ticker import MaxNLocator
+from brokenaxes import brokenaxes
+from matplotlib.ticker import FixedLocator, StrMethodFormatter
 from em import run_gmm, run_em, get_scatter_data
 from gmm_types import *
 
@@ -383,7 +384,32 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
     mode_indices = list(range(len(evidence_by_mode)))
     mode_indices_reversed = mode_indices[::-1]
 
-    fig, ax = plt.subplots()
+    fig = plt.figure(figsize=(12, 8))
+    max_max_l = -np.inf
+    min_min_r = np.inf
+    all_mode_paired_ends = []
+    for i, mode in enumerate(reversed(evidence_by_mode)):
+        all_paired_ends = []
+        for evidence in mode:
+            max_l = max([paired_end[0] for paired_end in evidence.paired_ends])
+            min_r = min([paired_end[1] for paired_end in evidence.paired_ends])
+            all_paired_ends.extend([max_l, min_r])
+            max_max_l = max(max_l, max_max_l)
+            min_min_r = min(min_r, min_min_r)
+            all_mode_paired_ends.extend(evidence.paired_ends)
+    all_mode_paired_ends = [
+        p for paired_end in all_mode_paired_ends for p in paired_end
+    ]
+
+    bax = brokenaxes(
+        xlims=(
+            (min(all_mode_paired_ends) - 20, max_max_l + 50),
+            (min_min_r - 50, max(all_mode_paired_ends) + 20),
+        ),
+        hspace=0.05,
+        fig=fig,
+    )
+
     min_y = np.inf
     for i, mode in enumerate(reversed(evidence_by_mode)):
         mode_color = COLORS[mode_indices_reversed[i]]
@@ -397,7 +423,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
             for paired_end in evidence.paired_ends:
                 x_values = [paired_end[0], paired_end[1]]
                 y_values = [y, y]
-                plt.plot(
+                bax.plot(
                     x_values,
                     y_values,
                     marker="o",
@@ -410,52 +436,59 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
             min_r = min([paired_end[1] for paired_end in evidence.paired_ends])
             all_paired_ends.extend([max_l, min_r])
 
-        n, bins, patches = plt.hist(
-            all_paired_ends,
-            bins=20,
-            color=mode_color,
-            alpha=0.8,
-            range=(min(all_paired_ends), max(all_paired_ends)),
-            orientation="vertical",
-            align="mid",
-        )
-        max_hist_height = max(n)
-        scale_factor = 0.5 / max_hist_height
-        for patch in patches:
-            patch.set_height(patch.get_height() * scale_factor)
-            patch.set_y(patch.get_y() + max_y + 0.05)
-        plt.ylim(min_y - 0.1, max_y + 0.65)
+        for ax in bax.axs:
+            n, bins, patches = ax.hist(
+                all_paired_ends,
+                bins=20,
+                color=mode_color,
+                alpha=0.8,
+                range=(min(all_paired_ends), max(all_paired_ends)),
+                orientation="vertical",
+                align="mid",
+            )
+            max_hist_height = max(n)
+            scale_factor = 0.5 / max_hist_height
+            for patch in patches:
+                patch.set_height(patch.get_height() * scale_factor)
+                patch.set_y(patch.get_y() + max_y + 0.05)
+            ax.set_ylim(min_y - 0.1, max_y + 0.65)
 
     for i in range(len(evidence_by_mode)):
-        plt.axvline(
+        bax.axvline(
             np.mean([sv.start for sv in sv_stats[i]]),
             color=COLORS[mode_indices[i]],
             linestyle="--",
         )
-        plt.axvline(
+        bax.axvline(
             np.mean([sv.end for sv in sv_stats[i]]),
             color=COLORS[mode_indices[i]],
             linestyle="--",
         )
 
-    plt.xlabel("Paired Ends")
-    plt.ylabel("Modes")
-    plt.yticks(
+    bax.set_yticks(
         ticks=[mode + 1 for mode in mode_indices],
         labels=[y_label + 1 for y_label in mode_indices_reversed],
     )
+    for ax in bax.axs:
+        ax.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
+        ax.yaxis.set_major_locator(FixedLocator([mode + 1 for mode in mode_indices]))
+        for label in ax.get_xticklabels():
+            label.set_rotation(30)
+    bax.locator_params(axis="x", nbins=6)
 
     text_x = 0.92
     text_y = 0.5
     mean_length = int(np.mean([sv.length for lst in sv_stats for sv in lst]))
-    fig.text(
-        text_x,
-        text_y,
-        f"Average SV Length={mean_length}\n\n{'\n\n'.join(print_sv_stats(sv_stats))}",
-        ha="left",
-        va="center",
-        fontsize=10,
-    )
+    # bax.text(
+    #     text_x,
+    #     text_y,
+    #     f"Average SV Length={mean_length}\n\n{'\n\n'.join(print_sv_stats(sv_stats))}",
+    #     ha="left",
+    #     va="center",
+    #     fontsize=10,
+    # )
+    bax.set_xlabel("Paired Ends", labelpad=30, fontsize=12)
+    bax.set_ylabel("Modes", fontsize=12)
     plt.show()
 
 
@@ -592,14 +625,6 @@ def query_sample(sample: str, chr: str, L: int, R: int):
     return sequence
 
 
-def query_genome_assembly(chr: str, L: int, R: int, sv_evidence: List[Evidence]):
-    # for evidence in sv_evidence:
-    #     sample_sequence = query_sample(
-    #         evidence.sample_id, chr, L, R
-    #     )  # TODO: these consensus sequences are incomplete
-    pass
-
-
 def run_viz_gmm(
     squiggle_data: Dict[str, np.ndarray[float]],
     *,
@@ -630,8 +655,6 @@ def run_viz_gmm(
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
     plot_evidence_by_mode(evidence_by_mode)
     # plot_sv_lengths(evidence_by_mode)
-    sv_sequences = query_genome_assembly(chr, L, R, sv_evidence)
-    # plot_sequence(evidence_by_mode, ref_sequence)
 
 
 # DEPRECATED
