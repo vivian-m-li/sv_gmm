@@ -27,7 +27,7 @@ def txt_to_df(filename: str):
         "type",
     ]
     df = pd.read_csv(filename, names=column_names, sep=r"\s+")
-    df['sample_id'] = df['sample_id'].str.extract(r'/([^/]+)\.bed\.gz', expand=False)
+    df["sample_id"] = df["sample_id"].str.extract(r"/([^/]+)\.bed\.gz", expand=False)
     return df
 
 
@@ -109,6 +109,8 @@ def query_stix(l: str, r: str, run_gmm: bool = True):
             L=int(l.split("-")[1]),
             R=int(r.split("-")[1]),
         )
+
+    return squiggle_data
 
 
 def main():

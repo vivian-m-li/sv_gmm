@@ -42,7 +42,6 @@ FILE_DIR = "gnomad_svs"
 
 
 def query_gnomad(chr: str, start: int, stop: int):
-
     payload = {
         "operationName": "StructuralVariantsInRegion",
         "query": "\n    query StructuralVariantsInRegion($datasetId: StructuralVariantDatasetId!, $chrom: String!, $start: Int!, $stop: Int!, $referenceGenome: ReferenceGenomeId!) {\n      region(chrom: $chrom, start: $start, stop: $stop, reference_genome: $referenceGenome) {\n        structural_variants(dataset: $datasetId) {\n          ac\n          ac_hemi\n          ac_hom\n          an\n          af\n          chrom\n          chrom2\n          end\n          end2\n          consequence\n          filters\n          length\n          pos\n          pos2\n          type\n          variant_id\n        }\n      }\n    }\n  ",
@@ -96,7 +95,9 @@ def query_gnomad_stix():
             p.close()
             p.join()
         end = time.time()
-        print(f"Time to query chromosome {chr}: {datetime.timedelta(seconds = end - start)}")
+        print(
+            f"Time to query chromosome {chr}: {datetime.timedelta(seconds = end - start)}"
+        )
 
 
 def get_num_samples(row_index: int, row, chr: str, lookup: Dict[int, int]):

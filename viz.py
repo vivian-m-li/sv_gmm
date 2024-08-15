@@ -487,7 +487,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
     #     va="center",
     #     fontsize=10,
     # )
-    bax.set_xlabel("Paired Ends", labelpad=30, fontsize=12)
+    bax.set_xlabel("Paired Ends", labelpad=40, fontsize=12)
     bax.set_ylabel("Modes", fontsize=12)
     plt.show()
 
