@@ -66,9 +66,7 @@ def parse_input(input: str) -> str:
     return giggle_format(chromosome, position)
 
 
-def query_stix(
-    l: str, r: str, run_gmm: bool = True, *, filter_nonreference: bool = False
-):
+def query_stix(l: str, r: str, run_gmm: bool = True, *, filter_reference: bool = False):
     for directory in [FILE_DIR, PROCESSED_FILE_DIR, PLOT_DIR]:
         if not os.path.exists(directory):
             os.mkdir(directory)
@@ -107,15 +105,15 @@ def query_stix(
             writer.writerows(processed_stix_output)
 
     chr, start, stop = reverse_giggle_format(l, r)
-    if filter_nonreference:
+    if filter_reference:
         df = pd.read_csv("1000genomes/deletions_df.csv")
         row = df[(df["start"] == start) & (df["stop"] == stop)]
         samples = [
             sample_id for sample_id in df.columns[11:-1] if sample_id in squiggle_data
         ]
-        non_ref_samples = [col for col in samples if row[col][0] == "(0, 0)"]
-        for non_ref in non_ref_samples:
-            squiggle_data.pop(non_ref, None)
+        ref_samples = [col for col in samples if row.iloc[0][col] == "(0, 0)"]
+        for ref in ref_samples:
+            squiggle_data.pop(ref, None)
 
     if run_gmm:
         if len(squiggle_data) == 0:

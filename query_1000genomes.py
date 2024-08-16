@@ -50,14 +50,16 @@ def load_vcf():
     df.to_csv(f"{FILE_DIR}/deletions_df.csv", index=False)
 
 
-# TODO: toss out all samples that are nonreference before putting them in the gmm
 def get_num_samples(row_index: int, row, lookup: Dict[int, int]):
     start = giggle_format(str(row.chr), row.start)
     end = giggle_format(str(row.chr), row.stop)
     squiggle_data = query_stix(start, end, False)
     if len(squiggle_data) > 0:
         intercepts, _ = get_intercepts(
-            squiggle_data, file_name=None, L=row.start, R=row.stop,
+            squiggle_data,
+            file_name=None,
+            L=row.start,
+            R=row.stop,
         )
         lookup[row_index] = len(intercepts)
 
