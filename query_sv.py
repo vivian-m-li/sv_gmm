@@ -66,7 +66,7 @@ def parse_input(input: str) -> str:
     return giggle_format(chromosome, position)
 
 
-def query_stix(l: str, r: str, run_gmm: bool = True, *, filter_reference: bool = False):
+def query_stix(l: str, r: str, run_gmm: bool = True, *, filter_reference: bool = True):
     for directory in [FILE_DIR, PROCESSED_FILE_DIR, PLOT_DIR]:
         if not os.path.exists(directory):
             os.mkdir(directory)
@@ -117,6 +117,7 @@ def query_stix(l: str, r: str, run_gmm: bool = True, *, filter_reference: bool =
 
     if run_gmm:
         if len(squiggle_data) == 0:
+            # TODO: return something here
             print("No structural variants found in this region.")
             return
 
@@ -126,6 +127,8 @@ def query_stix(l: str, r: str, run_gmm: bool = True, *, filter_reference: bool =
             chr=chr,
             L=start,
             R=stop,
+            plot=False,
+            plot_bokeh=False,
         )
 
     return squiggle_data

@@ -163,6 +163,7 @@ def filter_and_plot_sequences_bokeh(
     R: int,
     read_length: int,
     sig: int = 50,
+    plot_bokeh: bool,
 ) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
     ux = get_unique_x_values(list(y.values()))
 
@@ -234,7 +235,7 @@ def filter_and_plot_sequences_bokeh(
 
     p.grid.grid_line_alpha = 0.3
 
-    if file_name is not None:
+    if plot_bokeh and file_name is not None:
         output_file(f"{file_name}_sequences.html")
         save(p)
 
@@ -251,6 +252,7 @@ def plot_fitted_lines_bokeh(
     read_length: int,
     R: int,
     sig: int,
+    plot_bokeh: bool,
 ) -> np.ndarray[np.ndarray[float]]:
     p = figure(
         title="Fitted Lines Plot",
@@ -306,7 +308,7 @@ def plot_fitted_lines_bokeh(
     p.xaxis.formatter = NumeralTickFormatter(format="0")
     p.yaxis.formatter = NumeralTickFormatter(format="0")
 
-    if file_name is not None:
+    if plot_bokeh and file_name is not None:
         output_file(f"{file_name}_fitted_lines.html")
         save(p)
 
@@ -384,11 +386,12 @@ def add_color_noise(hex_color: str):
 
 def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
     sv_stats = get_sv_stats(evidence_by_mode)
-    mode_indices = list(range(len(evidence_by_mode)))
+    num_modes = len(evidence_by_mode)
+    mode_indices = list(range(num_modes))
     mode_indices_reversed = mode_indices[::-1]
 
-    fig = plt.figure(figsize=(14, 8))
-    gs = GridSpec(1, 2, width_ratios=[1, 5], figure=fig, wspace=0.05)
+    fig = plt.figure(figsize=(15, 8))
+    gs = GridSpec(1, 2, width_ratios=[1, 5], figure=fig, wspace=0.33)
 
     # Loop through data
     max_max_l = -np.inf
@@ -416,33 +419,43 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
 
     # Plot the bar chart
     left_ax = fig.add_subplot(gs[0])
-    bar_labels = set()
+    bar_offset = 1 / len(ANCESTRY_COLORS) / 2
     for i, counter in enumerate(population_data):
-        labels, values = zip(*counter.items())
-        bar_labels.update(labels)
-        values = np.array(values) / sum(values)
-        bar_offset = 1 / len(values) / 2
-        for j, (label, value) in enumerate(zip(labels, values)):
+        total = sum(counter.values())
+        for j, (label, color) in enumerate(ANCESTRY_COLORS.items()):
+            value = counter.get(label, 0) / total
             left_ax.barh(
                 i + j * bar_offset,
                 value,
-                color=ANCESTRY_COLORS[label],
+                color=color,
                 align="center",
                 height=bar_offset,
             )
-    bar_labels = list(bar_labels)
+            if value > 0:
+                left_ax.text(
+                    value + 0.01,
+                    i + j * bar_offset,
+                    f"{value:.2f}",
+                    va="center",
+                    fontsize=10,
+                    color="black",
+                )
 
-    left_ax.set_xlabel("Superpopulation", labelpad=20, fontsize=12)
+    left_ax.set_xlabel("Proportion", labelpad=20, fontsize=12)
     left_ax.yaxis.set_ticks([])
     left_ax.yaxis.set_ticklabels([])
-    for spine in left_ax.spines.values():
-        spine.set_visible(False)
+    for spine_name, spine in left_ax.spines.items():
+        if spine_name != "bottom":
+            spine.set_visible(False)
 
     # Set up axes
+    left_half = max_max_l - min(all_mode_paired_ends)
+    right_half = max(all_mode_paired_ends) - min_min_r
+    x_distance = max(left_half, right_half)
     bax = brokenaxes(
         xlims=(
-            (min(all_mode_paired_ends) - 20, max_max_l + 50),
-            (min_min_r - 50, max(all_mode_paired_ends) + 20),
+            (max_max_l - x_distance - 20, max_max_l + 50),
+            (min_min_r - 50, min_min_r + x_distance + 20),
         ),
         hspace=0.05,
         fig=fig,
@@ -493,7 +506,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
                 patch.set_y(patch.get_y() + max_y + 0.05)
             ax.set_ylim(min_y - 0.1, max_y + 0.65)
 
-    for i in range(len(evidence_by_mode)):
+    for i in range(num_modes):
         bax.axvline(
             np.mean([sv.start for sv in sv_stats[i]]),
             color=COLORS[mode_indices[i]],
@@ -506,52 +519,41 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
         )
 
     # Set ticks and labels for SV plot
-    if len(mode_indices) > 1:
-        bax.set_yticks(
-            ticks=[mode + 1 for mode in mode_indices],
-            labels=[y_label + 1 for y_label in mode_indices_reversed],
-        )
-    else:
-        for ax in bax.axs:
-            ax.yaxis.set_ticks([])
-            ax.yaxis.set_ticklabels([])
-
     for ax in bax.axs:
+        ax.yaxis.set_ticks([])
+        ax.yaxis.set_ticklabels([])
+        ax.tick_params(axis="y", length=0)
         ax.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
         ax.yaxis.set_major_locator(FixedLocator([mode + 1 for mode in mode_indices]))
-        for label in ax.get_xticklabels():
-            label.set_rotation(30)
-    bax.locator_params(axis="x", nbins=6)
+    bax.locator_params(axis="x", nbins=4)
 
     # Add the legend
     handles = [
         plt.Rectangle((0, 0), 1, 1, color=ANCESTRY_COLORS[value])
-        for value in bar_labels
+        for value in ANCESTRY_COLORS.keys()
     ]
     plt.legend(
         handles[::-1],
-        bar_labels[::-1],
+        list(ANCESTRY_COLORS.keys())[::-1],
         loc="center left",
-        bbox_to_anchor=(1, 0.5),
+        bbox_to_anchor=(-0.17, 0.9),
         title="Superpopulation",
     )
 
-    bax.set_xlabel("Paired Ends", labelpad=40, fontsize=12)
-    if len(mode_indices) > 1:
-        bax.set_ylabel("Modes", labelpad=20, fontsize=12)
+    bax.set_xlabel("Paired Ends", labelpad=30, fontsize=12)
 
-        # Plot the pie chart
-        pie_ax = fig.add_axes([0.23, 0.7, 0.25, 0.25])
-        counts = [len(mode) for mode in evidence_by_mode]
-        total_population = sum(counts)
-        mode_percentages = [count / total_population for count in counts]
-        pie_ax.pie(
-            mode_percentages,
-            autopct="%1.1f%%",
-            colors=COLORS[: len(mode_indices)],
-            startangle=90,
-        )
-        pie_ax.set_aspect("equal")
+    # Plot the pie chart
+    pie_ax = fig.add_axes([0.3, 0.7, 0.25, 0.25])
+    counts = [len(mode) for mode in evidence_by_mode]
+    total_population = sum(counts)
+    mode_percentages = [count / total_population for count in counts]
+    pie_ax.pie(
+        mode_percentages,
+        autopct="%1.1f%%",
+        colors=COLORS[: len(mode_indices)],
+        startangle=90,
+    )
+    pie_ax.set_aspect("equal")
 
     mean_length = int(np.mean([sv.length for lst in sv_stats for sv in lst]))
     # print(f"Average SV Length={mean_length}\n\n{'\n\n'.join(print_sv_stats(sv_stats))}")
@@ -624,7 +626,7 @@ def plot_sequence(evidence_by_mode: List[List[Evidence]], ref_sequence: Seq.Seq)
 
 
 def plot_sv_lengths(evidence_by_mode: List[List[Evidence]]):
-    plt.figure()
+    plt.figure(figsize=(15, 8))
     for i, mode in enumerate(evidence_by_mode):
         all_lengths = []
         for evidence in mode:
@@ -644,8 +646,8 @@ def plot_sv_lengths(evidence_by_mode: List[List[Evidence]]):
             color=COLORS[i],
         )
         plt.hist(all_lengths, bins=10, color=COLORS[i], alpha=0.5)
-    plt.xlabel("SV Length")
-    plt.ylabel("Frequency")
+    plt.xlabel("SV Length", fontsize=12)
+    plt.ylabel("Frequency", fontsize=12)
     plt.show()
 
 
@@ -655,6 +657,7 @@ def get_intercepts(
     file_name: Optional[str],
     L: int,
     R: int,
+    plot_bokeh: bool,
 ) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
     mb, sv_evidence_unfiltered = filter_and_plot_sequences_bokeh(
         squiggle_data,
@@ -663,15 +666,17 @@ def get_intercepts(
         R=R,
         read_length=450,
         sig=50,
+        plot_bokeh=plot_bokeh,
     )
     intercepts, sv_evidence = plot_fitted_lines_bokeh(
         mb,
         sv_evidence_unfiltered,
         file_name=file_name,
         L=L,
-        read_length=450,
         R=R,
+        read_length=450,
         sig=50,
+        plot_bokeh=plot_bokeh,
     )
     points = np.array([np.array(i)[1] for i in intercepts if len(i) > 1]) - R
     return points, sv_evidence
@@ -753,35 +758,47 @@ def run_viz_gmm(
     chr: str,
     L: int,
     R: int,
+    plot: bool = True,
+    plot_bokeh: bool = False,
 ):
     # plots that don't update data format
-    data = list(squiggle_data.values())
-    sv_viz(data, file_name=file_name)
-    bokeh_scatterplot(
-        data,
-        file_name=file_name,
-        lower_bound=L - 1900,
-        upper_bound=R + 1900,
-        L=L,
-        read_length=450,
-        R=R,
-    )
+    if plot_bokeh:
+        data = list(squiggle_data.values())
+        sv_viz(data, file_name=file_name)
+        bokeh_scatterplot(
+            data,
+            file_name=file_name,
+            lower_bound=L - 1900,
+            upper_bound=R + 1900,
+            L=L,
+            read_length=450,
+            R=R,
+        )
 
     # transforms data
-    points, sv_evidence = get_intercepts(squiggle_data, file_name=file_name, L=L, R=R)
+    points, sv_evidence = get_intercepts(
+        squiggle_data, file_name=file_name, L=L, R=R, plot_bokeh=plot_bokeh
+    )
+    # TODO: do something here
     if len(points) == 0:
         print("No structural variants found in this region.")
         return
 
-    gmm = run_gmm(points, plot=False, pr=False)
+    gmm = run_gmm(points, plot=plot, pr=False)
+    num_samples_pruned = sum([len(mode) for mode in gmm.x_by_mode])
+    if num_samples_pruned < 10:
+        # TODO: do something here
+        return
+
     populate_ancestry(
         sv_evidence
     )  # mutates sv_evidence with ancestry data for each sample
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
 
-    # check format of evidence
     plot_evidence_by_mode(evidence_by_mode)
-    # plot_sv_lengths(evidence_by_mode)
+    plot_sv_lengths(evidence_by_mode)
+
+    # return here
 
 
 # DEPRECATED

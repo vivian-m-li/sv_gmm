@@ -589,12 +589,6 @@ def run_em(
             )
         i += 1
 
-    # if plot:
-    #     # Visualize the final model
-    #     plot_distributions(
-    #         x, n, mu, vr, p, title=f"Final Stats: {print_stats(logL[-1], mu, vr, p)}"
-    #     )
-
     return all_params
 
 
@@ -659,7 +653,7 @@ def run_gmm(
     x = np.array(x, dtype=float)
     n = len(x)
     if len(x) == 0:
-        warnings.warn("Input data is empty")
+        # warnings.warn("Input data is empty")
         return EstimatedGMM(
             mu=[],
             vr=[],
@@ -668,12 +662,11 @@ def run_gmm(
             logL=0,
             aic=0,
             outliers=[],
-            percent_data_removed=0,
             window_size=(0, 0),
             x_by_mode=[],
         )
     if len(x) == 1:
-        warnings.warn("Input data contains one SV")
+        # warnings.warn("Input data contains one SV")
         singleton = x[0]
         return EstimatedGMM(
             mu=[singleton],
@@ -683,7 +676,6 @@ def run_gmm(
             logL=0,
             aic=0,
             outliers=[],
-            percent_data_removed=0,
             window_size=(singleton, singleton),
             x_by_mode=[],
         )
@@ -717,9 +709,6 @@ def run_gmm(
         )
 
     if plot:
-        # Plot the likelihood function over time
-        # plot_likelihood([x.logL for x in opt_params])
-        # animate_distribution(x, opt_params)
         plot_distributions(x, len(x), final_params.mu, final_params.vr, final_params.p)
 
     return EstimatedGMM(
@@ -730,7 +719,6 @@ def run_gmm(
         logL=final_params.logL,
         aic=min(aic_vals) if len(aic_vals) > 0 else None,
         outliers=outliers,
-        percent_data_removed=len(outliers) / n,
         window_size=(min(x), max(x)),
         x_by_mode=x_by_mode,
     )

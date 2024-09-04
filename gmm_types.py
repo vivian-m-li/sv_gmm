@@ -4,11 +4,11 @@ from typing import List, Optional, Tuple
 
 COLORS = ["#459395", "#EB7C69", "#FDA638"]
 ANCESTRY_COLORS = {
-    "EUR": "#f2cc8f",
-    "EAS": "#81b29a",
-    "AFR": "#3d405b",
-    "AMR": "#e07a5f",
-    "SAS": "#f4f1de",
+    "AFR": "#45597e",
+    "AMR": "#1d6295",
+    "EUR": "#a4def4",
+    "EAS": "#ffbf00",
+    "SAS": "#ffe69f",
 }
 
 
@@ -31,7 +31,6 @@ class EstimatedGMM(GaussianDistribution):
     logL: Optional[float]
     aic: Optional[float]
     outliers: List[float]
-    percent_data_removed: float
     window_size: Tuple[int, int]
     x_by_mode: List[np.ndarray[int]]
 
