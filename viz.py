@@ -5,6 +5,8 @@ import random
 import colorsys
 import math
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
+import pandas as pd
 from scipy.stats import norm
 from Bio import SeqIO, Seq
 import gzip
@@ -12,6 +14,7 @@ from typing import Optional, List, Tuple, Dict
 import matplotlib.cm as cm
 from brokenaxes import brokenaxes
 from matplotlib.ticker import FixedLocator, StrMethodFormatter
+from collections import Counter
 from em import run_gmm, run_em, get_scatter_data
 from gmm_types import *
 
@@ -208,7 +211,7 @@ def filter_and_plot_sequences_bokeh(
                 sdl = np.sum(np.abs(yp) <= sig)
                 mb[i, :] = [sdl, len(xp), b, 0]
                 sv_evidence[i] = Evidence(
-                    sample_id=sample_id,
+                    sample=Sample(id=sample_id),
                     intercept=b,
                     paired_ends=[
                         [z_filtered[i], z_filtered[i + 1]]
@@ -384,12 +387,18 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
     mode_indices = list(range(len(evidence_by_mode)))
     mode_indices_reversed = mode_indices[::-1]
 
-    fig = plt.figure(figsize=(12, 8))
+    fig = plt.figure(figsize=(14, 8))
+    gs = GridSpec(1, 2, width_ratios=[1, 5], figure=fig, wspace=0.05)
+
+    # Loop through data
     max_max_l = -np.inf
     min_min_r = np.inf
     all_mode_paired_ends = []
+    population_data = []
     for i, mode in enumerate(reversed(evidence_by_mode)):
         all_paired_ends = []
+        population_counter = Counter()
+
         for evidence in mode:
             max_l = max([paired_end[0] for paired_end in evidence.paired_ends])
             min_r = min([paired_end[1] for paired_end in evidence.paired_ends])
@@ -397,10 +406,39 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
             max_max_l = max(max_l, max_max_l)
             min_min_r = min(min_r, min_min_r)
             all_mode_paired_ends.extend(evidence.paired_ends)
+            population_counter[evidence.sample.superpopulation] += 1
+
+        population_data.append(population_counter)
+
     all_mode_paired_ends = [
         p for paired_end in all_mode_paired_ends for p in paired_end
     ]
 
+    # Plot the bar chart
+    left_ax = fig.add_subplot(gs[0])
+    bar_labels = set()
+    for i, counter in enumerate(population_data):
+        labels, values = zip(*counter.items())
+        bar_labels.update(labels)
+        values = np.array(values) / sum(values)
+        bar_offset = 1 / len(values) / 2
+        for j, (label, value) in enumerate(zip(labels, values)):
+            left_ax.barh(
+                i + j * bar_offset,
+                value,
+                color=ANCESTRY_COLORS[label],
+                align="center",
+                height=bar_offset,
+            )
+    bar_labels = list(bar_labels)
+
+    left_ax.set_xlabel("Superpopulation", labelpad=20, fontsize=12)
+    left_ax.yaxis.set_ticks([])
+    left_ax.yaxis.set_ticklabels([])
+    for spine in left_ax.spines.values():
+        spine.set_visible(False)
+
+    # Set up axes
     bax = brokenaxes(
         xlims=(
             (min(all_mode_paired_ends) - 20, max_max_l + 50),
@@ -408,8 +446,10 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
         ),
         hspace=0.05,
         fig=fig,
+        subplot_spec=gs[1],
     )
 
+    # SV plot
     min_y = np.inf
     for i, mode in enumerate(reversed(evidence_by_mode)):
         mode_color = COLORS[mode_indices_reversed[i]]
@@ -465,10 +505,17 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
             linestyle="--",
         )
 
-    bax.set_yticks(
-        ticks=[mode + 1 for mode in mode_indices],
-        labels=[y_label + 1 for y_label in mode_indices_reversed],
-    )
+    # Set ticks and labels for SV plot
+    if len(mode_indices) > 1:
+        bax.set_yticks(
+            ticks=[mode + 1 for mode in mode_indices],
+            labels=[y_label + 1 for y_label in mode_indices_reversed],
+        )
+    else:
+        for ax in bax.axs:
+            ax.yaxis.set_ticks([])
+            ax.yaxis.set_ticklabels([])
+
     for ax in bax.axs:
         ax.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
         ax.yaxis.set_major_locator(FixedLocator([mode + 1 for mode in mode_indices]))
@@ -476,19 +523,38 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
             label.set_rotation(30)
     bax.locator_params(axis="x", nbins=6)
 
-    text_x = 0.92
-    text_y = 0.5
-    mean_length = int(np.mean([sv.length for lst in sv_stats for sv in lst]))
-    # bax.text(
-    #     text_x,
-    #     text_y,
-    #     f"Average SV Length={mean_length}\n\n{'\n\n'.join(print_sv_stats(sv_stats))}",
-    #     ha="left",
-    #     va="center",
-    #     fontsize=10,
-    # )
+    # Add the legend
+    handles = [
+        plt.Rectangle((0, 0), 1, 1, color=ANCESTRY_COLORS[value])
+        for value in bar_labels
+    ]
+    plt.legend(
+        handles[::-1],
+        bar_labels[::-1],
+        loc="center left",
+        bbox_to_anchor=(1, 0.5),
+        title="Superpopulation",
+    )
+
     bax.set_xlabel("Paired Ends", labelpad=40, fontsize=12)
-    bax.set_ylabel("Modes", fontsize=12)
+    if len(mode_indices) > 1:
+        bax.set_ylabel("Modes", labelpad=20, fontsize=12)
+
+        # Plot the pie chart
+        pie_ax = fig.add_axes([0.23, 0.7, 0.25, 0.25])
+        counts = [len(mode) for mode in evidence_by_mode]
+        total_population = sum(counts)
+        mode_percentages = [count / total_population for count in counts]
+        pie_ax.pie(
+            mode_percentages,
+            autopct="%1.1f%%",
+            colors=COLORS[: len(mode_indices)],
+            startangle=90,
+        )
+        pie_ax.set_aspect("equal")
+
+    mean_length = int(np.mean([sv.length for lst in sv_stats for sv in lst]))
+    # print(f"Average SV Length={mean_length}\n\n{'\n\n'.join(print_sv_stats(sv_stats))}")
     plt.show()
 
 
@@ -571,7 +637,7 @@ def plot_sv_lengths(evidence_by_mode: List[List[Evidence]]):
         ux, hx = get_scatter_data(all_lengths)
         plt.plot(
             ux,
-            2
+            4
             * (len(all_lengths) * gmm.p[0])
             * norm.pdf(ux, gmm.mu[0], np.sqrt(gmm.vr[0])),
             linestyle="-",
@@ -625,6 +691,20 @@ def query_sample(sample: str, chr: str, L: int, R: int):
     return sequence
 
 
+def populate_ancestry(sv_evidence: List[Evidence]) -> None:
+    df = pd.read_csv("1000genomes/ancestry.tsv", delimiter="\t")
+    for evidence in sv_evidence:
+        sample_id = evidence.sample.id
+        row = df[df["Sample name"] == sample_id]
+        superpopulation = row["Superpopulation code"].values[0].split(",")[0]
+        evidence.sample = Sample(
+            id=sample_id,
+            sex=row["Sex"].values[0],
+            population=row["Population code"].values[0],
+            superpopulation=superpopulation,
+        )
+
+
 def run_viz_gmm(
     squiggle_data: Dict[str, np.ndarray[float]],
     *,
@@ -653,9 +733,14 @@ def run_viz_gmm(
         return
 
     gmm = run_gmm(points, plot=False, pr=False)
+    populate_ancestry(
+        sv_evidence
+    )  # mutates sv_evidence with ancestry data for each sample
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
+
+    # check format of evidence
     plot_evidence_by_mode(evidence_by_mode)
-    plot_sv_lengths(evidence_by_mode)
+    # plot_sv_lengths(evidence_by_mode)
 
 
 # DEPRECATED

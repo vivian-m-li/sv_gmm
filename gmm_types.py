@@ -3,6 +3,13 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 COLORS = ["#459395", "#EB7C69", "#FDA638"]
+ANCESTRY_COLORS = {
+    "EUR": "#f2cc8f",
+    "EAS": "#81b29a",
+    "AFR": "#3d405b",
+    "AMR": "#e07a5f",
+    "SAS": "#f4f1de",
+}
 
 
 @dataclass
@@ -35,8 +42,16 @@ class GMM(GaussianDistribution):
 
 
 @dataclass
+class Sample:
+    id: str
+    sex: str = ""
+    population: str = ""
+    superpopulation: str = ""
+
+
+@dataclass
 class Evidence:
-    sample_id: str
+    sample: Sample
     intercept: float
     paired_ends: List[List[float]]
     start_y: float = 0

@@ -106,7 +106,7 @@ def query_stix(l: str, r: str, run_gmm: bool = True, *, filter_reference: bool =
 
     chr, start, stop = reverse_giggle_format(l, r)
     if filter_reference:
-        df = pd.read_csv("1000genomes/deletions_df.csv")
+        df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
         row = df[(df["start"] == start) & (df["stop"] == stop)]
         samples = [
             sample_id for sample_id in df.columns[11:-1] if sample_id in squiggle_data
