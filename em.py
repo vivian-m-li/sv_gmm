@@ -506,7 +506,7 @@ def calc_responsibility(
     return gz
 
 
-def assign_values_to_modes(
+def assign_values_to_modes_inner(
     x: np.ndarray[int],
     num_modes: int,
     mu: np.ndarray[float],
@@ -633,6 +633,19 @@ def resize_data_window(data: np.ndarray) -> Tuple[np.ndarray, List[int]]:
         if len(outliers) > 0:
             x = remove_outliers(outliers, x)
     return x, outlier_values
+
+
+def assign_values_to_modes(
+    x: np.ndarray[int],
+    num_modes: int,
+    mu: np.ndarray[float],
+    vr: np.ndarray[float],
+    p: np.ndarray[float],
+) -> List[np.ndarray[int]]:
+    x_by_mode = assign_values_to_modes_inner(x, num_modes, mu, vr, p)
+    filtered_x = np.concatenate(x_by_mode)
+    gmm = em(filtered_x, num_modes, len(filtered_x), mu, vr, p)
+    return assign_values_to_modes_inner(filtered_x, num_modes, gmm.mu, gmm.vr, gmm.p)
 
 
 def run_gmm(
