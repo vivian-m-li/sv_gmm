@@ -705,6 +705,47 @@ def populate_ancestry(sv_evidence: List[Evidence]) -> None:
         )
 
 
+def analyze_ancestry() -> None:
+    df = pd.read_csv("1000genomes/ancestry.tsv", delimiter="\t")
+    population_data = Counter()
+    superpopulation_data = Counter()
+    population_lookup = {}
+    for _, row in df.iterrows():
+        population = row["Population code"].split(",")[0]
+        superpopulation = row["Superpopulation code"].split(",")[0]
+        population_data[population] += 1
+        superpopulation_data[superpopulation] += 1
+        population_lookup[population] = superpopulation
+
+    population_labels = sorted(
+        population_data.keys(), key=lambda x: population_lookup[x]
+    )
+    population_counts = [population_data[label] for label in population_labels]
+
+    superpopulation_labels = sorted(superpopulation_data.keys())
+    superpopulation_counts = [
+        superpopulation_data[label] for label in superpopulation_labels
+    ]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+    for label, count in zip(population_labels, population_counts):
+        ax1.bar(label, count, color=ANCESTRY_COLORS[population_lookup[label]])
+    ax1.set_title("Population Counts", fontsize=14)
+    ax1.set_xlabel("Population", fontsize=12)
+    ax1.set_ylabel("Count", fontsize=12)
+    ax1.tick_params(axis="x", rotation=90)
+
+    for label, count in zip(superpopulation_labels, superpopulation_counts):
+        ax2.bar(label, count, color=ANCESTRY_COLORS[label])
+    ax2.set_title("Superpopulation Counts", fontsize=14)
+    ax2.set_xlabel("Superpopulation", fontsize=12)
+    ax2.set_ylabel("Count", fontsize=12)
+
+    plt.tight_layout()
+    plt.show()
+
+
 def run_viz_gmm(
     squiggle_data: Dict[str, np.ndarray[float]],
     *,
