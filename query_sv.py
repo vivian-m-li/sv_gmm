@@ -127,7 +127,7 @@ def query_stix(l: str, r: str, run_gmm: bool = True, *, filter_reference: bool =
             chr=chr,
             L=start,
             R=stop,
-            plot=False,
+            plot=True,
             plot_bokeh=False,
         )
 

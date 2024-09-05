@@ -64,7 +64,7 @@ def plot_distributions(
     """Plots the GMM."""
     # visualize the data and the generative model
     ux, hx = get_scatter_data(x)
-    plt.figure()
+    plt.figure(figsize=(15, 8))
     plt.scatter(ux, hx, marker=".", color="blue")
     for i in range(len(mu)):
         plt.plot(
