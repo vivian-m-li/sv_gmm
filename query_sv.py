@@ -6,6 +6,7 @@ import csv
 import pandas as pd
 import numpy as np
 from viz import run_viz_gmm
+from typing import List, Dict
 
 
 STIX_SCRIPT = "./query_stix.sh"
@@ -66,6 +67,18 @@ def parse_input(input: str) -> str:
     return giggle_format(chromosome, position)
 
 
+def get_reference_samples(
+    squiggle_data: Dict[str, np.ndarray[float]], chr: str, start: int, stop: int
+) -> List[str]:
+    df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+    row = df[(df["chr"] == chr) & (df["start"] == start) & (df["stop"] == stop)]
+    samples = [
+        sample_id for sample_id in df.columns[11:-1] if sample_id in squiggle_data
+    ]
+    ref_samples = [col for col in samples if row.iloc[0][col] == "(0, 0)"]
+    return ref_samples
+
+
 def query_stix(l: str, r: str, run_gmm: bool = True, *, filter_reference: bool = True):
     for directory in [FILE_DIR, PROCESSED_FILE_DIR, PLOT_DIR]:
         if not os.path.exists(directory):
@@ -106,18 +119,12 @@ def query_stix(l: str, r: str, run_gmm: bool = True, *, filter_reference: bool =
 
     chr, start, stop = reverse_giggle_format(l, r)
     if filter_reference:
-        df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
-        row = df[(df["start"] == start) & (df["stop"] == stop)]
-        samples = [
-            sample_id for sample_id in df.columns[11:-1] if sample_id in squiggle_data
-        ]
-        ref_samples = [col for col in samples if row.iloc[0][col] == "(0, 0)"]
+        ref_samples = get_reference_samples(squiggle_data, chr, start, stop)
         for ref in ref_samples:
             squiggle_data.pop(ref, None)
 
     if run_gmm:
         if len(squiggle_data) == 0:
-            # TODO: return something here
             print("No structural variants found in this region.")
             return
 

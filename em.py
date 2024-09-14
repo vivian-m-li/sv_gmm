@@ -516,6 +516,7 @@ def assign_values_to_modes_inner(
     gz = calc_responsibility(x, len(x), mu, vr, p)
     assignments = np.argmax(gz, axis=1)
     x_by_mode = [[] for _ in range(num_modes)]
+    pruned = [[] for _ in range(num_modes)]
     for i, mode in enumerate(assignments):
         if mode is not None:
             mean = mu[mode]
@@ -524,8 +525,10 @@ def assign_values_to_modes_inner(
                 abs(x[i] - mean) <= 2 * std_dev
             ):  # remove points from a mode if they're too far out
                 x_by_mode[mode].append(x[i])
+            else:
+                pruned[mode].append(x[i])
     x_by_mode = [np.array(data_points) for data_points in x_by_mode]
-    return x_by_mode
+    return x_by_mode, pruned
 
 
 def em(
@@ -559,7 +562,7 @@ def run_em(
     x: np.ndarray[int],  # data
     num_modes: int,
     plot: bool = False,
-) -> List[GMM]:
+) -> Tuple[List[GMM], int]:
     """
     Given a dataset and an estimated number of modes for the GMM, estimates the parameters for each distribution.
     The algorithm is initialized using the k-means clustering approach, then the EM algorithm is run for up to 30 iterations, or a convergence of the log-likelihood; whichever comes first.
@@ -589,7 +592,7 @@ def run_em(
             )
         i += 1
 
-    return all_params
+    return all_params, i
 
 
 def identify_outliers(
@@ -620,7 +623,7 @@ def resize_data_window(data: np.ndarray) -> Tuple[np.ndarray, List[int]]:
     x = data[:]
     outlier_values = []
     for num_modes in [1, 2]:
-        params = run_em(x, num_modes)
+        params, _ = run_em(x, num_modes)
         mu, vr = params[-1].mu, params[-1].vr
         outliers = identify_outliers(x, mu, vr)
         outlier_values.extend([x_i for _, x_i in outliers])
@@ -635,11 +638,15 @@ def assign_values_to_modes(
     mu: np.ndarray[float],
     vr: np.ndarray[float],
     p: np.ndarray[float],
-) -> List[np.ndarray[int]]:
-    x_by_mode = assign_values_to_modes_inner(x, num_modes, mu, vr, p)
+) -> Tuple[List[np.ndarray[int]], List[int]]:
+    x_by_mode, pruned = assign_values_to_modes_inner(x, num_modes, mu, vr, p)
     filtered_x = np.concatenate(x_by_mode)
     gmm = em(filtered_x, num_modes, len(filtered_x), mu, vr, p)
-    return assign_values_to_modes_inner(filtered_x, num_modes, gmm.mu, gmm.vr, gmm.p)
+    x_by_mode2, pruned2 = assign_values_to_modes_inner(
+        filtered_x, num_modes, gmm.mu, gmm.vr, gmm.p
+    )
+    num_pruned = [len(x + y) for x, y in zip(pruned, pruned2)]
+    return x_by_mode2, num_pruned
 
 
 def run_gmm(
@@ -683,23 +690,26 @@ def run_gmm(
     outliers = []
     aic_vals = []
     if len(x) <= 10:  # small number of SVs detected
-        opt_params = run_em(x, 1, plot)
+        opt_params, _ = run_em(x, 1, plot)
         num_sv = 1
     else:
         x, outliers = resize_data_window(x)
         all_params = []
+        iterations = []
         for num_modes in range(1, 4):
-            params = run_em(x, num_modes, plot)
+            params, num_iterations = run_em(x, num_modes, plot)
             aic = calc_aic(params[-1].logL, num_modes, params[-1].mu, params[-1].vr)
             all_params.append(params)
+            iterations.append(num_iterations)
             aic_vals.append(aic)
         min_aic_idx = aic_vals.index(min(aic_vals))
         opt_params = all_params[min_aic_idx]
+        num_iterations_final = iterations[min_aic_idx]
         num_sv = len(opt_params[0].mu)
 
     final_params = opt_params[-1]
 
-    x_by_mode = assign_values_to_modes(
+    x_by_mode, num_pruned = assign_values_to_modes(
         x, num_sv, final_params.mu, final_params.vr, final_params.p
     )
 
@@ -721,6 +731,8 @@ def run_gmm(
         outliers=outliers,
         window_size=(min(x), max(x)),
         x_by_mode=x_by_mode,
+        num_pruned=num_pruned,
+        num_iterations=num_iterations_final,
     )
 
 

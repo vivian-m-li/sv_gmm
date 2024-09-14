@@ -33,6 +33,8 @@ class EstimatedGMM(GaussianDistribution):
     outliers: List[float]
     window_size: Tuple[int, int]
     x_by_mode: List[np.ndarray[int]]
+    num_pruned: List[int]
+    num_iterations: int
 
 
 @dataclass
@@ -46,6 +48,7 @@ class Sample:
     sex: str = ""
     population: str = ""
     superpopulation: str = ""
+    allele: str = ""
 
 
 @dataclass
@@ -61,3 +64,42 @@ class SVStat:
     length: int
     start: int
     end: int
+
+
+@dataclass
+class ModeStat:
+    length: int
+    length_sd: float
+    start: int
+    start_sd: float
+    end: int
+    end_sd: float
+    num_samples: int
+    num_heterozygous: int
+    num_homozygous: int
+    sample_ids: List[str]
+    num_pruned: int
+    af: float
+
+
+@dataclass
+class SVStatGMM:
+    id: str
+    chr: str
+    start: int
+    stop: int
+    svlen: int
+    ref: str
+    alt: str
+    qual: float
+    # filter: List[str]
+    af: float
+    # info: dict
+    num_samples: int
+    num_pruned: int
+    num_reference: int
+    svlen_post: int
+    num_modes: int
+    num_iterations: int
+    overlap_between_modes: bool
+    modes: List[ModeStat]

@@ -353,7 +353,7 @@ def print_sv_stats(sv_stats: List[List[SVStat]]):
     return stats
 
 
-def get_sv_stats(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
+def get_svlen(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
     all_stats = []
     for mode in evidence_by_mode:
         stats = []
@@ -385,7 +385,7 @@ def add_color_noise(hex_color: str):
 
 
 def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
-    sv_stats = get_sv_stats(evidence_by_mode)
+    sv_stats = get_svlen(evidence_by_mode)
     num_modes = len(evidence_by_mode)
     mode_indices = list(range(num_modes))
     mode_indices_reversed = mode_indices[::-1]
@@ -561,7 +561,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
 
 
 def plot_sequence(evidence_by_mode: List[List[Evidence]], ref_sequence: Seq.Seq):
-    sv_stats = get_sv_stats(evidence_by_mode)
+    sv_stats = get_svlen(evidence_by_mode)
     mode_indices = list(range(len(evidence_by_mode)))
     mode_indices_reversed = mode_indices[::-1]
     for i, mode in enumerate(reversed(evidence_by_mode)):
@@ -696,17 +696,30 @@ def query_sample(sample: str, chr: str, L: int, R: int):
     return sequence
 
 
-def populate_ancestry(sv_evidence: List[Evidence]) -> None:
-    df = pd.read_csv("1000genomes/ancestry.tsv", delimiter="\t")
+def populate_sample_info(
+    sv_evidence: List[Evidence],
+    chr: str,
+    L: int,
+    R: int,
+) -> None:
+    ancestry_df = pd.read_csv("1000genomes/ancestry.tsv", delimiter="\t")
+    deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
     for evidence in sv_evidence:
         sample_id = evidence.sample.id
-        row = df[df["Sample name"] == sample_id]
-        superpopulation = row["Superpopulation code"].values[0].split(",")[0]
+        ancestry_row = ancestry_df[ancestry_df["Sample name"] == sample_id]
+        superpopulation = ancestry_row["Superpopulation code"].values[0].split(",")[0]
+        deletions_row = deletions_df[
+            (deletions_df["chr"] == chr)
+            & (deletions_df["start"] == L)
+            & (deletions_df["stop"] == R)
+        ]
+        allele = deletions_row.iloc[0][sample_id]
         evidence.sample = Sample(
             id=sample_id,
-            sex=row["Sex"].values[0],
-            population=row["Population code"].values[0],
+            sex=ancestry_row["Sex"].values[0],
+            population=ancestry_row["Population code"].values[0],
             superpopulation=superpopulation,
+            allele=allele,
         )
 
 
@@ -760,7 +773,7 @@ def run_viz_gmm(
     R: int,
     plot: bool = True,
     plot_bokeh: bool = False,
-):
+) -> None:
     # plots that don't update data format
     if plot_bokeh:
         data = list(squiggle_data.values())
@@ -779,48 +792,20 @@ def run_viz_gmm(
     points, sv_evidence = get_intercepts(
         squiggle_data, file_name=file_name, L=L, R=R, plot_bokeh=plot_bokeh
     )
-    # TODO: do something here
+
     if len(points) == 0:
         print("No structural variants found in this region.")
         return
 
     gmm = run_gmm(points, plot=plot, pr=False)
-    num_samples_pruned = sum([len(mode) for mode in gmm.x_by_mode])
-    if num_samples_pruned < 10:
-        # TODO: do something here
-        return
 
-    populate_ancestry(
-        sv_evidence
-    )  # mutates sv_evidence with ancestry data for each sample
+    populate_sample_info(
+        sv_evidence, chr, L, R
+    )  # mutates sv_evidence with ancestry data and homo/heterozygous for each sample
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
 
-    plot_evidence_by_mode(evidence_by_mode)
-    plot_sv_lengths(evidence_by_mode)
+    if plot:
+        plot_evidence_by_mode(evidence_by_mode)
+        plot_sv_lengths(evidence_by_mode)
 
-    # return here
-
-
-# DEPRECATED
-def run_gmm_l_r(
-    squiggle_data: List[np.ndarray[float]], *, file_name: str, L: int, R: int
-):
-    all_xp = []
-    for row in squiggle_data:
-        all_xp.extend(row[0::2] - L)
-    gmm_l = run_gmm(all_xp)
-
-    for i in range(gmm_l.num_modes):
-        xp = gmm_l.x_by_mode[i] + L
-        yp = []
-        for row in squiggle_data:
-            for j in range(0, len(row), 2):
-                x = row[j]
-                y = row[j + 1]
-                if x in xp:
-                    yp.append(y)
-        yp = np.array(yp) - L
-
-        gmm_r = run_gmm(yp)
-        for mu_r in gmm_r.mu:
-            print((gmm_l.mu[i], mu_r))
+    return gmm, evidence_by_mode
