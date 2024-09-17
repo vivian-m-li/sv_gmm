@@ -15,10 +15,10 @@ def get_population_size():
 
 
 def remove_missing_samples(squiggle_data: Dict[str, np.ndarray[float]]):
-    df = pd.read_csv("1000genomes/deletions_df.csv", nrows=0, low_memory=False)
+    df = pd.read_csv(
+        "1000genomes/deletions_df.csv", nrows=0, low_memory=False
+    )  # 2504 samples
     missing_keys = set(squiggle_data.keys()) - set(df.columns[11:-1])
-    print(missing_keys)
-    # TODO: check deletions_df.csv for missing keys
     for key in missing_keys:
         squiggle_data.pop(key, None)
 
@@ -75,7 +75,7 @@ def get_sv_stats(row, svs: List[SVStatGMM]) -> None:
         plot_bokeh=False,
     )
     num_samples = sum([len(mode) for mode in gmm.x_by_mode])
-    sv_stat.num_pruned = len(squiggle_data) - num_samples
+    sv_stat.num_pruned = sum([pruned for pruned in gmm.num_pruned]) + len(gmm.outliers)
     sv_stat.num_modes = gmm.num_modes
     sv_stat.num_iterations = gmm.num_iterations
 
@@ -84,7 +84,7 @@ def get_sv_stats(row, svs: List[SVStatGMM]) -> None:
         np.mean(
             [sv.length - 450 for lst in all_svlen for sv in lst]
         )  # 450 is the length of the read
-    )
+    )  # TODO: how do we calculate this? It can be negative
 
     population_size = get_population_size()
     mode_coords = []
@@ -148,20 +148,23 @@ def run_all_sv(
     subset: Optional[List[Tuple[str, int, int]]] = None,
 ):
     deletions_df = pd.read_csv(f"{FILE_DIR}/deletions_df.csv", low_memory=False)
+    sv_stats_df = create_sv_stats_file()
     if subset is not None:
+        sv_stats = []
+        for chr, start, stop in subset:
+            row = deletions_df[
+                (deletions_df["chr"] == chr)
+                & (deletions_df["start"] == start)
+                & (deletions_df["stop"] == stop)
+            ].iloc[0]
+            get_sv_stats(row, sv_stats)
+            sv_stats_df.loc[-1] = asdict(sv_stats[0])
+    else:
         with multiprocessing.Manager() as manager:
             p = multiprocessing.Pool(multiprocessing.cpu_count())
             svs = manager.list()
             args = []
-            if subset is not None:
-                for chr, start, stop in subset:
-                    row = deletions_df[
-                        (deletions_df["chr"] == chr)
-                        & (deletions_df["start"] == start)
-                        & (deletions_df["stop"] == stop)
-                    ].iloc[0]
-                    args.append((row, svs))
-            elif query_chr is not None:
+            if query_chr is not None:
                 for _, row in deletions_df[deletions_df["chr"] == query_chr].iterrows():
                     args.append((row, svs))
             else:
@@ -171,15 +174,15 @@ def run_all_sv(
             p.close()
             p.join()
 
-            sv_stats_df = create_sv_stats_file()
             for sv in svs:
-                sv_stats_df[-1] = asdict(sv)
-            sv_stats_df.to_csv(f"{FILE_DIR}/{FILE_NAME}", index=False)
+                sv_stats_df.loc[-1] = asdict(sv)
+
+        sv_stats_df.to_csv(f"{FILE_DIR}/{FILE_NAME}", index=False)
 
 
 if __name__ == "__main__":
     run_all_sv(subset=[("18", 45379612, 45379807)])
     # TODO/issues:
     # pruning too many samples
-    # many samples queried from STIX but not in deletions_df.csv
+    # many samples queried from STIX but not in deletions_df.csv -- check STIX database for the index
     # figure out length of SV ~ length of read (-450?)
