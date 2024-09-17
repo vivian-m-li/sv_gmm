@@ -74,8 +74,7 @@ def get_sv_stats(row, svs: List[SVStatGMM]) -> None:
         plot=False,
         plot_bokeh=False,
     )
-    num_samples = sum([len(mode) for mode in gmm.x_by_mode])
-    sv_stat.num_pruned = sum([pruned for pruned in gmm.num_pruned]) + len(gmm.outliers)
+    sv_stat.num_pruned = sum(gmm.num_pruned) + len(gmm.outliers)
     sv_stat.num_modes = gmm.num_modes
     sv_stat.num_iterations = gmm.num_iterations
 
@@ -177,7 +176,7 @@ def run_all_sv(
             for sv in svs:
                 sv_stats_df.loc[-1] = asdict(sv)
 
-        sv_stats_df.to_csv(f"{FILE_DIR}/{FILE_NAME}", index=False)
+    sv_stats_df.to_csv(f"{FILE_DIR}/{FILE_NAME}", index=False)
 
 
 if __name__ == "__main__":
