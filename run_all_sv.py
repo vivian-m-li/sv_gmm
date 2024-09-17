@@ -9,21 +9,7 @@ FILE_DIR = "1000genomes"
 FILE_NAME = "sv_stats.csv"
 
 
-def get_population_size():
-    df = pd.read_csv("1000genomes/deletions_df.csv", nrows=0, low_memory=False)
-    return df.shape[1] - 12
-
-
-def remove_missing_samples(squiggle_data: Dict[str, np.ndarray[float]]):
-    df = pd.read_csv(
-        "1000genomes/deletions_df.csv", nrows=0, low_memory=False
-    )  # 2504 samples
-    missing_keys = set(squiggle_data.keys()) - set(df.columns[11:-1])
-    for key in missing_keys:
-        squiggle_data.pop(key, None)
-
-
-def get_sv_stats(row, svs: List[SVStatGMM]) -> None:
+def get_sv_stats(row, deletions_df, population_size, sample_set, queue) -> None:
     sv_stat = SVStatGMM(
         id=row.id,
         chr=row.chr,
@@ -53,17 +39,20 @@ def get_sv_stats(row, svs: List[SVStatGMM]) -> None:
     sv_stat.num_samples = len(squiggle_data)
 
     reference_samples = get_reference_samples(
-        squiggle_data, row.chr, row.start, row.stop
+        deletions_df, squiggle_data, row.chr, row.start, row.stop
     )
     sv_stat.num_reference = len(reference_samples)
     for ref in reference_samples:
         squiggle_data.pop(ref, None)
 
-    remove_missing_samples(squiggle_data)
+    missing_keys = set(squiggle_data.keys()) - set(sample_set)
+    for key in missing_keys:
+        squiggle_data.pop(key, None)
 
     if len(squiggle_data) == 0:
-        svs.append(sv_stat)
-        return
+        if queue is not None:
+            queue.put(asdict(sv_stat))
+        return sv_stat
 
     gmm, evidence_by_mode = run_viz_gmm(
         squiggle_data,
@@ -85,7 +74,6 @@ def get_sv_stats(row, svs: List[SVStatGMM]) -> None:
         )  # 450 is the length of the read
     )  # TODO: how do we calculate this? It can be negative
 
-    population_size = get_population_size()
     mode_coords = []
     for i, mode in enumerate(evidence_by_mode):
         sample_ids = [e.sample.id for e in mode]
@@ -128,7 +116,10 @@ def get_sv_stats(row, svs: List[SVStatGMM]) -> None:
             if mode_coords[i][1] > mode_coords[i + 1][0]:
                 sv_stat.overlap_between_modes = True
 
-    svs.append(sv_stat)
+    if queue is not None:
+        queue.put(asdict(sv_stat))
+
+    return sv_stat
 
 
 def dataclass_to_columns(dataclass_type):
@@ -141,47 +132,81 @@ def create_sv_stats_file():
     return df
 
 
+def listener(queue, sv_stats_file):
+    with open(sv_stats_file, mode="a", newline="") as file:
+        fieldnames = [field.name for field in fields(SVStatGMM)]
+        csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
+        while True:
+            result = queue.get()
+            if result == "DONE":
+                break
+            csv_writer.writerow(result)
+            file.flush()
+
+
 def run_all_sv(
     *,
     query_chr: Optional[str] = None,
     subset: Optional[List[Tuple[str, int, int]]] = None,
 ):
     deletions_df = pd.read_csv(f"{FILE_DIR}/deletions_df.csv", low_memory=False)
-    sv_stats_df = create_sv_stats_file()
+    sv_stats_file = f"{FILE_DIR}/{FILE_NAME}"
+    with open(sv_stats_file, mode="a", newline="") as file:
+        fieldnames = [field.name for field in fields(SVStatGMM)]
+        csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
+        file.seek(0, 2)  # Check if the file is empty
+        if file.tell() == 0:
+            csv_writer.writeheader()
+
+    population_size = deletions_df.shape[1] - 12
+    sample_ids = set(deletions_df.columns[11:-1])  # 2504 samples
+
     if subset is not None:
-        sv_stats = []
         for chr, start, stop in subset:
             row = deletions_df[
                 (deletions_df["chr"] == chr)
                 & (deletions_df["start"] == start)
                 & (deletions_df["stop"] == stop)
             ].iloc[0]
-            get_sv_stats(row, sv_stats)
-            sv_stats_df.loc[-1] = asdict(sv_stats[0])
+            sv_stat = get_sv_stats(row, deletions_df, population_size, sample_ids, None)
+            with open(sv_stats_file, mode="a", newline="") as file:
+                csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
+                csv_writer.writerow(asdict(sv_stat))
     else:
         with multiprocessing.Manager() as manager:
+            queue = manager.Queue()
             p = multiprocessing.Pool(multiprocessing.cpu_count())
-            svs = manager.list()
+
+            listener_process = multiprocessing.Process(
+                target=listener, args=(queue, sv_stats_file)
+            )
+            listener_process.start()
+
             args = []
+            sv_stats_df = pd.read_csv(sv_stats_file)
             if query_chr is not None:
                 for _, row in deletions_df[deletions_df["chr"] == query_chr].iterrows():
-                    args.append((row, svs))
+                    if row.id in sv_stats_df["id"].values:
+                        continue
+                    args.append((row, deletions_df, population_size, sample_ids, queue))
             else:
                 for _, row in deletions_df.iterrows():
-                    args.append((row, svs))
+                    if row.id in sv_stats_df["id"].values:
+                        continue
+                    args.append((row, deletions_df, population_size, sample_ids, queue))
             p.starmap(get_sv_stats, args)
             p.close()
             p.join()
 
-            for sv in svs:
-                sv_stats_df.loc[-1] = asdict(sv)
-
-    sv_stats_df.to_csv(f"{FILE_DIR}/{FILE_NAME}", index=False)
+            queue.put("DONE")
+            listener_process.join()
 
 
 if __name__ == "__main__":
-    run_all_sv(subset=[("18", 45379612, 45379807)])
+    # run_all_sv(subset=[("11", 54894935, 54899781)])
+    # run_all_sv(subset=[("18", 45379612, 45379807)])
+    run_all_sv(query_chr="1")
+
     # TODO/issues:
-    # pruning too many samples
     # many samples queried from STIX but not in deletions_df.csv -- check STIX database for the index
     # figure out length of SV ~ length of read (-450?)

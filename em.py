@@ -586,10 +586,10 @@ def run_em(
         if abs(logL[-1] - logL[-2]) < 0.05:
             break
 
-        if i == max_iterations - 1:
-            warnings.warn(
-                "Maximum number of iterations reached without logL convergence"
-            )
+        # if i == max_iterations - 1:
+        #     warnings.warn(
+        #         "Maximum number of iterations reached without logL convergence"
+        #     )
         i += 1
 
     return all_params, i

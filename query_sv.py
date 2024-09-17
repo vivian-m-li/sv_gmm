@@ -68,9 +68,12 @@ def parse_input(input: str) -> str:
 
 
 def get_reference_samples(
-    squiggle_data: Dict[str, np.ndarray[float]], chr: str, start: int, stop: int
+    df: pd.DataFrame,
+    squiggle_data: Dict[str, np.ndarray[float]],
+    chr: str,
+    start: int,
+    stop: int,
 ) -> List[str]:
-    df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
     row = df[(df["chr"] == chr) & (df["start"] == start) & (df["stop"] == stop)]
     samples = [
         sample_id for sample_id in df.columns[11:-1] if sample_id in squiggle_data
@@ -119,13 +122,16 @@ def query_stix(l: str, r: str, run_gmm: bool = True, *, filter_reference: bool =
 
     chr, start, stop = reverse_giggle_format(l, r)
     if filter_reference:
-        ref_samples = get_reference_samples(squiggle_data, chr, start, stop)
+        deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+        ref_samples = get_reference_samples(
+            deletions_df, squiggle_data, chr, start, stop
+        )
         for ref in ref_samples:
             squiggle_data.pop(ref, None)
 
     if run_gmm:
         if len(squiggle_data) == 0:
-            print("No structural variants found in this region.")
+            # print("No structural variants found in this region.")
             return
 
         run_viz_gmm(

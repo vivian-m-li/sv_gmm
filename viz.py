@@ -794,7 +794,7 @@ def run_viz_gmm(
     )
 
     if len(points) == 0:
-        print("No structural variants found in this region.")
+        # print("No structural variants found in this region.")
         return
 
     gmm = run_gmm(points, plot=plot, pr=False)
