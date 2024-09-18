@@ -80,6 +80,12 @@ def get_sv_stats(
         plot=False,
         plot_bokeh=False,
     )
+
+    if gmm is None:
+        if queue is not None:
+            queue.put(asdict(sv_stat))
+        return sv_stat
+
     sv_stat.num_pruned = sum(gmm.num_pruned) + len(gmm.outliers)
     sv_stat.num_modes = gmm.num_modes
     sv_stat.num_iterations = gmm.num_iterations
