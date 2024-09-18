@@ -23,7 +23,7 @@ def get_sv_stats(
     row: pd.Series,
     population_size: int,
     sample_set: Set[int],
-    queue,
+    svs: List[SVStatGMM],
 ) -> None:
     sv_stat = SVStatGMM(
         id=row.id,
@@ -67,9 +67,8 @@ def get_sv_stats(
         squiggle_data.pop(ref, None)
 
     if len(squiggle_data) == 0:
-        if queue is not None:
-            queue.put(asdict(sv_stat))
-        return sv_stat
+        svs.append(sv_stat)
+        return
 
     gmm, evidence_by_mode = run_viz_gmm(
         squiggle_data,
@@ -82,9 +81,8 @@ def get_sv_stats(
     )
 
     if gmm is None:
-        if queue is not None:
-            queue.put(asdict(sv_stat))
-        return sv_stat
+        svs.append(sv_stat)
+        return
 
     sv_stat.num_pruned = sum(gmm.num_pruned) + len(gmm.outliers)
     sv_stat.num_modes = gmm.num_modes
@@ -139,10 +137,7 @@ def get_sv_stats(
             if mode_coords[i][1] > mode_coords[i + 1][0]:
                 sv_stat.overlap_between_modes = True
 
-    if queue is not None:
-        queue.put(asdict(sv_stat))
-
-    return sv_stat
+    svs.append(sv_stat)
 
 
 def dataclass_to_columns(dataclass_type):
@@ -185,44 +180,50 @@ def run_all_sv(
     sample_ids = set(deletions_df.columns[11:-1])  # 2504 samples
 
     if subset is not None:
+        svs = []
         for chr, start, stop in subset:
             row = deletions_df[
                 (deletions_df["chr"] == chr)
                 & (deletions_df["start"] == start)
                 & (deletions_df["stop"] == stop)
             ].iloc[0]
-            sv_stat = get_sv_stats(row, population_size, sample_ids, None)
-            with open(sv_stats_file, mode="a", newline="") as file:
+            get_sv_stats(row, population_size, sample_ids, svs)
+        with open(sv_stats_file, mode="a", newline="") as file:
+            for sv in svs:
                 csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
-                csv_writer.writerow(asdict(sv_stat))
+                csv_writer.writerow(asdict(sv))
     else:
+        sv_stats_df = pd.read_csv(sv_stats_file)
+        rows = []
+        if query_chr is not None:
+            for _, row in deletions_df[deletions_df["chr"] == query_chr].iterrows():
+                if row.id in sv_stats_df["id"].values:
+                    continue
+                rows.append(row)
+        else:
+            for _, row in deletions_df.iterrows():
+                if row.id in sv_stats_df["id"].values:
+                    continue
+                rows.append(row)
+
         with multiprocessing.Manager() as manager:
-            queue = manager.Queue()
-            p = multiprocessing.Pool(multiprocessing.cpu_count())
+            cpu_count = multiprocessing.cpu_count()
+            p = multiprocessing.Pool(cpu_count)
 
-            listener_process = multiprocessing.Process(
-                target=listener, args=(queue, sv_stats_file)
-            )
-            listener_process.start()
+            for i in range(0, len(rows), cpu_count):
+                svs = manager.list()
+                args = [
+                    (row, population_size, sample_ids, svs)
+                    for row in rows[i : i + cpu_count]
+                ]
+                p.starmap(get_sv_stats, args)
+                with open(sv_stats_file, mode="a", newline="") as file:
+                    for sv in svs:
+                        csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
+                        csv_writer.writerow(asdict(sv))
 
-            args = []
-            sv_stats_df = pd.read_csv(sv_stats_file)
-            if query_chr is not None:
-                for _, row in deletions_df[deletions_df["chr"] == query_chr].iterrows():
-                    if row.id in sv_stats_df["id"].values:
-                        continue
-                    args.append((row, population_size, sample_ids, queue))
-            else:
-                for _, row in deletions_df.iterrows():
-                    if row.id in sv_stats_df["id"].values:
-                        continue
-                    args.append((row, population_size, sample_ids, queue))
-            p.starmap(get_sv_stats, args)
             p.close()
             p.join()
-
-            queue.put("DONE")
-            listener_process.join()
 
 
 if __name__ == "__main__":
