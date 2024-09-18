@@ -10,7 +10,7 @@ from sklearn.metrics import roc_auc_score
 from collections import Counter
 from pprint import pprint
 from gmm_types import *
-from typing import Tuple, List, Dict, Union
+from typing import Tuple, List, Dict, Union, Optional
 
 OUTLIER_THRESHOLD = 0.001
 RESPONSIBILITY_THRESHOLD = 1e-10
@@ -651,7 +651,7 @@ def assign_values_to_modes(
 
 def run_gmm(
     x: Union[List[int], np.ndarray], *, plot: bool = False, pr: bool = False
-) -> EstimatedGMM:
+) -> Optional[EstimatedGMM]:
     """
     Runs the GMM estimation process to determine the number of structural variants in a DNA reading frame.
     x is a list of data points corresponding to the y-intercept of the L-R position calculated after a shift in the genome due to a deletion of greater than 1 base pair.
@@ -661,17 +661,7 @@ def run_gmm(
     n = len(x)
     if len(x) == 0:
         # warnings.warn("Input data is empty")
-        return EstimatedGMM(
-            mu=[],
-            vr=[],
-            p=[],
-            num_modes=0,
-            logL=0,
-            aic=0,
-            outliers=[],
-            window_size=(0, 0),
-            x_by_mode=[],
-        )
+        return None
     if len(x) == 1:
         # warnings.warn("Input data contains one SV")
         singleton = x[0]
@@ -684,13 +674,16 @@ def run_gmm(
             aic=0,
             outliers=[],
             window_size=(singleton, singleton),
-            x_by_mode=[],
+            x_by_mode=[[singleton]],
+            num_pruned=0,
+            num_iterations=0,
         )
 
     outliers = []
     aic_vals = []
     if len(x) <= 10:  # small number of SVs detected
-        opt_params, _ = run_em(x, 1, plot)
+        opt_params, num_iterations = run_em(x, 1, plot)
+        num_iterations_final = num_iterations
         num_sv = 1
     else:
         x, outliers = resize_data_window(x)
