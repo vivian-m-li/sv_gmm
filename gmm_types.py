@@ -83,7 +83,7 @@ class ModeStat:
 
 
 @dataclass
-class SVStatGMM:
+class SVInfoGMM:
     id: str
     chr: str
     start: int

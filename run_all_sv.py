@@ -10,9 +10,9 @@ from typing import Set
 
 FILE_DIR = "processed_svs"
 
-def write_sv_file(sv: SVStatGMM):
+def write_sv_file(sv: SVInfoGMM):
     with open(f"{FILE_DIR}/{sv.id}.csv", mode="w") as file:
-        fieldnames = [field.name for field in fields(SVStatGMM)]
+        fieldnames = [field.name for field in fields(SVInfoGMM)]
         csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
         csv_writer.writerow(asdict(sv))
 
@@ -25,22 +25,20 @@ def get_reference_samples(
 
 
 def write_sv_stats(
-    row: pd.Series,
+    row: Dict,
     population_size: int,
     sample_set: Set[int],
 ) -> None:
-    sv_stat = SVStatGMM(
-        id=row.id,
-        chr=row.chr,
-        start=row.start,
-        stop=row.stop,
-        svlen=row.svlen,
-        ref=row.ref,
-        alt=row.alt,
-        qual=row.qual,
-        # filter=row.filter,
-        af=row.af,
-        # info=row.info,
+    sv_stat = SVInfoGMM(
+        id=row['id'],
+        chr=row['chr'],
+        start=row['start'],
+        stop=row['stop'],
+        svlen=row['svlen'],
+        ref=row['ref'],
+        alt=row['alt'],
+        qual=row['qual'],
+        af=row['af'],
         num_samples=0,
         num_pruned=0,
         num_reference=0,
@@ -51,8 +49,8 @@ def write_sv_stats(
         modes=[],
     )
 
-    start = giggle_format(str(row.chr), row.start)
-    end = giggle_format(str(row.chr), row.stop)
+    start = giggle_format(str(row['chr']), row['start'])
+    end = giggle_format(str(row['chr']), row['stop'])
 
     squiggle_data = query_stix(start, end, False, filter_reference=False)
     missing_keys = set(squiggle_data.keys()) - sample_set
@@ -77,9 +75,9 @@ def write_sv_stats(
     gmm, evidence_by_mode = run_viz_gmm(
         squiggle_data,
         file_name=None,
-        chr=row.chr,
-        L=row.start,
-        R=row.stop,
+        chr=row['chr'],
+        L=row['start'],
+        R=row['stop'],
         plot=False,
         plot_bokeh=False,
     )
@@ -145,11 +143,11 @@ def write_sv_stats(
 
 
 def dataclass_to_columns(dataclass_type):
-    return [field.name for field in SVStatGMM(dataclass_type)]
+    return [field.name for field in SVInfoGMM(dataclass_type)]
 
 
 def create_sv_stats_file():
-    df_fields = [field.name for field in fields(SVStatGMM)]
+    df_fields = [field.name for field in fields(SVInfoGMM)]
     df = pd.DataFrame(columns=df_fields)
     return df
 
@@ -162,7 +160,7 @@ def run_all_sv(
     deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
     # sv_stats_file = f"1000genomes/sv_stats"
     # with open(sv_stats_file, mode="a", newline="") as file:
-    #     fieldnames = [field.name for field in fields(SVStatGMM)]
+    #     fieldnames = [field.name for field in fields(SVInfoGMM)]
     #     csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
     #     file.seek(0, 2)  # Check if the file is empty
     #     if file.tell() == 0:
@@ -178,7 +176,7 @@ def run_all_sv(
                 & (deletions_df["start"] == start)
                 & (deletions_df["stop"] == stop)
             ].iloc[0]
-            write_sv_stats(row, population_size, sample_ids)
+            write_sv_stats(row.to_dict(), population_size, sample_ids)
     else:
         processed_sv_ids = set([file for file in os.listdir(FILE_DIR)])
         rows = []
@@ -196,7 +194,7 @@ def run_all_sv(
             for row in rows:
                 if row.id in processed_sv_ids:
                     continue
-                args.append((row, population_size, sample_ids))
+                args.append((row.to_dict(), population_size, sample_ids))
             p.starmap(write_sv_stats, args)
             p.close()
             p.join()
