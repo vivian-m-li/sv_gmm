@@ -1,3 +1,4 @@
+import os
 import csv
 import pandas as pd
 import multiprocessing
@@ -7,9 +8,13 @@ from viz import *
 from gmm_types import *
 from typing import Set
 
-FILE_DIR = "1000genomes"
-FILE_NAME = "sv_stats.csv"
+FILE_DIR = "processed_svs"
 
+def write_sv_file(sv: SVStatGMM):
+    with open(f"{FILE_DIR}/{sv.id}.csv", mode="w") as file:
+        fieldnames = [field.name for field in fields(SVStatGMM)]
+        csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
+        csv_writer.writerow(asdict(sv))
 
 def get_reference_samples(
     row: pd.Series, sample_set: Set[int], squiggle_data: Dict[str, np.ndarray[float]]
@@ -19,11 +24,10 @@ def get_reference_samples(
     return ref_samples
 
 
-def get_sv_stats(
+def write_sv_stats(
     row: pd.Series,
     population_size: int,
     sample_set: Set[int],
-    svs: List[SVStatGMM],
 ) -> None:
     sv_stat = SVStatGMM(
         id=row.id,
@@ -67,7 +71,7 @@ def get_sv_stats(
         squiggle_data.pop(ref, None)
 
     if len(squiggle_data) == 0:
-        svs.append(sv_stat)
+        write_sv_file(sv_stat)
         return
 
     gmm, evidence_by_mode = run_viz_gmm(
@@ -81,7 +85,7 @@ def get_sv_stats(
     )
 
     if gmm is None:
-        svs.append(sv_stat)
+        write_sv_file(sv_stat)
         return
 
     sv_stat.num_pruned = sum(gmm.num_pruned) + len(gmm.outliers)
@@ -137,7 +141,7 @@ def get_sv_stats(
             if mode_coords[i][1] > mode_coords[i + 1][0]:
                 sv_stat.overlap_between_modes = True
 
-    svs.append(sv_stat)
+    write_sv_file(sv_stat)
 
 
 def dataclass_to_columns(dataclass_type):
@@ -150,83 +154,52 @@ def create_sv_stats_file():
     return df
 
 
-def listener(queue, sv_stats_file):
-    with open(sv_stats_file, mode="a", newline="") as file:
-        fieldnames = [field.name for field in fields(SVStatGMM)]
-        csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
-        while True:
-            result = queue.get()
-            if result == "DONE":
-                break
-            csv_writer.writerow(result)
-            file.flush()
-
-
 def run_all_sv(
     *,
     query_chr: Optional[str] = None,
     subset: Optional[List[Tuple[str, int, int]]] = None,
 ):
-    deletions_df = pd.read_csv(f"{FILE_DIR}/deletions_df.csv", low_memory=False)
-    sv_stats_file = f"{FILE_DIR}/{FILE_NAME}"
-    with open(sv_stats_file, mode="a", newline="") as file:
-        fieldnames = [field.name for field in fields(SVStatGMM)]
-        csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
-        file.seek(0, 2)  # Check if the file is empty
-        if file.tell() == 0:
-            csv_writer.writeheader()
+    deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+    # sv_stats_file = f"1000genomes/sv_stats"
+    # with open(sv_stats_file, mode="a", newline="") as file:
+    #     fieldnames = [field.name for field in fields(SVStatGMM)]
+    #     csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
+    #     file.seek(0, 2)  # Check if the file is empty
+    #     if file.tell() == 0:
+    #         csv_writer.writeheader()
 
     population_size = deletions_df.shape[1] - 12
     sample_ids = set(deletions_df.columns[11:-1])  # 2504 samples
 
     if subset is not None:
-        svs = []
         for chr, start, stop in subset:
             row = deletions_df[
                 (deletions_df["chr"] == chr)
                 & (deletions_df["start"] == start)
                 & (deletions_df["stop"] == stop)
             ].iloc[0]
-            get_sv_stats(row, population_size, sample_ids, svs)
-        with open(sv_stats_file, mode="a", newline="") as file:
-            for sv in svs:
-                csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
-                csv_writer.writerow(asdict(sv))
+            write_sv_stats(row, population_size, sample_ids)
     else:
-        sv_stats_df = pd.read_csv(sv_stats_file)
+        processed_sv_ids = set([file for file in os.listdir(FILE_DIR)])
         rows = []
         if query_chr is not None:
             for _, row in deletions_df[deletions_df["chr"] == query_chr].iterrows():
-                if row.id in sv_stats_df["id"].values:
-                    continue
                 rows.append(row)
         else:
             for _, row in deletions_df.iterrows():
-                if row.id in sv_stats_df["id"].values:
-                    continue
                 rows.append(row)
 
         with multiprocessing.Manager() as manager:
             cpu_count = multiprocessing.cpu_count()
             p = multiprocessing.Pool(cpu_count)
-
-            for i in range(0, len(rows), cpu_count):
-                svs = manager.list()
-                args = [
-                    (row, population_size, sample_ids, svs)
-                    for row in rows[i : i + cpu_count]
-                ]
-                p.starmap(get_sv_stats, args)
-                with open(sv_stats_file, mode="a", newline="") as file:
-                    for sv in svs:
-                        csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
-                        csv_writer.writerow(asdict(sv))
-
+            args = []
+            for row in rows:
+                if row.id in processed_sv_ids:
+                    continue
+                args.append((row, population_size, sample_ids))
+            p.starmap(write_sv_stats, args)
             p.close()
             p.join()
 
-
 if __name__ == "__main__":
-    # run_all_sv(subset=[("11", 54894935, 54899781)])
-    # run_all_sv(subset=[("18", 45379612, 45379807)])
-    run_all_sv(query_chr="1")
+    run_all_sv()
