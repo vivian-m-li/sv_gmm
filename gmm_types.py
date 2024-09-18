@@ -91,12 +91,12 @@ class SVStatGMM:
     svlen: int
     ref: str
     alt: str
-    qual: float
+    qual: str
     # filter: List[str]
-    af: float
+    af: str
     # info: dict
     num_samples: int
-    num_pruned: int  # number of samples pruned by the GMM. Samples can also be dropped if they're reference samples, don't have enough evidence, or aren't in the vcf index
+    num_pruned: int  # number of samples pruned by the GMM. Samples can also be dropped if they're reference samples, don't have enough evidence, or aren't in the vcf index but aren't counted here
     num_reference: int
     svlen_post: int
     num_modes: int

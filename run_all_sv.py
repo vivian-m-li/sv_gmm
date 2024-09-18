@@ -1,15 +1,30 @@
+import csv
 import pandas as pd
 import multiprocessing
 from dataclasses import fields, asdict
-from query_sv import *
+from query_sv import query_stix, giggle_format
 from viz import *
 from gmm_types import *
+from typing import Set
 
 FILE_DIR = "1000genomes"
 FILE_NAME = "sv_stats.csv"
 
 
-def get_sv_stats(row, deletions_df, population_size, sample_set, queue) -> None:
+def get_reference_samples(
+    row: pd.Series, sample_set: Set[int], squiggle_data: Dict[str, np.ndarray[float]]
+) -> List[str]:
+    samples = [sample_id for sample_id in sample_set if sample_id in squiggle_data]
+    ref_samples = [col for col in samples if row[col] == "(0, 0)"]
+    return ref_samples
+
+
+def get_sv_stats(
+    row: pd.Series,
+    population_size: int,
+    sample_set: Set[int],
+    queue,
+) -> None:
     sv_stat = SVStatGMM(
         id=row.id,
         chr=row.chr,
@@ -36,18 +51,20 @@ def get_sv_stats(row, deletions_df, population_size, sample_set, queue) -> None:
     end = giggle_format(str(row.chr), row.stop)
 
     squiggle_data = query_stix(start, end, False, filter_reference=False)
+    missing_keys = set(squiggle_data.keys()) - sample_set
+    for key in missing_keys:
+        squiggle_data.pop(key, None)
+
     sv_stat.num_samples = len(squiggle_data)
 
     reference_samples = get_reference_samples(
-        deletions_df, squiggle_data, row.chr, row.start, row.stop
+        row,
+        sample_set,
+        squiggle_data,
     )
     sv_stat.num_reference = len(reference_samples)
     for ref in reference_samples:
         squiggle_data.pop(ref, None)
-
-    missing_keys = set(squiggle_data.keys()) - set(sample_set)
-    for key in missing_keys:
-        squiggle_data.pop(key, None)
 
     if len(squiggle_data) == 0:
         if queue is not None:
@@ -72,7 +89,7 @@ def get_sv_stats(row, deletions_df, population_size, sample_set, queue) -> None:
         np.mean(
             [sv.length - 450 for lst in all_svlen for sv in lst]
         )  # 450 is the length of the read
-    )  # TODO: how do we calculate this? It can be negative
+    )
 
     mode_coords = []
     for i, mode in enumerate(evidence_by_mode):
@@ -168,7 +185,7 @@ def run_all_sv(
                 & (deletions_df["start"] == start)
                 & (deletions_df["stop"] == stop)
             ].iloc[0]
-            sv_stat = get_sv_stats(row, deletions_df, population_size, sample_ids, None)
+            sv_stat = get_sv_stats(row, population_size, sample_ids, None)
             with open(sv_stats_file, mode="a", newline="") as file:
                 csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
                 csv_writer.writerow(asdict(sv_stat))
@@ -188,12 +205,12 @@ def run_all_sv(
                 for _, row in deletions_df[deletions_df["chr"] == query_chr].iterrows():
                     if row.id in sv_stats_df["id"].values:
                         continue
-                    args.append((row, deletions_df, population_size, sample_ids, queue))
+                    args.append((row, population_size, sample_ids, queue))
             else:
                 for _, row in deletions_df.iterrows():
                     if row.id in sv_stats_df["id"].values:
                         continue
-                    args.append((row, deletions_df, population_size, sample_ids, queue))
+                    args.append((row, population_size, sample_ids, queue))
             p.starmap(get_sv_stats, args)
             p.close()
             p.join()
@@ -206,7 +223,3 @@ if __name__ == "__main__":
     # run_all_sv(subset=[("11", 54894935, 54899781)])
     # run_all_sv(subset=[("18", 45379612, 45379807)])
     run_all_sv(query_chr="1")
-
-    # TODO/issues:
-    # many samples queried from STIX but not in deletions_df.csv -- check STIX database for the index
-    # figure out length of SV ~ length of read (-450?)
