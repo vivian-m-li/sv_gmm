@@ -1,5 +1,8 @@
 import os
 import pandas as pd
+import csv
+from dataclasses import fields
+from gmm_types import *
 
 
 def find_missing_samples():
@@ -22,5 +25,16 @@ def find_missing_samples():
     return missing
 
 
+def concat_processed_sv_files():
+    with open("1000genomes/sv_stats.csv", mode="w", newline="") as out:
+        fieldnames = [field.name for field in fields(SVInfoGMM)]
+        csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
+        csv_writer.writeheader()
+        for file in os.listdir("processed_svs"):
+            with open(f"processed_svs/{file}") as f:
+                for line in f:
+                    out.write(line)
+
+
 if __name__ == "__main__":
-    find_missing_samples()
+    concat_processed_sv_files()
