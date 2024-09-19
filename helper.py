@@ -5,7 +5,7 @@ from dataclasses import fields
 from gmm_types import *
 
 
-def find_missing_samples():
+def find_missing_sample_ids():
     sample_ids = set()
     for file in os.listdir("processed_stix_output"):
         with open(f"processed_stix_output/{file}") as f:
@@ -25,6 +25,15 @@ def find_missing_samples():
     return missing
 
 
+def find_missing_processed_svs():
+    processed_sv_ids = set([file.strip(".csv") for file in os.listdir("processed_svs")])
+    deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+    missing = set(deletions_df["id"]) - processed_sv_ids
+    print(len(missing))
+    print(missing)
+    return missing
+
+
 def concat_processed_sv_files():
     with open("1000genomes/sv_stats.csv", mode="w", newline="") as out:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
@@ -37,4 +46,4 @@ def concat_processed_sv_files():
 
 
 if __name__ == "__main__":
-    concat_processed_sv_files()
+    find_missing_processed_svs()
