@@ -674,8 +674,8 @@ def run_gmm(
             aic=0,
             outliers=[],
             window_size=(singleton, singleton),
-            x_by_mode=[[singleton]],
-            num_pruned=0,
+            x_by_mode=[x],
+            num_pruned=[0],
             num_iterations=0,
         )
 

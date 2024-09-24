@@ -1,20 +1,21 @@
-from bokeh.plotting import figure, show, output_notebook, output_file, save
-from bokeh.models import HoverTool, Range1d, ColumnDataSource, NumeralTickFormatter
-import numpy as np
 import random
 import colorsys
+import gzip
 import math
-import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
+import numpy as np
 import pandas as pd
 from scipy.stats import norm
 from Bio import SeqIO, Seq
-import gzip
-from typing import Optional, List, Tuple, Dict
+import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import matplotlib.patches as patches
 from brokenaxes import brokenaxes
 from matplotlib.ticker import FixedLocator, StrMethodFormatter
+from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
+from bokeh.plotting import figure, show, output_notebook, output_file, save
+from bokeh.models import HoverTool, Range1d, ColumnDataSource, NumeralTickFormatter
 from collections import Counter
+from typing import Optional, List, Tuple, Dict
 from em import run_gmm, run_em, get_scatter_data
 from gmm_types import *
 
@@ -202,6 +203,7 @@ def filter_and_plot_sequences_bokeh(
         z_filtered = z.copy()
 
         if len(z) > 0:
+            # TODO: ValueError: cannot convert float NaN to integer
             b = int(
                 np.mean(z[1::2]) - np.mean(z[0::2])
             )  # TODO: we don't know that these evidence points all belong to the same SV, but we're calculating one intercept for all of them
@@ -490,7 +492,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
             all_paired_ends.extend([max_l, min_r])
 
         for ax in bax.axs:
-            n, bins, patches = ax.hist(
+            n, bins, hist_patches = ax.hist(
                 all_paired_ends,
                 bins=20,
                 color=mode_color,
@@ -501,7 +503,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
             )
             max_hist_height = max(n)
             scale_factor = 0.5 / max_hist_height
-            for patch in patches:
+            for patch in hist_patches:
                 patch.set_height(patch.get_height() * scale_factor)
                 patch.set_y(patch.get_y() + max_y + 0.05)
             ax.set_ylim(min_y - 0.1, max_y + 0.65)
@@ -574,7 +576,7 @@ def plot_sequence(evidence_by_mode: List[List[Evidence]], ref_sequence: Seq.Seq)
         max_left = max(lefts)
         min_right = min(rights)
 
-        n, bins, patches = plt.hist(
+        n, bins, hist_patches = plt.hist(
             all_paired_ends,
             bins=20,
             color=COLORS[mode_indices_reversed[i]],
@@ -585,7 +587,7 @@ def plot_sequence(evidence_by_mode: List[List[Evidence]], ref_sequence: Seq.Seq)
         )
         max_hist_height = max(n)
         scale_factor = 0.8 / max_hist_height
-        for patch in patches:
+        for patch in hist_patches:
             patch.set_height(patch.get_height() * scale_factor)
             patch.set_y(patch.get_y() + i + 1)
         plt.ylim(i + 0.9, i + 2)
@@ -648,6 +650,202 @@ def plot_sv_lengths(evidence_by_mode: List[List[Evidence]]):
         plt.hist(all_lengths, bins=10, color=COLORS[i], alpha=0.5)
     plt.xlabel("SV Length", fontsize=12)
     plt.ylabel("Frequency", fontsize=12)
+    plt.show()
+
+
+def extract_hetero_homozygous(row):
+    modes_data = eval(row["modes"])
+    heterozygous_counts = [mode["num_heterozygous"] for mode in modes_data]
+    homozygous_counts = [mode["num_homozygous"] for mode in modes_data]
+    return heterozygous_counts, homozygous_counts
+
+
+def plot_processed_sv_stats():
+    # TODO: filter out rows with less than some number of samples
+    df = pd.read_csv("1000genomes/sv_stats.csv")
+    total_n = df.shape[0]
+    filtered_n = df[df["num_samples"] > 0].shape[0]
+    # TODO: check these
+
+    df["num_samples_gmm"] = df.apply(
+        lambda row: [mode["num_samples"] for mode in eval(row["modes"])], axis=1
+    )
+    df["num_heterozygous"], df["num_homozygous"] = zip(
+        *df.apply(extract_hetero_homozygous, axis=1)
+    )
+    df["afs"] = df.apply(
+        lambda row: [mode["af"] for mode in eval(row["modes"])], axis=1
+    )
+
+    mode_data = [df[df["num_modes"] == i + 1] for i in range(3)]
+    total_ns = [x.shape[0] for x in mode_data]
+    splits = [x * (i + 1) for i, x in enumerate(total_ns)]
+    num_svs_pre_split = sum(total_ns)
+    num_svs_post_split = sum(splits)
+    scaling_factor = num_svs_post_split / num_svs_pre_split
+
+    fig, ax = plt.subplots(figsize=(16, 10))
+    gs = fig.add_gridspec(1, 4)
+
+    # Plot bars showing SV distribution
+    ax_bar = fig.add_subplot(gs[0, :3])
+
+    y0 = 0
+    # Plot the first bar
+    for i, mode in enumerate(total_ns):
+        proportion = mode / num_svs_pre_split
+        height = proportion / scaling_factor
+        ax_bar.add_patch(
+            patches.Rectangle(
+                (0, y0),
+                0.3,
+                height,
+                facecolor=COLORS[i],
+                edgecolor="none",
+            )
+        )
+        ax_bar.text(
+            0.15,
+            y0 + height / 2,
+            f"{i+1} Mode{'' if i == 0 else 's'}",
+            ha="center",
+            va="center",
+            fontsize=8,
+            color="black",
+        )
+        y0 += height
+
+    y1 = 0
+    bar_heights = []
+    # Plot the 2nd bar
+    for i, split in enumerate(splits):
+        proportion = split / num_svs_post_split
+        num_homo = mode_data[i]["num_homozygous"].apply(lambda x: sum(x))
+        num_hetero = mode_data[i]["num_heterozygous"].apply(lambda x: sum(x))
+        allele_ratios = num_hetero / (num_homo + num_hetero)
+        mean_allele_ratio = allele_ratios.mean()
+        proportion_hetero = mean_allele_ratio * proportion
+        ax_bar.add_patch(
+            patches.Rectangle(
+                (0.6, y1),
+                0.3,
+                proportion,
+                facecolor=COLORS[i],
+                edgecolor="none",
+            )
+        )
+        ax_bar.plot(
+            [0.6, 0.9],
+            [y1 + proportion_hetero, y1 + proportion_hetero],
+            color="black",
+            linestyle="--",
+            linewidth=1,
+        )
+        bar_heights.append((y1, y1 + proportion))
+        y1 += proportion
+
+    y0_1 = 0
+    y0_2 = 0
+    # Plot the polygons connecting the bars
+    for i, (mode, split) in enumerate(zip(total_ns, splits)):
+        proportion1 = mode / num_svs_pre_split / scaling_factor
+        proportion2 = split / num_svs_post_split
+
+        polygon_points = [
+            (0.3, y0_1),
+            (0.6, y0_2),
+            (0.6, y0_2 + proportion2),
+            (0.3, y0_1 + proportion1),
+        ]
+
+        polygon = patches.Polygon(
+            polygon_points,
+            closed=True,
+            facecolor=COLORS[i],
+            alpha=0.4,
+            edgecolor="none",
+        )
+        ax_bar.add_patch(polygon)
+
+        y0_1 += proportion1
+        y0_2 += proportion2
+
+    ax_bar.set_xlim(0, 0.9)
+    ax_bar.set_ylim(0, 1)
+
+    # Plot histogram of allele frequencies
+    height_ratios = [(y_max - y_min) / y0 for y_min, y_max in bar_heights[::-1]]
+    gs_sub = GridSpecFromSubplotSpec(
+        3,
+        1,
+        subplot_spec=gs[0, 3],
+        height_ratios=height_ratios,
+        hspace=0,
+        wspace=0,
+    )
+    hist_axs = []
+    for i, mode in enumerate(mode_data):
+        afs = [x for y in mode["afs"].tolist() for x in y]
+        hist_ax = fig.add_subplot(gs_sub[len(height_ratios) - i - 1])
+        hist_axs.append(hist_ax)
+        hist_ax.hist(
+            afs,
+            bins=15,
+            orientation="horizontal",
+            color=COLORS[i],
+            alpha=0.6,
+        )
+        hist_ax.set_ylim(0, 0.5)
+
+    for ax in fig.get_axes():
+        ax.set_xticks([])
+        ax.set_xticklabels([])
+        ax.set_yticks([])
+        ax.set_yticklabels([])
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_visible(False)
+        ax.spines["bottom"].set_visible(False)
+
+    plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, wspace=0)
+    ax_bar.set_position([0.05, 0.05, 0.7, 0.9])
+    for hist_ax in hist_axs:
+        pos = hist_ax.get_position()
+        hist_ax.set_position([0.752, pos.y0, 0.2, pos.height])
+
+    plt.axis("off")
+    plt.gca().set_xticks([])
+    plt.gca().set_yticks([])
+    plt.show()
+
+    # number of SVs of each mode
+    # filter out SVs with no samples (gmm didn't even run)
+    # get number of 1, 2, and 3 SVs
+    # for each of those SVs:
+    # split into number of hetero/homo SVs
+    # histogram of AF
+    # number of samples
+
+
+def plot_sample_size_per_mode():
+    df = pd.read_csv("1000genomes/sv_stats.csv")
+    df["num_samples_gmm"] = df.apply(
+        lambda row: [mode["num_samples"] for mode in eval(row["modes"])], axis=1
+    )
+    nonzero = df[df["num_samples"] > 0]
+    mode_data = [nonzero] + [df[df["num_modes"] == i + 1] for i in range(3)]
+
+    sample_sizes = [x["num_samples_gmm"].apply(lambda y: sum(y)) for x in mode_data]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    ax.boxplot(sample_sizes, positions=[1, 2, 3, 4], widths=0.6)
+
+    ax.set_xticks([1, 2, 3, 4])
+    ax.set_xticklabels(["All SVs", "1 Mode", "2 Modes", "3 Modes"])
+    ax.set_xlabel("")
+    ax.set_ylabel("Sample Size")
+
     plt.show()
 
 
