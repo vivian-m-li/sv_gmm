@@ -170,7 +170,7 @@ def run_all_sv(
             ].iloc[0]
             write_sv_stats(row.to_dict(), population_size, sample_ids)
     else:
-        processed_sv_ids = set([file for file in os.listdir(FILE_DIR)])
+        processed_sv_ids = set([file.strip(".csv") for file in os.listdir(FILE_DIR)])
         rows = []
         if query_chr is not None:
             for _, row in deletions_df[deletions_df["chr"] == query_chr].iterrows():

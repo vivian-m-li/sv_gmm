@@ -5,6 +5,7 @@ import math
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
+from scipy.special import logit
 from Bio import SeqIO, Seq
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
@@ -792,17 +793,17 @@ def plot_processed_sv_stats():
     hist_axs = []
     for i, mode in enumerate(mode_data):
         afs = np.array([x for y in mode["afs"].tolist() for x in y])
-        logged_afs = np.log(afs)
+        logit_afs = logit(afs)
         hist_ax = fig.add_subplot(gs_sub[len(height_ratios) - i - 1])
         hist_axs.append(hist_ax)
         hist_ax.hist(
-            logged_afs,
-            bins=15,
+            logit_afs,
+            bins=10,
             orientation="horizontal",
             color=COLORS[i],
             alpha=0.6,
         )
-        hist_ax.set_ylim(0, 1.0)
+        hist_ax.set_ylim(logit(1e-10), logit(0.5))
 
     for ax in fig.get_axes():
         ax.set_xticks([])
@@ -813,6 +814,12 @@ def plot_processed_sv_stats():
         ax.spines["right"].set_visible(False)
         ax.spines["left"].set_visible(False)
         ax.spines["bottom"].set_visible(False)
+
+    for ax in hist_axs:
+        allele_frequencies = [0.01, 0.1, 0.5, 0.9, 0.99]
+        logit_ticks = logit(allele_frequencies)
+        ax.set_yticks(logit_ticks)
+        ax.set_yticklabels([f"{af:.2f}" for af in allele_frequencies])
 
     plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, wspace=0)
     ax_bar.set_position([0.05, 0.05, 0.7, 0.9])
