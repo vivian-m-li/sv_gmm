@@ -203,13 +203,13 @@ def filter_and_plot_sequences_bokeh(
         z_filtered = z.copy()
 
         if len(z) > 0:
-            # TODO: ValueError: cannot convert float NaN to integer
             b = int(
                 np.mean(z[1::2]) - np.mean(z[0::2])
             )  # TODO: we don't know that these evidence points all belong to the same SV, but we're calculating one intercept for all of them
             z[1::2] -= z[0::2] + b
             z[0::2] -= min(ux)
             if len(z) >= 6:  # if there are more than 3 pairs of points
+                # NOTE: should we filter out for under 5 points?
                 xp, yp = z[0::2], z[1::2]
                 sdl = np.sum(np.abs(yp) <= sig)
                 mb[i, :] = [sdl, len(xp), b, 0]
@@ -637,7 +637,8 @@ def plot_sv_lengths(evidence_by_mode: List[List[Evidence]]):
             ]
             all_lengths.append(np.mean(lengths))
 
-        gmm = run_em(all_lengths, 1)[-1]
+        gmm_iters, _ = run_em(all_lengths, 1)
+        gmm = gmm_iters[-1]
         ux, hx = get_scatter_data(all_lengths)
         plt.plot(
             ux,
@@ -660,16 +661,21 @@ def extract_hetero_homozygous(row):
     return heterozygous_counts, homozygous_counts
 
 
-def plot_processed_sv_stats():
-    # TODO: filter out rows with less than some number of samples
-    df = pd.read_csv("1000genomes/sv_stats.csv")
-    total_n = df.shape[0]
-    filtered_n = df[df["num_samples"] > 0].shape[0]
-    # TODO: check these
-
+def get_num_samples_gmm(df):
     df["num_samples_gmm"] = df.apply(
         lambda row: [mode["num_samples"] for mode in eval(row["modes"])], axis=1
     )
+    # TODO: subtract num outliers in the gmm
+    return df
+
+
+def plot_processed_sv_stats():
+    df = pd.read_csv("1000genomes/sv_stats.csv")
+
+    # TODO: remove rows with no samples after GMM outlier removal
+    df = df[df["num_samples"] > 0]
+
+    df = get_num_samples_gmm(df)
     df["num_heterozygous"], df["num_homozygous"] = zip(
         *df.apply(extract_hetero_homozygous, axis=1)
     )
@@ -785,17 +791,18 @@ def plot_processed_sv_stats():
     )
     hist_axs = []
     for i, mode in enumerate(mode_data):
-        afs = [x for y in mode["afs"].tolist() for x in y]
+        afs = np.array([x for y in mode["afs"].tolist() for x in y])
+        logged_afs = np.log(afs)
         hist_ax = fig.add_subplot(gs_sub[len(height_ratios) - i - 1])
         hist_axs.append(hist_ax)
         hist_ax.hist(
-            afs,
+            logged_afs,
             bins=15,
             orientation="horizontal",
             color=COLORS[i],
             alpha=0.6,
         )
-        hist_ax.set_ylim(0, 0.5)
+        hist_ax.set_ylim(0, 1.0)
 
     for ax in fig.get_axes():
         ax.set_xticks([])
@@ -818,20 +825,10 @@ def plot_processed_sv_stats():
     plt.gca().set_yticks([])
     plt.show()
 
-    # number of SVs of each mode
-    # filter out SVs with no samples (gmm didn't even run)
-    # get number of 1, 2, and 3 SVs
-    # for each of those SVs:
-    # split into number of hetero/homo SVs
-    # histogram of AF
-    # number of samples
-
 
 def plot_sample_size_per_mode():
     df = pd.read_csv("1000genomes/sv_stats.csv")
-    df["num_samples_gmm"] = df.apply(
-        lambda row: [mode["num_samples"] for mode in eval(row["modes"])], axis=1
-    )
+    df = get_num_samples_gmm(df)
     nonzero = df[df["num_samples"] > 0]
     mode_data = [nonzero] + [df[df["num_modes"] == i + 1] for i in range(3)]
 

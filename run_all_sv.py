@@ -55,9 +55,6 @@ def write_sv_stats(
     end = giggle_format(str(row["chr"]), row["stop"])
 
     squiggle_data = query_stix(start, end, False, filter_reference=False)
-    missing_keys = set(squiggle_data.keys()) - sample_set
-    for key in missing_keys:
-        squiggle_data.pop(key, None)
 
     sv_stat.num_samples = len(squiggle_data)
 

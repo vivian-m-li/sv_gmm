@@ -121,8 +121,15 @@ def query_stix(l: str, r: str, run_gmm: bool = True, *, filter_reference: bool =
             writer.writerows(processed_stix_output)
 
     chr, start, stop = reverse_giggle_format(l, r)
+    deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+
+    # remove samples queried by stix but missing in the 1000genomes columns
+    sample_ids = set(deletions_df.columns[11:-1])
+    missing_keys = set(squiggle_data.keys()) - sample_ids
+    for key in missing_keys:
+        squiggle_data.pop(key, None)
+
     if filter_reference:
-        deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
         ref_samples = get_reference_samples(
             deletions_df, squiggle_data, chr, start, stop
         )
