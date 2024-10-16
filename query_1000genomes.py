@@ -4,7 +4,6 @@ import multiprocessing
 from query_sv import *
 from viz import *
 
-CHRS = [str(i) for i in range(1, 23)] + ["X", "Y"]
 FILE_DIR = "1000genomes"
 
 

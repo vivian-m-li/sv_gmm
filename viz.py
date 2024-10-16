@@ -975,6 +975,7 @@ def run_viz_gmm(
     R: int,
     plot: bool = True,
     plot_bokeh: bool = False,
+    synthetic_data: bool = False,
 ) -> None:
     # plots that don't update data format
     if plot_bokeh:
@@ -1001,9 +1002,10 @@ def run_viz_gmm(
 
     gmm = run_gmm(points, plot=plot, pr=False)
 
-    populate_sample_info(
-        sv_evidence, chr, L, R
-    )  # mutates sv_evidence with ancestry data and homo/heterozygous for each sample
+    if not synthetic_data:
+        populate_sample_info(
+            sv_evidence, chr, L, R
+        )  # mutates sv_evidence with ancestry data and homo/heterozygous for each sample
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
 
     if plot:
