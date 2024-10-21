@@ -42,8 +42,10 @@ ANCESTRY_COLORS = {
 @dataclass
 class GaussianDistribution:
     mu: List[float]  # means
-    vr: List[float]  # variances
     p: List[float]  # component weights
+    vr: List[float] = []  # variances
+    # TODO: convert this type everywhere
+    cov: List[np.ndarray[float]] = []  # covariance matrices
 
 
 @dataclass
