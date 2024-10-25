@@ -40,22 +40,27 @@ ANCESTRY_COLORS = {
 
 
 @dataclass
-class GaussianDistribution:
-    mu: List[float]  # means
+class GaussianDistribution1D:
+    mu: List[float]  # means for a 2D GMM
+    vr: List[float]  # variances
     p: List[float]  # component weights
-    vr: List[float] = []  # variances
-    # TODO: convert this type everywhere
-    cov: List[np.ndarray[float]] = []  # covariance matrices
 
 
 @dataclass
-class SampleData(GaussianDistribution):
+class GaussianDistribution2D:
+    mu: List[List[float]]  # means for a 2D GMM
+    cov: List[List[float]]  # covariance matrices
+    p: List[float]  # component weights
+
+
+@dataclass
+class SampleData(GaussianDistribution1D):
     x: np.ndarray
     x_by_mu: List[List[float]]
 
 
 @dataclass
-class EstimatedGMM(GaussianDistribution):
+class EstimatedGMM:
     num_modes: int
     logL: Optional[float]
     aic: Optional[float]
@@ -67,8 +72,28 @@ class EstimatedGMM(GaussianDistribution):
 
 
 @dataclass
-class GMM(GaussianDistribution):
+class EstimatedGMM1D(EstimatedGMM, GaussianDistribution1D):
+    pass
+
+
+@dataclass
+class EstimatedGMM2D(EstimatedGMM, GaussianDistribution2D):
+    pass
+
+
+@dataclass
+class GMM:
     logL: float  # log-likelihood
+
+
+@dataclass
+class GMM1D(GMM, GaussianDistribution1D):
+    pass
+
+
+@dataclass
+class GMM2D(GMM, GaussianDistribution2D):
+    pass
 
 
 @dataclass
@@ -84,6 +109,7 @@ class Sample:
 class Evidence:
     sample: Sample
     intercept: float
+    max_l: int
     paired_ends: List[List[float]]
     start_y: float = 0
 

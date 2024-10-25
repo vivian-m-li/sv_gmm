@@ -17,7 +17,8 @@ from bokeh.plotting import figure, show, output_notebook, output_file, save
 from bokeh.models import HoverTool, Range1d, ColumnDataSource, NumeralTickFormatter
 from collections import Counter
 from typing import Optional, List, Tuple, Dict
-from em import run_gmm, run_em, get_scatter_data
+from em import run_gmm, run_em
+from em_1d import run_em as run_em1d, get_scatter_data
 from gmm_types import *
 
 REFERENCE_FILE = "hs37d5.fa.gz"
@@ -191,7 +192,9 @@ def filter_and_plot_sequences_bokeh(
 
     for i, (sample_id, yi) in enumerate(y.items()):
         z = yi.copy()
-        for j in range(0, len(yi), 2):
+        for j in range(0, len(yi), 2):  # look at pairs of points (L-R coordinates)
+            # filter out points that are too far from the original SV's L and R coordinates
+            # TODO: what is the justification for these boundaries?
             if (
                 yi[j] < (L - 2 * read_length)
                 or yi[j] > (L + 1.5 * read_length)
@@ -206,25 +209,31 @@ def filter_and_plot_sequences_bokeh(
         if len(z) > 0:
             b = int(
                 np.mean(z[1::2]) - np.mean(z[0::2])
-            )  # TODO: we don't know that these evidence points all belong to the same SV, but we're calculating one intercept for all of them
-            z[1::2] -= z[0::2] + b
-            z[0::2] -= min(ux)
+            )  # R - L (including read length)
+            z[1::2] -= z[0::2] + b  # subtract MLE y=x+b line
+            z[0::2] -= min(ux)  # shift left by min(x) units
             if len(z) >= 6:  # if there are more than 3 pairs of points
                 # NOTE: should we filter out for under 5 points?
                 xp, yp = z[0::2], z[1::2]
-                sdl = np.sum(np.abs(yp) <= sig)
+                # TODO: why are we filtering out so many points here?
+                sdl = np.sum(
+                    np.abs(yp) <= sig
+                )  # checking if the points are within 1 SD of read noise
                 mb[i, :] = [sdl, len(xp), b, 0]
+                paired_ends = [
+                    [z_filtered[i], z_filtered[i + 1]]
+                    for i in range(0, len(z_filtered), 2)
+                ]
                 sv_evidence[i] = Evidence(
                     sample=Sample(id=sample_id),
                     intercept=b,
-                    paired_ends=[
-                        [z_filtered[i], z_filtered[i + 1]]
-                        for i in range(0, len(z_filtered), 2)
-                    ],
+                    max_l=max([paired_end[0] for paired_end in paired_ends]),
+                    paired_ends=paired_ends,
                 )
 
                 # if more than 3 pieces of evidence (paired read_length-r ends), then there is an SV here for this sample
-                if sdl >= 3:
+                # include if >=3 (x,y) points within sig distance of y=x+b line
+                if sdl >= 3:  # TODO: this is where the points are getting filtered
                     p.line(xp, yp, line_width=2, color=colors[i % len(colors)])
                     p.scatter(xp, yp, size=6, color=colors[i % len(colors)], alpha=0.6)
                     mb[i, 3] = 1
@@ -327,14 +336,22 @@ def add_noise(value, scale=0.07):
 
 
 def get_evidence_by_mode(
-    gmm: GMM, sv_evidence: List[Evidence], R: int
+    gmm: GMM, sv_evidence: List[Evidence], L: int, R: int
 ) -> List[List[Evidence]]:
     sv_evidence = np.array(sv_evidence)
-    x_by_mode = [sorted(x + R) for x in gmm.x_by_mode]
+    x_by_mode = []
+    for mode in gmm.x_by_mode:
+        length_l_pairs = []
+        for x in mode:
+            length_l_pairs.append((x[0] + R, x[1] + L))  # (length, L-coordinate)
+        x_by_mode.append(length_l_pairs)
     evidence_by_mode = [[] for _ in range(len(x_by_mode))]
     for evidence in sv_evidence:
         for i, mode in enumerate(x_by_mode):
-            if evidence.start_y in mode:  # assumes that each mode has unique values
+            if (
+                evidence.start_y,
+                evidence.max_l,
+            ) in mode:  # assumes that each mode has unique (length, L-coordinate) pairs
                 evidence_by_mode[i].append(evidence)
                 continue
     return evidence_by_mode
@@ -405,6 +422,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
         all_paired_ends = []
         population_counter = Counter()
 
+        # plots all evidence for each sample
         for evidence in mode:
             max_l = max([paired_end[0] for paired_end in evidence.paired_ends])
             min_r = min([paired_end[1] for paired_end in evidence.paired_ends])
@@ -557,9 +575,6 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
         startangle=90,
     )
     pie_ax.set_aspect("equal")
-
-    mean_length = int(np.mean([sv.length for lst in sv_stats for sv in lst]))
-    # print(f"Average SV Length={mean_length}\n\n{'\n\n'.join(print_sv_stats(sv_stats))}")
     plt.show()
 
 
@@ -634,11 +649,12 @@ def plot_sv_lengths(evidence_by_mode: List[List[Evidence]]):
         all_lengths = []
         for evidence in mode:
             lengths = [
-                max(paired_end) - min(paired_end) for paired_end in evidence.paired_ends
+                max(paired_end) - min(paired_end) - 450
+                for paired_end in evidence.paired_ends
             ]
             all_lengths.append(np.mean(lengths))
 
-        gmm_iters, _ = run_em(all_lengths, 1)
+        gmm_iters, _ = run_em1d(all_lengths, 1)
         gmm = gmm_iters[-1]
         ux, hx = get_scatter_data(all_lengths)
         plt.plot(
@@ -652,6 +668,65 @@ def plot_sv_lengths(evidence_by_mode: List[List[Evidence]]):
         plt.hist(all_lengths, bins=10, color=COLORS[i], alpha=0.5)
     plt.xlabel("SV Length", fontsize=12)
     plt.ylabel("Frequency", fontsize=12)
+    plt.show()
+
+
+def plot_sv_coords(evidence_by_mode: List[List[Evidence]]):
+    fig = plt.figure(figsize=(15, 8))
+    for i, mode in enumerate(evidence_by_mode):
+        coords = [evidence.max_l for evidence in mode]
+        gmm_iters, _ = run_em1d(coords, 1)
+        gmm = gmm_iters[-1]
+        ux, hx = get_scatter_data(coords)
+        plt.plot(
+            ux,
+            4 * (len(coords) * gmm.p[0]) * norm.pdf(ux, gmm.mu[0], np.sqrt(gmm.vr[0])),
+            linestyle="-",
+            color=COLORS[i],
+        )
+        plt.hist(coords, bins=10, color=COLORS[i], alpha=0.5)
+    plt.gca().xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
+    plt.xlabel("L Coordinate", fontsize=12)
+    plt.ylabel("Frequency", fontsize=12)
+    plt.show()
+
+
+def plot_sv_length_coords(evidence_by_mode: List[List[Evidence]]):
+    plt.figure(figsize=(15, 8))
+    for i, mode in enumerate(evidence_by_mode):
+        x = []
+        for evidence in mode:
+            lengths = [
+                max(paired_end) - min(paired_end) - 450
+                for paired_end in evidence.paired_ends
+            ]
+            x.append([np.mean(lengths), evidence.max_l])
+        x = np.array(x)
+
+        gmm_iters, _ = run_em(x, 1)
+        gmm = gmm_iters[-1]
+
+        # plot 2D data
+        plt.scatter(x[:, 0], x[:, 1], color=COLORS[i])
+
+        # Plot the 2D gaussian distributions
+        eigenvalues, eigenvectors = np.linalg.eigh(gmm.cov[0])
+        angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
+        width, height = 2 * np.sqrt(eigenvalues)
+        ellipse = patches.Ellipse(
+            xy=gmm.mu[0],
+            width=width,
+            height=height,
+            angle=angle,
+            edgecolor=COLORS[i],
+            fc="None",
+            lw=2,
+        )
+        plt.gca().add_patch(ellipse)
+
+    plt.gca().yaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
+    plt.xlabel("SV Length", fontsize=12)
+    plt.ylabel("L Coordinate", fontsize=12)
     plt.show()
 
 
@@ -860,7 +935,8 @@ def get_intercepts(
     L: int,
     R: int,
     plot_bokeh: bool,
-) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
+) -> Tuple[np.ndarray[Tuple[float, int]], List[Evidence]]:
+    print("Num total samples", len(squiggle_data))
     mb, sv_evidence_unfiltered = filter_and_plot_sequences_bokeh(
         squiggle_data,
         file_name=file_name,
@@ -880,7 +956,18 @@ def get_intercepts(
         sig=50,
         plot_bokeh=plot_bokeh,
     )
-    points = np.array([np.array(i)[1] for i in intercepts if len(i) > 1]) - R
+
+    # save the largest x value associated with each intercept
+    points = []  # [[intercept, max_l], ...]
+    for bs, evidence in zip(intercepts, sv_evidence):
+        if len(bs) > 0:
+            # scale the intercept and maxL values
+            points.append((bs[1] - R, evidence.max_l - L))  # np.array(bs)[1]=start_y
+    points = np.array(points)
+
+    print("Num points into GMM", len(points))
+    # TODO: filtering out a lot of points in one of these steps
+
     return points, sv_evidence
 
 
@@ -1006,10 +1093,16 @@ def run_viz_gmm(
         populate_sample_info(
             sv_evidence, chr, L, R
         )  # mutates sv_evidence with ancestry data and homo/heterozygous for each sample
-    evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, R)
-
+    evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, L, R)
     if plot:
         plot_evidence_by_mode(evidence_by_mode)
-        plot_sv_lengths(evidence_by_mode)
+        # plot_sv_lengths(evidence_by_mode)
+        # plot_sv_coords(evidence_by_mode)
+        plot_sv_length_coords(evidence_by_mode)
+
+    print(f"mu: {gmm.mu}")
+    print(f"cov: {gmm.cov}")
+    print(f"p: {gmm.p}")
+    print([len(i) for i in gmm.x_by_mode])
 
     return gmm, evidence_by_mode

@@ -103,8 +103,8 @@ def generate_synthetic_sv_data(chr: int, svs: List[Tuple[int, int]]):
         num_evidence = random.randint(3, 20)
         mode_start, mode_end = svs[mode]
         for _ in range(num_evidence):
-            read_length = int(random.gauss(450, 50))  # TODO: should this be 100?
-            split = random.randint(0, read_length)
+            read_length = int(random.gauss(450, 50))
+            split = random.randint(int(read_length / 2) - 50, int(read_length / 2) + 50)
             evidence_start = mode_start - split
             evidence_stop = mode_end + split
             evidence[sample].extend([evidence_start, evidence_stop])

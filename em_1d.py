@@ -85,7 +85,7 @@ def plot_distributions(
 def calc_y_vals(
     ux: np.ndarray,
     n: int,
-    gmm: GMM,
+    gmm: GMM1D,
     i: int,
 ) -> List[float]:
     """Calculates the density for each x value in the GMM."""
@@ -138,7 +138,7 @@ class UpdateDist:
         return (self.scatter,) + self.lines
 
 
-def animate_distribution(x: np.ndarray[int], gmms: List[GMM]) -> None:
+def animate_distribution(x: np.ndarray[int], gmms: List[GMM1D]) -> None:
     """
     Animates the change in the GMM over each iteration of the EM algorithm.
     Note: This function does not produce an animation in Jupyter Notebook.
@@ -164,7 +164,7 @@ def plot_likelihood(logL: np.ndarray[float]) -> None:
 
 
 def plot_param_vs_aic(
-    n: int, gmm_lookup: Dict[float, EstimatedGMM], xlabel: str, logL: bool = False
+    n: int, gmm_lookup: Dict[float, EstimatedGMM1D], xlabel: str, logL: bool = False
 ) -> None:
     """Plots the aic or log likelihood value when comparing different GMMs."""
     cmap = cm.Set2.colors
@@ -538,7 +538,7 @@ def em(
     mu: np.ndarray[float],
     vr: np.ndarray[float],
     p: np.ndarray[float],
-) -> GMM:
+) -> GMM1D:
     """Performs one iteration of the expectation-maximization algorithm."""
     # Expectation step: calculate the posterior probabilities
     gz = calc_responsibility(x, n, mu, vr, p)
@@ -555,23 +555,23 @@ def em(
 
     # update likelihood
     logL = calc_log_likelihood(x, mu, vr, p)
-    return GMM(mu, vr, p, logL)
+    return GMM1D(mu, vr, p, logL)
 
 
 def run_em(
     x: np.ndarray[int],  # data
     num_modes: int,
     plot: bool = False,
-) -> Tuple[List[GMM], int]:
+) -> Tuple[List[GMM1D], int]:
     """
     Given a dataset and an estimated number of modes for the GMM, estimates the parameters for each distribution.
     The algorithm is initialized using the k-means clustering approach, then the EM algorithm is run for up to 30 iterations, or a convergence of the log-likelihood; whichever comes first.
     Returns the GMM estimated by each iteration of the EM algorithm.
     """
-    all_params: List[GMM] = []
+    all_params: List[GMM1D] = []
 
     n, mu, vr, p, logL = init_em(x, num_modes)  # initialize parameters
-    all_params.append(GMM(mu, vr, p, logL[0]))
+    all_params.append(GMM1D(mu, vr, p, logL[0]))
 
     max_iterations = 30
     i = 0
@@ -646,12 +646,13 @@ def assign_values_to_modes(
         filtered_x, num_modes, gmm.mu, gmm.vr, gmm.p
     )
     num_pruned = [len(x + y) for x, y in zip(pruned, pruned2)]
+    print("Num pruned", num_pruned)
     return x_by_mode2, num_pruned
 
 
 def run_gmm(
     x: Union[List[int], np.ndarray], *, plot: bool = False, pr: bool = False
-) -> Optional[EstimatedGMM]:
+) -> Optional[EstimatedGMM1D]:
     """
     Runs the GMM estimation process to determine the number of structural variants in a DNA reading frame.
     x is a list of data points corresponding to the y-intercept of the L-R position calculated after a shift in the genome due to a deletion of greater than 1 base pair.
@@ -665,7 +666,7 @@ def run_gmm(
     if len(x) == 1:
         # warnings.warn("Input data contains one SV")
         singleton = x[0]
-        return EstimatedGMM(
+        return EstimatedGMM1D(
             mu=[singleton],
             vr=[0],
             p=[1],
@@ -714,7 +715,7 @@ def run_gmm(
     if plot:
         plot_distributions(x, len(x), final_params.mu, final_params.vr, final_params.p)
 
-    return EstimatedGMM(
+    return EstimatedGMM1D(
         mu=final_params.mu,
         vr=final_params.vr,
         p=final_params.p,

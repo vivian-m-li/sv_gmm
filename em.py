@@ -10,89 +10,53 @@ RESPONSIBILITY_THRESHOLD = 1e-10
 
 
 """
-Plotting functions
-"""
-
-
-def get_scatter_data(x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """Fits the data points to a histogram and returns the formatted data to be plotted as a scatter plot."""
-    ux = np.arange(min(x), max(x) + 0.25, 0.25)
-    hx, edges = np.histogram(x, bins=ux)
-    ux = (edges[:-1] + edges[1:]) / 2
-
-    # filter out x values with 0 points
-    nonzero_filter = hx > 0
-    ux = ux[nonzero_filter]
-    hx = hx[nonzero_filter]
-
-    return ux, hx
-
-
-def plot_distributions(
-    x: np.ndarray[int],
-    n: int,
-    mu: np.ndarray[float],
-    cov: List[np.ndarray[float]],
-    p: np.ndarray[float],
-    *,
-    title: str = None,
-    outliers: List[float] = [],
-) -> None:
-    """Plots the GMM."""
-    # visualize the data and the generative model
-    ux, hx = get_scatter_data(x)
-    plt.figure(figsize=(15, 8))
-    plt.scatter(ux, hx, marker=".", color="blue")
-    for i in range(len(mu)):
-        plt.plot(
-            ux,
-            2
-            * (n * p[i])
-            * norm.pdf(ux, mu[i], np.sqrt(cov[i])),  # TODO: use covariance matrix
-            linestyle="-",
-            color=COLORS[i],
-        )
-    if outliers is not None:
-        plt.scatter(outliers, len(outliers) * [1], marker=".", color="blue")
-    if title is not None:
-        plt.title(title)
-    plt.xlabel("intercept")
-    plt.ylabel("density")
-    plt.show()
-
-
-"""
 GMM/EM helper functions
 """
 
 
 def calc_log_likelihood(
-    x: np.ndarray[int],
-    mu: np.ndarray[float],
-    cov: List[np.ndarray[float]],
-    p: np.ndarray[float],
+    x: np.ndarray,
+    mu: List[np.ndarray],
+    cov: List[np.ndarray],
+    p: np.ndarray,
 ) -> float:
     """Calculates the log-likelihood of the data fitting the GMM."""
     num_modes = len(mu)
     logL = 0.0
     for i in range(len(x)):
-        pdf = [
-            p[k] * multivariate_normal.pdf(x[i], mu[k], cov[k])
-            for k in range(num_modes)
-        ]
+        try:
+            pdf = [
+                p[k] * multivariate_normal.pdf(x[i], mu[k], cov[k])
+                for k in range(num_modes)
+            ]
+        except Exception:
+            # LinAlgError: When `allow_singular is False`, the input matrix must be symmetric positive definite.
+            raise Exception(f"Error with values: {x[i]}, {mu}, {cov}")
         likelihood_i = np.sum(pdf)
         logL += np.log(likelihood_i)
     return logL
 
 
 def calc_aic(
-    logL: float, num_modes: int, mu: np.ndarray[float], cov: List[np.ndarray[float]]
+    logL: float, num_modes: int, mu: np.ndarray, cov: List[np.ndarray]
 ) -> float:
     """Calculates the penalized log-likelihood using AIC."""
     num_params = (
-        num_modes * 3
-    ) - 1  # mu, cov, and p as the params to predict, - 1 because the last p value is determined by the other(s)
-    aic = (5 * num_params) - (2 * logL)  # scale the AIC
+        (num_modes * 2) + (num_modes * 3) + (num_modes - 1)
+    )  # number of parameters for mu + cov + p - 1
+    aic = (2 * num_params) - (2 * logL)  # scale the AIC
+
+    # compare the lengths and L coordinates of the different modes - penalize if they're within 2 SD of our sampling SD (50)
+    if num_modes > 1:
+        for i in range(num_modes):
+            for j in range(i + 1, num_modes):
+                dist = np.linalg.norm(mu[i] - mu[j])
+                # add a large penalty for mus that are too close to each other
+                penalty = 0 if dist >= 100 else 100
+                if dist > 50 and dist < 100:
+                    # smaller penalty for having a larger gap between mus
+                    penalty -= (dist * 2) - 100
+                aic += penalty
 
     return aic
 
@@ -106,12 +70,16 @@ def init_em(
     Returns the sample size, means, variances, weights, and log likelihood of the initial GMM.
     """
     # initial conditions
-    kmeans = KMeans(n_init=1, n_clusters=num_modes)
+    kmeans = KMeans(n_clusters=num_modes)
     kmeans.fit(x)
 
-    mu = np.sort(np.ravel(kmeans.cluster_centers_))  # initial means
-    cov = [np.cov(x.T)] * num_modes  # intial covariance matrices
-    p = np.ones(num_modes) / num_modes  # initial p_k proportions
+    mu = kmeans.cluster_centers_  # initial means
+    cov = [
+        np.cov(x[kmeans.labels_ == i].T) for i in range(num_modes)
+    ]  # initial covariances
+    unique, counts = np.unique(kmeans.labels_, return_counts=True)
+    count_lookup = dict(zip(unique, counts))
+    p = [count_lookup[i] / len(x) for i in range(num_modes)]  # initial p_k proportions
     logL = []  # logL values
     n = len(x)  # sample size
 
@@ -122,14 +90,14 @@ def init_em(
 
 
 def calc_responsibility(
-    x: np.ndarray[int],
+    x: np.ndarray,
     n: int,
-    mu: np.ndarray[float],
-    cov: List[np.ndarray[float]],
-    p: np.ndarray[float],
+    mu: List[np.ndarray],
+    cov: List[np.ndarray],
+    p: np.ndarray,
 ):
     """Calculates the responsibility matrix for each point/mode."""
-    gz = np.zeros((n, len(mu)))
+    gz = np.zeros((n, len(mu)))  # number of points by number of modes
     for i in range(len(x)):
         # For each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
         gz[i, :] = [
@@ -140,13 +108,14 @@ def calc_responsibility(
 
 
 def em(
-    x: np.ndarray[int],
+    x: np.ndarray,
     num_modes: int,
     n: int,
-    mu: np.ndarray[float],
-    cov: List[np.ndarray[float]],
-    p: np.ndarray[float],
-) -> GMM:
+    mu: List[np.ndarray],
+    cov: List[np.ndarray],
+    p: np.ndarray,
+) -> GMM2D:
+    # TODO: this is not converging properly
     """Performs one iteration of the expectation-maximization algorithm."""
     # Expectation step: calculate the posterior probabilities
     gz = calc_responsibility(x, n, mu, cov, p)
@@ -157,32 +126,40 @@ def em(
     # Maximization step: estimate gaussian parameters
     # Given the probability that each point belongs to particular gaussian, calculate the mean, variance, and weight of the gaussian
     nk = np.sum(gz, axis=0)
-    mu = [(1.0 / nk[j]) * np.sum(gz[:, j, None] * x) for j in range(num_modes)]
+    # TODO: check why we need the Nones?
+    mu = [(1.0 / nk[j]) * np.sum(gz[:, j, None] * x, axis=0) for j in range(num_modes)]
     cov = [
-        (1.0 / nk[j]) * np.dot((gz[:, j, None] * (x - mu[j])).T, axis=0)
+        (1.0 / nk[j]) * np.dot((gz[:, j, None] * (x - mu[j])).T, (x - mu[j]))
         for j in range(num_modes)
     ]
     p = nk / n
 
+    if num_modes > 1:
+        pass
+        # responsibility getting assigned to the first mode
+        # import pdb
+
+        # pdb.set_trace()
+
     # update likelihood
     logL = calc_log_likelihood(x, mu, cov, p)
-    return GMM(mu, cov, p, logL)
+    return GMM2D(mu, cov, p, logL)
 
 
 def run_em(
-    x: np.ndarray[int],  # data
+    x: np.ndarray,  # data
     num_modes: int,
     plot: bool = False,
-) -> Tuple[List[GMM], int]:
+) -> Tuple[List[GMM2D], int]:
     """
     Given a dataset and an estimated number of modes for the GMM, estimates the parameters for each distribution.
     The algorithm is initialized using the k-means clustering approach, then the EM algorithm is run for up to 30 iterations, or a convergence of the log-likelihood; whichever comes first.
     Returns the GMM estimated by each iteration of the EM algorithm.
     """
-    all_params: List[GMM] = []
+    all_params: List[GMM2D] = []
 
     n, mu, cov, p, logL = init_em(x, num_modes)  # initialize parameters
-    all_params.append(GMM(mu, cov, p, logL[0]))
+    all_params.append(GMM2D(mu, cov, p, logL[0]))
 
     max_iterations = 30
     i = 0
@@ -203,12 +180,12 @@ def run_em(
 
 
 def assign_values_to_modes(
-    x: np.ndarray[int],
+    x: np.ndarray,
     num_modes: int,
-    mu: np.ndarray[float],
-    cov: List[np.ndarray[float]],
-    p: np.ndarray[float],
-) -> Tuple[List[np.ndarray[int]], List[int]]:
+    mu: np.ndarray,
+    cov: List[np.ndarray],
+    p: np.ndarray,
+) -> Tuple[List[np.ndarray], List[int]]:
     gz = calc_responsibility(x, len(x), mu, cov, p)
     assignments = np.argmax(gz, axis=1)
     x_by_mode = [[] for _ in range(num_modes)]
@@ -220,12 +197,14 @@ def assign_values_to_modes(
 
 
 def run_gmm(
-    x: np.ndarray, *, plot: bool = False, pr: bool = False
-) -> Optional[EstimatedGMM]:
+    x: np.ndarray[Tuple[float, int]], *, plot: bool = False, pr: bool = False
+) -> Optional[EstimatedGMM2D]:
     """
     Runs the GMM estimation process to determine the number of structural variants in a DNA reading frame.
-    x is a list of data points corresponding to the y-intercept of the L-R position calculated after a shift in the genome due to a deletion of greater than 1 base pair.
-    If x contains 10 or fewer data points, then 1 structural variant is estimated. If x has more than 10 data points, then outliers are first identified, and the reading frame is resized to exclude these outliers. The EM algorithm is then run for a 1, 2, or 3 mode GMM, and the resulting AIC scores are calculated and compared across the estimated GMMs. The GMM with the lowest AIC score is returned as the optimal fit to the data.
+    x is a 2D list of data points where each data point consists of:
+      - the y-intercept of the L-R position calculated after a shift in the genome due to a deletion of greater than 1 base pair, and
+      - the max L value read for each sample
+    If x contains 10 or fewer data points, then 1 structural variant is estimated. If x has more than 10 data points, then the EM algorithm is then run for a 1, 2, or 3 mode GMM, and the resulting AIC scores are calculated and compared across the estimated GMMs. The GMM with the lowest AIC score is returned as the optimal fit to the data. The GMM's mu value represents the length and L coordinate of each structural variant estimated.
     """
     x = np.array(x, dtype=float)
     n = len(x)
@@ -235,9 +214,12 @@ def run_gmm(
     if len(x) == 1:
         # warnings.warn("Input data contains one SV")
         singleton = x[0]
-        return EstimatedGMM(
+        return EstimatedGMM2D(
             mu=[singleton],
-            cov=[0],  # TODO: determine this value
+            cov=[
+                [0, 0],
+                [0, 0],
+            ],  # can't determine the covariance for only one pair of points
             p=[1],
             num_modes=1,
             logL=0,
@@ -264,6 +246,7 @@ def run_gmm(
             all_params.append(params)
             iterations.append(num_iterations)
             aic_vals.append(aic)
+            print(num_modes, params[-1].logL, aic)
         min_aic_idx = aic_vals.index(min(aic_vals))
         opt_params = all_params[min_aic_idx]
         num_iterations_final = iterations[min_aic_idx]
@@ -275,7 +258,7 @@ def run_gmm(
         x, num_sv, final_params.mu, final_params.cov, final_params.p
     )
 
-    return EstimatedGMM(
+    return EstimatedGMM2D(
         mu=final_params.mu,
         cov=final_params.cov,
         p=final_params.p,
@@ -283,7 +266,7 @@ def run_gmm(
         logL=final_params.logL,
         aic=min(aic_vals) if len(aic_vals) > 0 else None,
         outliers=outliers,
-        window_size=(min(x), max(x)),
+        window_size=(min(x[:, 0]), max(x[:, 0])),
         x_by_mode=x_by_mode,
         num_pruned=0,
         num_iterations=num_iterations_final,
