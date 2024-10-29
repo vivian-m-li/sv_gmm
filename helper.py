@@ -2,10 +2,12 @@ import os
 import pandas as pd
 import csv
 import random
+import ast
 from viz import run_viz_gmm
 from collections import defaultdict
 from dataclasses import fields
 from gmm_types import *
+from query_sv import giggle_format, query_stix
 
 
 def find_missing_sample_ids():
@@ -46,6 +48,26 @@ def concat_processed_sv_files():
             with open(f"processed_svs/{file}") as f:
                 for line in f:
                     out.write(line)
+
+
+def query_random_svs(num_sample_range):
+    df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+    df = df[df.num_samples >= num_sample_range[0]]
+    df = df[df.num_samples <= num_sample_range[1]]
+    for _ in range(50):
+        row = df.sample()
+        num_samples = row.num_samples.values[0]
+        chr = str(row.chr.values[0])
+        start = row.start.values[0]
+        stop = row.stop.values[0]
+        af = round(ast.literal_eval(row.af.values[0])[0], 3)
+        print(
+            f"Chr {chr}: {start}-{stop} ({num_samples} samples, allele frequency={af})"
+        )
+
+        l = giggle_format(chr, start)
+        r = giggle_format(chr, stop)
+        query_stix(l, r)
 
 
 def generate_weights(num_svs: int):
@@ -104,7 +126,10 @@ def generate_synthetic_sv_data(chr: int, svs: List[Tuple[int, int]]):
         mode_start, mode_end = svs[mode]
         for _ in range(num_evidence):
             read_length = int(random.gauss(450, 50))
-            split = random.randint(int(read_length / 2) - 50, int(read_length / 2) + 50)
+            # split = random.randint(1, read_length - 1) # if the read is too close to the start/end of the SV, it gets filtered out
+            split = random.randint(
+                int(read_length / 2) - 100, int(read_length / 2) + 100
+            )
             evidence_start = mode_start - split
             evidence_stop = mode_end + split
             evidence[sample].extend([evidence_start, evidence_stop])
@@ -119,10 +144,12 @@ def generate_synthetic_sv_data(chr: int, svs: List[Tuple[int, int]]):
         chr=str(chr),
         L=L,
         R=R,
-        plot=True,
+        plot=False,
         plot_bokeh=False,
         synthetic_data=True,
     )
+
+    return gmm, evidence_by_mode
 
 
 if __name__ == "__main__":

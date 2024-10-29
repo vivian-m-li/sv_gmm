@@ -24,14 +24,16 @@ def calc_log_likelihood(
     num_modes = len(mu)
     logL = 0.0
     for i in range(len(x)):
-        try:
-            pdf = [
-                p[k] * multivariate_normal.pdf(x[i], mu[k], cov[k])
-                for k in range(num_modes)
-            ]
-        except Exception:
-            # LinAlgError: When `allow_singular is False`, the input matrix must be symmetric positive definite.
-            raise Exception(f"Error with values: {x[i]}, {mu}, {cov}")
+        pdf = []
+        for k in range(num_modes):
+            pdf_i = None
+            while pdf_i is None:
+                try:
+                    pdf_i = p[k] * multivariate_normal.pdf(x[i], mu[k], cov[k])
+                except np.linalg.LinAlgError:
+                    # if the covariance matrix is not positive definite, add a small value to the diagonal and try again
+                    cov[k] += np.eye(cov[k].shape[0]) * 1e-6
+            pdf.append(pdf_i)
         likelihood_i = np.sum(pdf)
         logL += np.log(likelihood_i)
     return logL
@@ -47,15 +49,16 @@ def calc_aic(
     aic = (2 * num_params) - (2 * logL)  # scale the AIC
 
     # compare the lengths and L coordinates of the different modes - penalize if they're within 2 SD of our sampling SD (50)
+    # TODO: scale this penalty based on the number of samples, since the logL is larger for bigger sample sizes
     if num_modes > 1:
         for i in range(num_modes):
             for j in range(i + 1, num_modes):
                 dist = np.linalg.norm(mu[i] - mu[j])
                 # add a large penalty for mus that are too close to each other
-                penalty = 0 if dist >= 100 else 100
-                if dist > 50 and dist < 100:
+                penalty = 0 if dist >= 141 else 100
+                if dist > 70 and dist < 141:  # between 1 and 2 SDs away
                     # smaller penalty for having a larger gap between mus
-                    penalty -= (dist * 2) - 100
+                    penalty -= round(dist * 0.71)
                 aic += penalty
 
     return aic
@@ -74,11 +77,16 @@ def init_em(
     kmeans.fit(x)
 
     mu = kmeans.cluster_centers_  # initial means
-    cov = [
-        np.cov(x[kmeans.labels_ == i].T) for i in range(num_modes)
-    ]  # initial covariances
     unique, counts = np.unique(kmeans.labels_, return_counts=True)
     count_lookup = dict(zip(unique, counts))
+    cov = [
+        (
+            np.cov(x[kmeans.labels_ == i].T)
+            if count_lookup[i] > 1
+            else np.eye(x.shape[1])
+        )
+        for i in range(num_modes)
+    ]  # initial covariances, sets a default covariance if only one point in a cluster
     p = [count_lookup[i] / len(x) for i in range(num_modes)]  # initial p_k proportions
     logL = []  # logL values
     n = len(x)  # sample size
@@ -115,7 +123,6 @@ def em(
     cov: List[np.ndarray],
     p: np.ndarray,
 ) -> GMM2D:
-    # TODO: this is not converging properly
     """Performs one iteration of the expectation-maximization algorithm."""
     # Expectation step: calculate the posterior probabilities
     gz = calc_responsibility(x, n, mu, cov, p)
@@ -126,20 +133,12 @@ def em(
     # Maximization step: estimate gaussian parameters
     # Given the probability that each point belongs to particular gaussian, calculate the mean, variance, and weight of the gaussian
     nk = np.sum(gz, axis=0)
-    # TODO: check why we need the Nones?
     mu = [(1.0 / nk[j]) * np.sum(gz[:, j, None] * x, axis=0) for j in range(num_modes)]
     cov = [
         (1.0 / nk[j]) * np.dot((gz[:, j, None] * (x - mu[j])).T, (x - mu[j]))
         for j in range(num_modes)
     ]
     p = nk / n
-
-    if num_modes > 1:
-        pass
-        # responsibility getting assigned to the first mode
-        # import pdb
-
-        # pdb.set_trace()
 
     # update likelihood
     logL = calc_log_likelihood(x, mu, cov, p)
@@ -246,7 +245,7 @@ def run_gmm(
             all_params.append(params)
             iterations.append(num_iterations)
             aic_vals.append(aic)
-            print(num_modes, params[-1].logL, aic)
+            # print(num_modes, params[-1].logL, aic)
         min_aic_idx = aic_vals.index(min(aic_vals))
         opt_params = all_params[min_aic_idx]
         num_iterations_final = iterations[min_aic_idx]

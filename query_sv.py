@@ -82,7 +82,14 @@ def get_reference_samples(
     return ref_samples
 
 
-def query_stix(l: str, r: str, run_gmm: bool = True, *, filter_reference: bool = True):
+def query_stix(
+    l: str,
+    r: str,
+    run_gmm: bool = True,
+    *,
+    filter_reference: bool = True,
+    plot: bool = True,
+):
     for directory in [FILE_DIR, PROCESSED_FILE_DIR, PLOT_DIR]:
         if not os.path.exists(directory):
             os.mkdir(directory)
@@ -147,7 +154,7 @@ def query_stix(l: str, r: str, run_gmm: bool = True, *, filter_reference: bool =
             chr=chr,
             L=start,
             R=stop,
-            plot=True,
+            plot=plot,
             plot_bokeh=False,
         )
 

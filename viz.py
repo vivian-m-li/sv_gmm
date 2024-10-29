@@ -215,10 +215,10 @@ def filter_and_plot_sequences_bokeh(
             if len(z) >= 6:  # if there are more than 3 pairs of points
                 # NOTE: should we filter out for under 5 points?
                 xp, yp = z[0::2], z[1::2]
-                # TODO: why are we filtering out so many points here?
+                # TODO: filter fewer points out here
                 sdl = np.sum(
-                    np.abs(yp) <= sig
-                )  # checking if the points are within 1 SD of read noise
+                    np.abs(yp) <= 2 * sig
+                )  # checking if the points are within 2 SD of read noise
                 mb[i, :] = [sdl, len(xp), b, 0]
                 paired_ends = [
                     [z_filtered[i], z_filtered[i + 1]]
@@ -232,8 +232,8 @@ def filter_and_plot_sequences_bokeh(
                 )
 
                 # if more than 3 pieces of evidence (paired read_length-r ends), then there is an SV here for this sample
-                # include if >=3 (x,y) points within sig distance of y=x+b line
-                if sdl >= 3:  # TODO: this is where the points are getting filtered
+                # include if >=3 (x,y) points within 2 sig distance of y=x+b line
+                if sdl >= 3:
                     p.line(xp, yp, line_width=2, color=colors[i % len(colors)])
                     p.scatter(xp, yp, size=6, color=colors[i % len(colors)], alpha=0.6)
                     mb[i, 3] = 1
@@ -438,7 +438,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
         p for paired_end in all_mode_paired_ends for p in paired_end
     ]
 
-    # Plot the bar chart
+    # Plot the ancestry bar chart
     left_ax = fig.add_subplot(gs[0])
     bar_offset = 1 / len(ANCESTRY_COLORS) / 2
     for i, counter in enumerate(population_data):
@@ -487,29 +487,32 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
     min_y = np.inf
     for i, mode in enumerate(reversed(evidence_by_mode)):
         mode_color = COLORS[mode_indices_reversed[i]]
+
+        # plot the paired ends
         max_y = -np.inf
         all_paired_ends = []
         for evidence in mode:
             color = add_color_noise(mode_color)
             y = add_noise(i + 1)
+            # determine the y shift for the histograms later
             max_y = max(y, max_y)
             min_y = min(y, min_y)
-            for paired_end in evidence.paired_ends:
-                x_values = [paired_end[0], paired_end[1]]
-                y_values = [y, y]
-                bax.plot(
-                    x_values,
-                    y_values,
-                    marker="o",
-                    markersize=5,
-                    linestyle="-",
-                    linewidth=1,
-                    color=color,
-                )
+
+            # plot only the max L coordinate and min R coordinate (closest values to the actual SV, which is not sequenced)
             max_l = max([paired_end[0] for paired_end in evidence.paired_ends])
             min_r = min([paired_end[1] for paired_end in evidence.paired_ends])
+            bax.plot(
+                [max_l, min_r],
+                [y, y],
+                marker="o",
+                markersize=5,
+                linestyle="-",
+                linewidth=1,
+                color=color,
+            )
             all_paired_ends.extend([max_l, min_r])
 
+        # plot the histograms
         for ax in bax.axs:
             n, bins, hist_patches = ax.hist(
                 all_paired_ends,
@@ -527,6 +530,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
                 patch.set_y(patch.get_y() + max_y + 0.05)
             ax.set_ylim(min_y - 0.1, max_y + 0.65)
 
+    # plot the vertical lines
     for i in range(num_modes):
         bax.axvline(
             np.mean([sv.start for sv in sv_stats[i]]),
@@ -936,7 +940,7 @@ def get_intercepts(
     R: int,
     plot_bokeh: bool,
 ) -> Tuple[np.ndarray[Tuple[float, int]], List[Evidence]]:
-    print("Num total samples", len(squiggle_data))
+    # print("Num total samples", len(squiggle_data))
     mb, sv_evidence_unfiltered = filter_and_plot_sequences_bokeh(
         squiggle_data,
         file_name=file_name,
@@ -965,8 +969,7 @@ def get_intercepts(
             points.append((bs[1] - R, evidence.max_l - L))  # np.array(bs)[1]=start_y
     points = np.array(points)
 
-    print("Num points into GMM", len(points))
-    # TODO: filtering out a lot of points in one of these steps
+    # print("Num points into GMM", len(points))
 
     return points, sv_evidence
 
@@ -1099,10 +1102,5 @@ def run_viz_gmm(
         # plot_sv_lengths(evidence_by_mode)
         # plot_sv_coords(evidence_by_mode)
         plot_sv_length_coords(evidence_by_mode)
-
-    print(f"mu: {gmm.mu}")
-    print(f"cov: {gmm.cov}")
-    print(f"p: {gmm.p}")
-    print([len(i) for i in gmm.x_by_mode])
 
     return gmm, evidence_by_mode
