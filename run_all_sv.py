@@ -71,6 +71,8 @@ def write_sv_stats(
         write_sv_file(sv_stat)
         return
 
+    print("running gmm for ", row["id"])
+
     gmm, evidence_by_mode = run_viz_gmm(
         squiggle_data,
         file_name=None,
@@ -80,6 +82,8 @@ def write_sv_stats(
         plot=False,
         plot_bokeh=False,
     )
+
+    print("ran gmm for ", row["id"])
 
     if gmm is None:
         write_sv_file(sv_stat)
@@ -187,6 +191,7 @@ def run_all_sv(
                 if row.id in processed_sv_ids:
                     continue
                 args.append((row.to_dict(), population_size, sample_ids))
+            print(len(args), " SVs to process")
             p.starmap(write_sv_stats, args)
             p.close()
             p.join()

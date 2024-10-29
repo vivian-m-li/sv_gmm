@@ -7,4 +7,5 @@ gnomad_svs
 samples
 hs37d5.fa.gz
 1000genomes
+1d_processed_svs
 processed_svs
