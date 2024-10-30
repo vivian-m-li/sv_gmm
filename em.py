@@ -267,6 +267,6 @@ def run_gmm(
         outliers=outliers,
         window_size=(min(x[:, 0]), max(x[:, 0])),
         x_by_mode=x_by_mode,
-        num_pruned=0,
+        num_pruned=[[0] for _ in range(num_sv)],
         num_iterations=num_iterations_final,
     )
