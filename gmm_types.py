@@ -109,8 +109,9 @@ class Sample:
 class Evidence:
     sample: Sample
     intercept: float
-    max_l: int
+    mean_l: int
     paired_ends: List[List[float]]
+    removed: int  # 0 if not removed, 1 if removed due to 1 paired end only, 2 if removed due to 2 paired ends, 3 if removed due to deviation from y=x+b line
     start_y: float = 0
 
 

@@ -122,7 +122,7 @@ def generate_synthetic_sv_data(chr: int, svs: List[Tuple[int, int]]):
     # For each sample, generate random evidence
     evidence = defaultdict(list)
     for sample, mode in zip(samples, modes):
-        num_evidence = random.randint(3, 20)
+        num_evidence = random.randint(2, 20)
         mode_start, mode_end = svs[mode]
         for _ in range(num_evidence):
             read_length = int(random.gauss(450, 50))
@@ -131,7 +131,7 @@ def generate_synthetic_sv_data(chr: int, svs: List[Tuple[int, int]]):
                 int(read_length / 2) - 100, int(read_length / 2) + 100
             )
             evidence_start = mode_start - split
-            evidence_stop = mode_end + split
+            evidence_stop = mode_end + (read_length - split)
             evidence[sample].extend([evidence_start, evidence_stop])
 
     # Pass synthetic data through SV analysis pipeline
@@ -144,12 +144,10 @@ def generate_synthetic_sv_data(chr: int, svs: List[Tuple[int, int]]):
         chr=str(chr),
         L=L,
         R=R,
-        plot=False,
+        plot=True,
         plot_bokeh=False,
         synthetic_data=True,
     )
-
-    return gmm, evidence_by_mode
 
 
 if __name__ == "__main__":

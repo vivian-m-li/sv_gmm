@@ -205,6 +205,10 @@ def filter_and_plot_sequences_bokeh(
 
         z = z[~np.isnan(z)]
         z_filtered = z.copy()
+        paired_ends = [
+            [z_filtered[i], z_filtered[i + 1]] for i in range(0, len(z_filtered), 2)
+        ]
+        mean_l = int(np.mean([paired_end[0] for paired_end in paired_ends]))
 
         if len(z) > 0:
             b = int(
@@ -212,22 +216,18 @@ def filter_and_plot_sequences_bokeh(
             )  # R - L (including read length)
             z[1::2] -= z[0::2] + b  # subtract MLE y=x+b line
             z[0::2] -= min(ux)  # shift left by min(x) units
-            if len(z) >= 6:  # if there are more than 3 pairs of points
-                # NOTE: should we filter out for under 5 points?
+            if len(z) >= 4:  # if there are more than 2 pairs of points
+                # Note: 2 vs >= 3 pairs of points didn't make a difference in the mean L/R coordinates of the reads
                 xp, yp = z[0::2], z[1::2]
-                # TODO: filter fewer points out here
                 sdl = np.sum(
                     np.abs(yp) <= 2 * sig
                 )  # checking if the points are within 2 SD of read noise
                 mb[i, :] = [sdl, len(xp), b, 0]
-                paired_ends = [
-                    [z_filtered[i], z_filtered[i + 1]]
-                    for i in range(0, len(z_filtered), 2)
-                ]
                 sv_evidence[i] = Evidence(
                     sample=Sample(id=sample_id),
                     intercept=b,
-                    max_l=max([paired_end[0] for paired_end in paired_ends]),
+                    mean_l=mean_l,
+                    removed=3 if sdl < 3 else 0,
                     paired_ends=paired_ends,
                 )
 
@@ -244,6 +244,13 @@ def filter_and_plot_sequences_bokeh(
                 mb[i, :] = [-np.inf, len(z) // 2, -np.inf, 0]
                 p.line(z[0::2], z[1::2], line_width=2, color="#999999")
                 p.scatter(z[0::2], z[1::2], size=6, color="#999999", alpha=0.6)
+                sv_evidence[i] = Evidence(
+                    sample=Sample(id=sample_id),
+                    intercept=0,
+                    mean_l=mean_l,
+                    removed=len(z) / 2,
+                    paired_ends=paired_ends,
+                )
 
     p.grid.grid_line_alpha = 0.3
 
@@ -350,7 +357,7 @@ def get_evidence_by_mode(
         for i, mode in enumerate(x_by_mode):
             if (
                 evidence.start_y,
-                evidence.max_l,
+                evidence.mean_l,
             ) in mode:  # assumes that each mode has unique (length, L-coordinate) pairs
                 evidence_by_mode[i].append(evidence)
                 continue
@@ -678,7 +685,7 @@ def plot_sv_lengths(evidence_by_mode: List[List[Evidence]]):
 def plot_sv_coords(evidence_by_mode: List[List[Evidence]]):
     fig = plt.figure(figsize=(15, 8))
     for i, mode in enumerate(evidence_by_mode):
-        coords = [evidence.max_l for evidence in mode]
+        coords = [evidence.mean_l for evidence in mode]
         gmm_iters, _ = run_em1d(coords, 1)
         gmm = gmm_iters[-1]
         ux, hx = get_scatter_data(coords)
@@ -704,7 +711,7 @@ def plot_sv_length_coords(evidence_by_mode: List[List[Evidence]]):
                 max(paired_end) - min(paired_end) - 450
                 for paired_end in evidence.paired_ends
             ]
-            x.append([np.mean(lengths), evidence.max_l])
+            x.append([np.mean(lengths), evidence.mean_l])
         x = np.array(x)
 
         gmm_iters, _ = run_em(x, 1)
@@ -928,7 +935,63 @@ def plot_sample_size_per_mode():
     ax.set_xticklabels(["All SVs", "1 Mode", "2 Modes", "3 Modes"])
     ax.set_xlabel("")
     ax.set_ylabel("Sample Size")
+    plt.show()
 
+
+def plot_removed_evidence(sv_evidence: List[Evidence], L: int, R: int):
+    plt.figure(figsize=(15, 8))
+    colors = {0: "grey", 1: "red", 2: "orange", 3: "blue"}
+    evidence_sorted = {0: [], 1: [], 2: [], 3: []}
+    for evidence in sv_evidence:
+        y = add_noise(evidence.removed)
+        evidence_sorted[evidence.removed].extend(evidence.paired_ends)
+        for paired_end in evidence.paired_ends:
+            plt.plot(
+                [paired_end[0], paired_end[1]],
+                [y, y],
+                marker="o",
+                markersize=5,
+                linestyle="-",
+                linewidth=1,
+                color=colors[evidence.removed],
+                alpha=0.6,
+            )
+    for key, paired_ends in evidence_sorted.items():
+        if len(paired_ends) == 0:
+            continue
+        plt.axvline(
+            np.mean([paired_end[0] for paired_end in paired_ends]),
+            color=colors[key],
+            linestyle="--",
+        )
+        plt.axvline(
+            np.mean([paired_end[1] for paired_end in paired_ends]),
+            color=colors[key],
+            linestyle="--",
+        )
+
+    plt.axvline(
+        L,
+        color="black",
+        linestyle="--",
+    )
+    plt.axvline(
+        R,
+        color="black",
+        linestyle="--",
+    )
+
+    legend = {
+        0: "Not Removed",
+        1: "Not Enough Evidence (1 pair of reads)",
+        2: "Not Enough Evidence (2 pairs of reads)",
+        3: "Deviation from y=x+b line",
+    }
+    plt.legend(
+        [plt.Rectangle((0, 0), 1, 1, color=color) for color in colors.values()],
+        list(legend.values()),
+        loc="upper right",
+    )
     plt.show()
 
 
@@ -940,7 +1003,6 @@ def get_intercepts(
     R: int,
     plot_bokeh: bool,
 ) -> Tuple[np.ndarray[Tuple[float, int]], List[Evidence]]:
-    # print("Num total samples", len(squiggle_data))
     mb, sv_evidence_unfiltered = filter_and_plot_sequences_bokeh(
         squiggle_data,
         file_name=file_name,
@@ -961,15 +1023,15 @@ def get_intercepts(
         plot_bokeh=plot_bokeh,
     )
 
+    # plot_removed_evidence(sv_evidence_unfiltered, L, R)
+
     # save the largest x value associated with each intercept
     points = []  # [[intercept, max_l], ...]
     for bs, evidence in zip(intercepts, sv_evidence):
         if len(bs) > 0:
             # scale the intercept and maxL values
-            points.append((bs[1] - R, evidence.max_l - L))  # np.array(bs)[1]=start_y
+            points.append((bs[1] - R, evidence.mean_l - L))  # np.array(bs)[1]=start_y
     points = np.array(points)
-
-    # print("Num points into GMM", len(points))
 
     return points, sv_evidence
 
