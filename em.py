@@ -14,6 +14,26 @@ GMM/EM helper functions
 """
 
 
+def calc_hinge_loss(num_samples: int, mu: List[np.ndarray]) -> float:
+    """Adds a penalty to the log-likelihood to prevent cluster centroids from getting too close to each other, accounting for sequencing noise."""
+    # c - alpha * d(mu_i, mu_j)
+    # alpha is the slope
+    # 0 at d(mu_i, mu_j) = 141, which is 2 SD
+    # c1 = -ln n -- max penalty
+    # maybe scale it to make it larger
+    hinge_loss = 0
+    num_modes = len(mu)
+    if num_modes > 1:
+        for i in range(num_modes):
+            for j in range(i + 1, num_modes):
+                dist = np.linalg.norm(
+                    mu[i] - mu[j]
+                )  # add a large penalty for mus that are too close to each other
+                penalty = (500 * np.log(num_samples)) * (np.exp(-0.045 * dist))
+                hinge_loss += penalty
+    return hinge_loss
+
+
 def calc_log_likelihood(
     x: np.ndarray,
     mu: List[np.ndarray],
@@ -21,7 +41,6 @@ def calc_log_likelihood(
     p: np.ndarray,
 ) -> float:
     """Calculates the log-likelihood of the data fitting the GMM."""
-    # TODO: implement hinge function for logL
     num_modes = len(mu)
     logL = 0.0
     for i in range(len(x)):
@@ -37,6 +56,8 @@ def calc_log_likelihood(
             pdf.append(pdf_i)
         likelihood_i = np.sum(pdf)
         logL += np.log(likelihood_i)
+
+    logL -= calc_hinge_loss(len(x), mu)
     return logL
 
 
