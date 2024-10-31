@@ -21,6 +21,7 @@ def calc_log_likelihood(
     p: np.ndarray,
 ) -> float:
     """Calculates the log-likelihood of the data fitting the GMM."""
+    # TODO: implement hinge function for logL
     num_modes = len(mu)
     logL = 0.0
     for i in range(len(x)):
@@ -47,20 +48,6 @@ def calc_aic(
         (num_modes * 2) + (num_modes * 3) + (num_modes - 1)
     )  # number of parameters for mu + cov + p - 1
     aic = (2 * num_params) - (2 * logL)  # scale the AIC
-
-    # compare the lengths and L coordinates of the different modes - penalize if they're within 2 SD of our sampling SD (50)
-    # TODO: scale this penalty based on the number of samples, since the logL is larger for bigger sample sizes
-    if num_modes > 1:
-        for i in range(num_modes):
-            for j in range(i + 1, num_modes):
-                dist = np.linalg.norm(mu[i] - mu[j])
-                # add a large penalty for mus that are too close to each other
-                penalty = 0 if dist >= 141 else 100
-                if dist > 70 and dist < 141:  # between 1 and 2 SDs away
-                    # smaller penalty for having a larger gap between mus
-                    penalty -= round(dist * 0.71)
-                aic += penalty
-
     return aic
 
 
