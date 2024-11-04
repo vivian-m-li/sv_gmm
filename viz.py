@@ -703,7 +703,7 @@ def plot_sv_coords(evidence_by_mode: List[List[Evidence]]):
 
 
 def plot_sv_length_coords(evidence_by_mode: List[List[Evidence]]):
-    plt.figure(figsize=(15, 8))
+    fig, ax_main = plt.subplots(figsize=(15, 8))
     for i, mode in enumerate(evidence_by_mode):
         x = []
         for evidence in mode:
@@ -718,9 +718,9 @@ def plot_sv_length_coords(evidence_by_mode: List[List[Evidence]]):
         gmm = gmm_iters[-1]
 
         # plot 2D data
-        plt.scatter(x[:, 0], x[:, 1], color=COLORS[i])
+        ax_main.scatter(x[:, 0], x[:, 1], color=COLORS[i])
 
-        # Plot the 2D gaussian distributions
+        # plot the 2D gaussian distributions
         eigenvalues, eigenvectors = np.linalg.eigh(gmm.cov[0])
         angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
         width, height = 2 * np.sqrt(eigenvalues)
@@ -733,11 +733,33 @@ def plot_sv_length_coords(evidence_by_mode: List[List[Evidence]]):
             fc="None",
             lw=2,
         )
-        plt.gca().add_patch(ellipse)
+        ax_main.add_patch(ellipse)
 
-    plt.gca().yaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
-    plt.xlabel("SV Length", fontsize=12)
-    plt.ylabel("L Coordinate", fontsize=12)
+        # plot the 1D gaussian distributions
+        ax_xhist = ax_main.inset_axes([0, 1, 1, 0.2], sharex=ax_main)
+        ax_xhist.hist(x[:, 0], bins=20, color=COLORS[i], alpha=0.6, density=True)
+        mean_x, std_x = np.mean(x[:, 0]), np.std(x[:, 0])
+        x_vals = np.linspace(mean_x - 3 * std_x, mean_x + 3 * std_x, 100)
+        ax_xhist.plot(x_vals, norm.pdf(x_vals, mean_x, std_x), color=COLORS[i])
+        ax_xhist.axis("off")
+
+        ax_yhist = ax_main.inset_axes([1, 0, 0.2, 1], sharey=ax_main)
+        ax_yhist.hist(
+            x[:, 1],
+            bins=20,
+            color=COLORS[i],
+            alpha=0.6,
+            density=True,
+            orientation="horizontal",
+        )
+        mean_y, std_y = np.mean(x[:, 1]), np.std(x[:, 1])
+        y_vals = np.linspace(mean_y - 3 * std_y, mean_y + 3 * std_y, 100)
+        ax_yhist.plot(norm.pdf(y_vals, mean_y, std_y), y_vals, color=COLORS[i])
+        ax_yhist.axis("off")
+
+    ax_main.yaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
+    ax_main.set_xlabel("SV Length", fontsize=12)
+    ax_main.set_ylabel("L Coordinate", fontsize=12)
     plt.show()
 
 
