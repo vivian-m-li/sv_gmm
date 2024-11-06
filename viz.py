@@ -952,9 +952,12 @@ def plot_sample_size_per_mode():
     fig, ax = plt.subplots(figsize=(10, 6))
 
     ax.boxplot(sample_sizes, positions=[1, 2, 3, 4], widths=0.6)
-
     ax.set_xticks([1, 2, 3, 4])
-    ax.set_xticklabels(["All SVs", "1 Mode", "2 Modes", "3 Modes"])
+    labels = [
+        f"{label} (n={len(sample_sizes[i])})"
+        for i, label in enumerate(["All SVs", "1 Mode", "2 Modes", "3 Modes"])
+    ]
+    ax.set_xticklabels(labels)
     ax.set_xlabel("")
     ax.set_ylabel("Sample Size")
     plt.show()
