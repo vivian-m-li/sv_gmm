@@ -45,5 +45,18 @@ def concat_processed_sv_files():
                     out.write(line)
 
 
+def get_num_intersecting_genes():
+    df = pd.read_csv(
+        "1000genomes/intersect_num_overlap.csv", header=None, delimiter="\t"
+    )
+    num_intersections = df.iloc[:, 5]
+    print(f"Total number of genes: {len(num_intersections)}")
+
+    # Number of SV that each gene intersects with
+    # 23.36% of genes intersect with at least 1 SV
+    num_intersections_filtered = num_intersections[num_intersections > 0]
+    print(num_intersections_filtered.describe())
+
+
 if __name__ == "__main__":
-    concat_processed_sv_files()
+    get_num_intersecting_genes()
