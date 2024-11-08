@@ -1,13 +1,10 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.stats import norm, multivariate_normal
+from scipy.stats import multivariate_normal
 from sklearn.cluster import KMeans
-from sklearn.metrics import roc_auc_score
 from gmm_types import *
 from typing import Tuple, List, Dict, Union, Optional
 
 RESPONSIBILITY_THRESHOLD = 1e-10
-
 
 """
 GMM/EM helper functions

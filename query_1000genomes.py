@@ -7,6 +7,15 @@ from viz import *
 FILE_DIR = "1000genomes"
 
 
+def load_vcf_bed():
+    vcf_in = pysam.VariantFile(
+        f"{FILE_DIR}/ALL.wgs.integrated_sv_map_v2.20130502.svs.genotypes.deletions.vcf.gz"
+    )
+    with open(f"{FILE_DIR}/deletions.bed", "w") as f:
+        for record in vcf_in.fetch():
+            f.write(f"{record.chrom}\t{record.start}\t{record.stop}\t{record.id}\n")
+
+
 def load_vcf():
     vcf_in = pysam.VariantFile(
         f"{FILE_DIR}/ALL.wgs.integrated_sv_map_v2.20130502.svs.genotypes.deletions.vcf.gz"
