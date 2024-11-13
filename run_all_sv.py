@@ -4,7 +4,7 @@ import pandas as pd
 import multiprocessing
 from dataclasses import fields, asdict
 from query_sv import query_stix, giggle_format
-from viz import *
+from process_data import *
 from gmm_types import *
 from typing import Set
 

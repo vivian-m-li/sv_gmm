@@ -5,7 +5,7 @@ import argparse
 import csv
 import pandas as pd
 import numpy as np
-from viz import run_viz_gmm
+from process_data import run_viz_gmm
 from typing import List, Dict
 
 

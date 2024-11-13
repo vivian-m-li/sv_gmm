@@ -2,7 +2,7 @@ import pandas as pd
 import pysam
 import multiprocessing
 from query_sv import *
-from viz import *
+from process_data import *
 
 FILE_DIR = "1000genomes"
 

@@ -7,7 +7,7 @@ import multiprocessing
 import pandas as pd
 import matplotlib.pyplot as plt
 from query_sv import *
-from viz import *
+from process_data import *
 from typing import Dict
 
 # for human genome assembly GRCh37, https://www.ncbi.nlm.nih.gov/grc/human/data?asm=GRCh37

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import random
 import ast
-from viz import run_viz_gmm
+from process_data import run_viz_gmm
 from query_sv import giggle_format, query_stix
 from collections import defaultdict
 from typing import List, Tuple
