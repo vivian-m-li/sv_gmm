@@ -778,11 +778,21 @@ def get_num_samples_gmm(df):
     return df
 
 
-def plot_processed_sv_stats():
-    df = pd.read_csv("1000genomes/sv_stats.csv")
+def get_svs_intersecting_genes(df: pd.DataFrame):
+    sv_gene_overlap_df = pd.read_csv(
+        "1000genomes/sv_intersect.csv", header=None, delimiter="\t"
+    )
+    intersecting_svs = sv_gene_overlap_df.iloc[:, 3]
+    return df[df["id"].isin(intersecting_svs)]
 
-    # TODO: remove rows with no samples after GMM outlier removal
+
+def plot_processed_sv_stats(filter_intersecting_genes: bool = False):
+    df = pd.read_csv("1000genomes/sv_stats.csv")
     df = df[df["num_samples"] > 0]
+
+    if filter_intersecting_genes:
+        # only show SVs that intersect with a gene
+        get_svs_intersecting_genes(df)
 
     df = get_num_samples_gmm(df)
     df["num_heterozygous"], df["num_homozygous"] = zip(
@@ -941,8 +951,11 @@ def plot_processed_sv_stats():
     plt.show()
 
 
-def plot_sample_size_per_mode():
+def plot_sample_size_per_mode(filter_intersecting_genes: bool = False):
     df = pd.read_csv("1000genomes/sv_stats.csv")
+    if filter_intersecting_genes:
+        df = get_svs_intersecting_genes(df)
+
     df = get_num_samples_gmm(df)
     nonzero = df[df["num_samples"] > 0]
     mode_data = [nonzero] + [df[df["num_modes"] == i + 1] for i in range(3)]
@@ -954,7 +967,7 @@ def plot_sample_size_per_mode():
     ax.boxplot(sample_sizes, positions=[1, 2, 3, 4], widths=0.6)
     ax.set_xticks([1, 2, 3, 4])
     labels = [
-        f"{label} (n={len(sample_sizes[i])})"
+        f"{label} (n={len(sample_sizes[i])})\n{len(sample_sizes[i])/len(sample_sizes[0])*100:.2f}%"
         for i, label in enumerate(["All SVs", "1 Mode", "2 Modes", "3 Modes"])
     ]
     ax.set_xticklabels(labels)
