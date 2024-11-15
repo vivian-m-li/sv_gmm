@@ -4,6 +4,7 @@ from bokeh.plotting import figure, output_file, save
 from bokeh.models import HoverTool, ColumnDataSource, NumeralTickFormatter
 from typing import Optional, List, Tuple, Dict
 from em import run_gmm
+from em_1d import run_gmm as run_gmm_1d
 from viz import *
 from gmm_types import *
 
@@ -192,7 +193,6 @@ def filter_and_plot_sequences_bokeh(
         paired_ends = [
             [z_filtered[i], z_filtered[i + 1]] for i in range(0, len(z_filtered), 2)
         ]
-        mean_l = int(np.mean([paired_end[0] for paired_end in paired_ends]))
 
         if len(z) > 0:
             b = int(
@@ -200,6 +200,7 @@ def filter_and_plot_sequences_bokeh(
             )  # R - L (including read length)
             z[1::2] -= z[0::2] + b  # subtract MLE y=x+b line
             z[0::2] -= min(ux)  # shift left by min(x) units
+            mean_l = int(np.mean([paired_end[0] for paired_end in paired_ends]))
             if len(z) >= 4:  # if there are more than 2 pairs of points
                 # Note: 2 vs >= 3 pairs of points didn't make a difference in the mean L/R coordinates of the reads
                 xp, yp = z[0::2], z[1::2]
@@ -396,6 +397,12 @@ def run_viz_gmm(
 
     if gmm_model == "2d":
         gmm_func = run_gmm
+    else:
+        gmm_func = run_gmm_1d
+        if gmm_model == "1d_len":
+            points = points[:, 0]
+        elif gmm_model == "1d_L":
+            points = points[:, 1]
 
     gmm = gmm_func(points, plot=plot, pr=False)
 
@@ -403,7 +410,7 @@ def run_viz_gmm(
         populate_sample_info(
             sv_evidence, chr, L, R
         )  # mutates sv_evidence with ancestry data and homo/heterozygous for each sample
-    evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, L, R)
+    evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, L, R, gmm_model=gmm_model)
     if plot:
         plot_evidence_by_mode(evidence_by_mode)
         # plot_sv_lengths(evidence_by_mode)

@@ -31,24 +31,42 @@ def add_noise(value, scale=0.07):
 
 
 def get_evidence_by_mode(
-    gmm: GMM, sv_evidence: List[Evidence], L: int, R: int
+    gmm: GMM, sv_evidence: List[Evidence], L: int, R: int, *, gmm_model: str = "2d"
 ) -> List[List[Evidence]]:
     sv_evidence = np.array(sv_evidence)
     x_by_mode = []
     for mode in gmm.x_by_mode:
-        length_l_pairs = []
+        data = []
         for x in mode:
-            length_l_pairs.append((x[0] + R, x[1] + L))  # (length, L-coordinate)
-        x_by_mode.append(length_l_pairs)
+            if gmm_model == "1d_len":
+                data.append((x + R))  # length
+            elif gmm_model == "1d_L":
+                data.append((x + L))  # L-coordinate
+            else:
+                data.append((x[0] + R, x[1] + L))  # (length, L-coordinate)
+        x_by_mode.append(data)
     evidence_by_mode = [[] for _ in range(len(x_by_mode))]
     for evidence in sv_evidence:
         for i, mode in enumerate(x_by_mode):
-            if (
-                evidence.start_y,
-                evidence.mean_l,
-            ) in mode:  # assumes that each mode has unique (length, L-coordinate) pairs
-                evidence_by_mode[i].append(evidence)
-                continue
+            try:
+                if gmm_model == "1d_len":
+                    mode_data = evidence.start_y  # length
+                elif gmm_model == "1d_L":
+                    mode_data = evidence.mean_l  # L-coordinate
+                else:
+                    mode_data = (
+                        evidence.start_y,
+                        evidence.mean_l,
+                    )  # (length, L-coordinate)
+                if (
+                    mode_data in mode
+                ):  # assumes that each mode has unique (length, L-coordinate) pairs
+                    evidence_by_mode[i].append(evidence)
+                    continue
+            except ValueError:
+                print(evidence)
+                print(mode)
+                raise ValueError
     return evidence_by_mode
 
 

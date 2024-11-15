@@ -72,6 +72,7 @@ def generate_synthetic_sv_data(
     *,
     n_samples: Optional[int] = None,
     p: Optional[List[float]] = None,
+    gmm_model: str = "2d",
 ):
     num_svs = len(svs)
 
@@ -115,6 +116,7 @@ def generate_synthetic_sv_data(
         plot=False,
         plot_bokeh=False,
         synthetic_data=True,
+        gmm_model=gmm_model,
     )
 
     return gmm, evidence_by_mode

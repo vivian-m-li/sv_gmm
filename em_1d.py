@@ -646,7 +646,6 @@ def assign_values_to_modes(
         filtered_x, num_modes, gmm.mu, gmm.vr, gmm.p
     )
     num_pruned = [len(x + y) for x, y in zip(pruned, pruned2)]
-    print("Num pruned", num_pruned)
     return x_by_mode2, num_pruned
 
 

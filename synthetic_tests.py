@@ -2,13 +2,15 @@ import csv
 import multiprocessing
 import numpy as np
 from generate_data import generate_synthetic_sv_data
+from gmm_types import GMM_MODELS
 
 
 def run_gmm(case, svs, weights, n_samples, results):
-    gmm, evidence_by_mode = generate_synthetic_sv_data(
-        1, svs, n_samples=n_samples, p=weights
-    )
-    results.append((case, svs, n_samples, gmm, evidence_by_mode))
+    for gmm_model in GMM_MODELS:
+        gmm, evidence_by_mode = generate_synthetic_sv_data(
+            1, svs, n_samples=n_samples, p=weights, gmm_model=gmm_model
+        )
+        results[gmm_model].append((case, svs, n_samples, gmm, evidence_by_mode))
 
 
 def get_len_L(evidence_by_mode):
@@ -27,34 +29,51 @@ def get_len_L(evidence_by_mode):
     return lengths, Ls
 
 
-def write_csv(results):
-    with open("synthetic_data/results_2d.csv", mode="w", newline="") as out:
-        fieldnames = [
-            "case",
-            "expected_num_modes",
-            "expected_lengths",
-            "expected_Ls",
-            "num_modes",
-            "lengths",
-            "Ls",
-            "num_samples",
-        ]
-        csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
-        csv_writer.writeheader()
-        for case, svs, n_samples, gmm, evidence_by_mode in results:
-            lengths, Ls = get_len_L(evidence_by_mode)
-            csv_writer.writerow(
-                {
-                    "case": case,
-                    "expected_num_modes": int(case[0]),
-                    "expected_lengths": [sv[1] - sv[0] for sv in svs],
-                    "expected_Ls": [sv[0] for sv in svs],
-                    "num_modes": gmm.num_modes,
-                    "lengths": lengths,
-                    "Ls": Ls,
-                    "num_samples": n_samples,
-                }
+def write_csv(all_results):
+    for gmm_model, results in all_results.items():
+        with open(
+            f"synthetic_data/results_{gmm_model}.csv", mode="w", newline=""
+        ) as out:
+            fieldnames = [
+                "case",
+                "expected_num_modes",
+                "expected_lengths",
+                "expected_Ls",
+                "num_modes",
+                "lengths",
+                "Ls",
+                "num_samples",
+            ]
+            csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
+            csv_writer.writeheader()
+            for case, svs, n_samples, gmm, evidence_by_mode in results:
+                lengths, Ls = get_len_L(evidence_by_mode)
+                csv_writer.writerow(
+                    {
+                        "case": case,
+                        "expected_num_modes": int(case[0]),
+                        "expected_lengths": [sv[1] - sv[0] for sv in svs],
+                        "expected_Ls": [sv[0] for sv in svs],
+                        "num_modes": gmm.num_modes,
+                        "lengths": lengths,
+                        "Ls": Ls,
+                        "num_samples": n_samples,
+                    }
+                )
+
+
+def is_valid_svs(svs):
+    valid_sv = True
+    for i, sv1 in enumerate(svs):
+        sv1_size = sv1[1] - sv1[0]
+        for sv2 in svs[i + 1 :]:
+            sv2_size = sv2[1] - sv2[0]
+            valid_sv = valid_sv and (
+                np.abs(sv2_size - sv1_size) >= 100
+                or np.abs(sv2[0] - sv1[0]) > 50
+                or np.abs(sv2[1] - sv1[1]) > 50
             )
+    return valid_sv
 
 
 def run_gmm_synthetic_data():
@@ -71,7 +90,10 @@ def run_gmm_synthetic_data():
     with multiprocessing.Manager() as manager:
         cpu_count = multiprocessing.cpu_count()
         p = multiprocessing.Pool(cpu_count)
-        results = manager.list()
+        results = manager.dict()
+        for gmm_model in GMM_MODELS:
+            results[gmm_model] = manager.list()
+
         args = []
 
         # case 1A: one SV
@@ -89,9 +111,9 @@ def run_gmm_synthetic_data():
         for sv2_size in list(range(600, 1050, 50)):
             for diff in list(range(0, 250, 50)):
                 sv2_start = sv1[0] - diff
-                if sv2_start + sv2_size < sv1[1]:
-                    continue
                 svs = [sv1, (sv2_start, sv2_start + sv2_size)]
+                if sv2_start + sv2_size < sv1[1] or not is_valid_svs(svs):
+                    continue
                 for weights in ps:
                     for n in n_samples:
                         args.append(("2A", svs, weights, n, results))
@@ -101,9 +123,9 @@ def run_gmm_synthetic_data():
         for sv2_size in list(range(300, 900, 100)):
             for diff in list(range(50, 500, 50)):
                 sv2_start = sv1[0] + diff
-                if sv2_start + sv2_size < sv1[1]:
-                    continue
                 svs = [sv1, (sv2_start, sv2_start + sv2_size)]
+                if sv2_start + sv2_size < sv1[1] or not is_valid_svs(svs):
+                    continue
                 for weights in ps:
                     for n in n_samples:
                         args.append(("2B", svs, weights, n, results))
@@ -129,6 +151,8 @@ def run_gmm_synthetic_data():
             for sv2_diff in list(range(0, 250, 50)):
                 sv2_start = sv1[0] - sv2_diff
                 sv2 = (sv2_start, sv2_start + sv2_size)
+                if sv2_start + sv2_size < sv1[1] or not is_valid_svs([sv1, sv2]):
+                    continue
                 for sv3_size in list(range(300, 650, 50)):
                     for sv3_diff in list(range(-150, 150, 50)):
                         sv3_start = sv2[1] + sv3_diff

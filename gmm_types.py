@@ -38,6 +38,8 @@ ANCESTRY_COLORS = {
     "SAS": "#ffe69f",
 }
 
+GMM_MODELS = ["1d_len", "1d_L", "2d"]
+
 
 @dataclass
 class GaussianDistribution1D:
