@@ -801,3 +801,8 @@ def analyze_ancestry() -> None:
 
     plt.tight_layout()
     plt.show()
+
+
+def processed_svs_intersecting_genes(num_modes: int):
+    # create a bed file with the each mode from each variant as a separate row and use bedtools intersect
+    pass

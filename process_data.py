@@ -177,16 +177,17 @@ def filter_and_plot_sequences_bokeh(
         z = yi.copy()
         for j in range(0, len(yi), 2):  # look at pairs of points (L-R coordinates)
             # filter out points that are too far from the original SV's L and R coordinates
-            # TODO: what is the justification for these boundaries?
             if (
                 yi[j] < (L - 2 * read_length)
                 or yi[j] > (L + 1.5 * read_length)
                 or yi[j + 1] < (R - 2 * read_length)
                 or yi[j + 1] > (R + 5 * read_length)
             ):
-                z[j] = z[j + 1] = np.nan
+                z[j] = z[j + 1] = (
+                    0  # setting the values to nan was giving me an error on the synthetic data
+                )
 
-        z = z[~np.isnan(z)]
+        z = z[z != 0]
         z_filtered = z.copy()
         paired_ends = [
             [z_filtered[i], z_filtered[i + 1]] for i in range(0, len(z_filtered), 2)
@@ -368,6 +369,7 @@ def run_viz_gmm(
     plot: bool = True,
     plot_bokeh: bool = False,
     synthetic_data: bool = False,
+    gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
 ) -> None:
     # plots that don't update data format
     if plot_bokeh:
@@ -392,7 +394,10 @@ def run_viz_gmm(
         # print("No structural variants found in this region.")
         return None, None
 
-    gmm = run_gmm(points, plot=plot, pr=False)
+    if gmm_model == "2d":
+        gmm_func = run_gmm
+
+    gmm = gmm_func(points, plot=plot, pr=False)
 
     if not synthetic_data:
         populate_sample_info(
