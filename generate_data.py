@@ -5,7 +5,7 @@ import ast
 from process_data import run_viz_gmm
 from query_sv import giggle_format, query_stix
 from collections import defaultdict
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 """
 Data generation functions
@@ -66,20 +66,26 @@ svs: List of (start, stop) for each SV
 """
 
 
-def generate_synthetic_sv_data(chr: int, svs: List[Tuple[int, int]]):
+def generate_synthetic_sv_data(
+    chr: int,
+    svs: List[Tuple[int, int]],
+    *,
+    n_samples: Optional[int] = None,
+    p: Optional[List[float]] = None,
+):
     num_svs = len(svs)
 
     # Decide how many samples we want in our population
-    num_samples = random.randint(30, 1000)
+    num_samples = random.randint(30, 1000) if n_samples is None else n_samples
     samples = [f"sample_{i}" for i in range(num_samples)]
 
     # Decide how we want to divide the samples between the SVs
-    weights = generate_weights(num_svs)
+    weights = generate_weights(num_svs) if p is None else p
     modes = assign_modes(weights, samples)
 
-    print(
-        f"{num_samples} total samples, {[modes.count(i) for i in range(num_svs)]} samples per mode"
-    )
+    # print(
+    #     f"{num_samples} total samples, {[modes.count(i) for i in range(num_svs)]} samples per mode"
+    # )
 
     # For each sample, generate random evidence
     evidence = defaultdict(list)
@@ -106,7 +112,9 @@ def generate_synthetic_sv_data(chr: int, svs: List[Tuple[int, int]]):
         chr=str(chr),
         L=L,
         R=R,
-        plot=True,
+        plot=False,
         plot_bokeh=False,
         synthetic_data=True,
     )
+
+    return gmm, evidence_by_mode
