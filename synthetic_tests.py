@@ -1,8 +1,26 @@
 import csv
 import multiprocessing
 import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn import metrics
 from generate_data import generate_synthetic_sv_data
 from gmm_types import GMM_MODELS
+
+
+def confusion_mat():
+    for model in GMM_MODELS:
+        df = pd.read_csv(f"synthetic_data/results_{model}.csv", low_memory=False)
+        actual = df["expected_num_modes"]
+        predicted = df["num_modes"]
+        confusion_matrix = metrics.confusion_matrix(actual, predicted)
+        cm_display = metrics.ConfusionMatrixDisplay(
+            confusion_matrix=confusion_matrix,
+            display_labels=["1 mode", "2 modes", "3 modes"],
+        )
+        cm_display.plot()
+        plt.title(model)
+        plt.show()
 
 
 def run_gmm(case, svs, weights, n_samples, results):
