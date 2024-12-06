@@ -4,7 +4,7 @@ import gzip
 import math
 import numpy as np
 import pandas as pd
-from scipy.stats import norm
+from scipy.stats import norm, sem
 from scipy.special import logit
 from Bio import SeqIO, Seq
 import matplotlib.pyplot as plt
@@ -147,7 +147,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
 
         population_data.append(population_counter)
 
-    all_mode_paired_ends = [
+    all_mode_paired_end_flat = [
         p for paired_end in all_mode_paired_ends for p in paired_end
     ]
 
@@ -183,8 +183,8 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
             spine.set_visible(False)
 
     # Set up axes
-    left_half = max_max_l - min(all_mode_paired_ends)
-    right_half = max(all_mode_paired_ends) - min_min_r
+    left_half = max_max_l - min(all_mode_paired_end_flat)
+    right_half = max(all_mode_paired_end_flat) - min_min_r
     x_distance = max(left_half, right_half)
     bax = brokenaxes(
         xlims=(
@@ -198,12 +198,13 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
 
     # SV plot
     min_y = np.inf
+    all_sample_means = []
     for i, mode in enumerate(reversed(evidence_by_mode)):
         mode_color = COLORS[mode_indices_reversed[i]]
 
         # plot the paired ends
         max_y = -np.inf
-        all_paired_ends = []
+        sample_means = []
         for evidence in mode:
             color = add_color_noise(mode_color)
             y = add_noise(i + 1)
@@ -212,10 +213,10 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
             min_y = min(y, min_y)
 
             # plot only the max L coordinate and min R coordinate (closest values to the actual SV, which is not sequenced)
-            max_l = max([paired_end[0] for paired_end in evidence.paired_ends])
-            min_r = min([paired_end[1] for paired_end in evidence.paired_ends])
+            mean_l = np.mean([paired_end[0] for paired_end in evidence.paired_ends])
+            mean_r = np.mean([paired_end[1] for paired_end in evidence.paired_ends])
             bax.plot(
-                [max_l, min_r],
+                [mean_l, mean_r],
                 [y, y],
                 marker="o",
                 markersize=5,
@@ -223,16 +224,17 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
                 linewidth=1,
                 color=color,
             )
-            all_paired_ends.extend([max_l, min_r])
+            sample_means.extend([mean_l, mean_r])
+        all_sample_means.append(sample_means)
 
         # plot the histograms
         for ax in bax.axs:
             n, bins, hist_patches = ax.hist(
-                all_paired_ends,
-                bins=20,
+                sample_means,
+                bins=30,
                 color=mode_color,
                 alpha=0.8,
-                range=(min(all_paired_ends), max(all_paired_ends)),
+                range=(min(sample_means), max(sample_means)),
                 orientation="vertical",
                 align="mid",
             )
@@ -245,13 +247,14 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
 
     # plot the vertical lines
     for i in range(num_modes):
+        sample_means = np.array(all_sample_means[i])
         bax.axvline(
-            np.mean([sv.start for sv in sv_stats[i]]),
+            np.mean(sample_means[0::2]),
             color=COLORS[mode_indices[i]],
             linestyle="--",
         )
         bax.axvline(
-            np.mean([sv.end for sv in sv_stats[i]]),
+            np.mean(sample_means[1::2]),
             color=COLORS[mode_indices[i]],
             linestyle="--",
         )
@@ -408,23 +411,59 @@ def plot_sv_coords(evidence_by_mode: List[List[Evidence]]):
     plt.show()
 
 
-def plot_sv_length_coords(evidence_by_mode: List[List[Evidence]]):
+def plot_2d_coords(
+    evidence_by_mode: List[List[Evidence]],
+    *,
+    axis1: str,
+    axis2: str,
+    add_error_bars: bool = False,
+):
     fig, ax_main = plt.subplots(figsize=(15, 8))
     for i, mode in enumerate(evidence_by_mode):
         x = []
+        num_evidence = []
+        sem_ax1 = []
+        sem_ax2 = []
         for evidence in mode:
-            lengths = [
-                max(paired_end) - min(paired_end) - 450
-                for paired_end in evidence.paired_ends
-            ]
-            x.append([np.mean(lengths), evidence.mean_l])
+            ax1_vals = [GMM_AXES[axis1](x) for x in evidence.paired_ends]
+            ax2_vals = [GMM_AXES[axis2](x) for x in evidence.paired_ends]
+            x.append([np.mean(ax1_vals), np.mean(ax2_vals)])
+            num_evidence.append(len(evidence.paired_ends))
+            sem_ax1.append(sem(ax1_vals))
+            sem_ax2.append(sem(ax2_vals))
         x = np.array(x)
+        num_evidence = np.array(num_evidence)
 
         gmm_iters, _ = run_em(x, 1)
         gmm = gmm_iters[-1]
 
         # plot 2D data
-        ax_main.scatter(x[:, 0], x[:, 1], color=COLORS[i])
+        ax_main.scatter(
+            x[:, 0], x[:, 1], color=COLORS[i], sizes=num_evidence * 40, alpha=0.6
+        )
+
+        if add_error_bars:
+            for j in range(len(x)):
+                ax_main.errorbar(
+                    x[j, 0],
+                    x[j, 1],
+                    xerr=sem_ax1[j],
+                    yerr=sem_ax2[j],
+                    color=COLORS[i],
+                    alpha=0.6,
+                )
+
+        mse_x = np.mean(sem_ax1)
+        mse_y = np.mean(sem_ax2)
+        ax_main.text(
+            gmm.mu[0][0],
+            gmm.mu[0][1],
+            f"n={len(mode)}\nAvg. num reads/sample: {np.mean(num_evidence):.1f}\nMSE {axis1}: {mse_x:.2f}\nMSE {axis2}: {mse_y:.2}",
+            fontsize=10,
+            ha="center",
+            va="center",
+            bbox=dict(facecolor="white", alpha=0.5, edgecolor="none"),
+        )
 
         # plot the 2D gaussian distributions
         eigenvalues, eigenvectors = np.linalg.eigh(gmm.cov[0])
@@ -463,9 +502,13 @@ def plot_sv_length_coords(evidence_by_mode: List[List[Evidence]]):
         ax_yhist.plot(norm.pdf(y_vals, mean_y, std_y), y_vals, color=COLORS[i])
         ax_yhist.axis("off")
 
-    ax_main.yaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
-    ax_main.set_xlabel("SV Length", fontsize=12)
-    ax_main.set_ylabel("L Coordinate", fontsize=12)
+    if axis1 != "length":
+        ax_main.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
+    if axis2 != "length":
+        ax_main.yaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
+
+    ax_main.set_xlabel(axis1, fontsize=12)
+    ax_main.set_ylabel(axis2, fontsize=12)
     plt.show()
 
 

@@ -413,8 +413,9 @@ def run_viz_gmm(
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, L, R, gmm_model=gmm_model)
     if plot:
         plot_evidence_by_mode(evidence_by_mode)
-        # plot_sv_lengths(evidence_by_mode)
-        # plot_sv_coords(evidence_by_mode)
-        plot_sv_length_coords(evidence_by_mode)
+        plot_2d_coords(
+            evidence_by_mode, axis1="L", axis2="Length", add_error_bars=False
+        )
+        plot_2d_coords(evidence_by_mode, axis1="L", axis2="R", add_error_bars=False)
 
     return gmm, evidence_by_mode

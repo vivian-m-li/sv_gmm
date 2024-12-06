@@ -58,5 +58,14 @@ def get_num_intersecting_genes():
     print(num_intersections_filtered.describe())
 
 
+def get_num_new_svs():
+    df = pd.read_csv("1000genomes/sv_stats.csv")
+    df = df[df["num_samples"] > 0]
+    mode_data = [df[df["num_modes"] == i + 1] for i in range(3)]
+    num_two_modes = len(mode_data[1])
+    num_three_modes = len(mode_data[2])
+    print(f"Number of new SVs: {num_two_modes + (num_three_modes * 2)}")
+
+
 if __name__ == "__main__":
-    get_num_intersecting_genes()
+    get_num_new_svs()
