@@ -660,10 +660,8 @@ def run_gmm(
     x = np.array(x, dtype=float)
     n = len(x)
     if len(x) == 0:
-        # warnings.warn("Input data is empty")
-        return None
+        raise Exception("No data points provided.")
     if len(x) == 1:
-        # warnings.warn("Input data contains one SV")
         singleton = x[0]
         return EstimatedGMM1D(
             mu=[singleton],

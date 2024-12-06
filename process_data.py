@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import matplotlib.cm as cm
 from bokeh.plotting import figure, output_file, save
@@ -392,8 +393,8 @@ def run_viz_gmm(
     )
 
     if len(points) == 0:
-        # print("No structural variants found in this region.")
-        return None, None
+        warnings.warn("No structural variants found in this region.")
+        return None, []
 
     if gmm_model == "2d":
         gmm_func = run_gmm

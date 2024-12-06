@@ -6,6 +6,7 @@ import pandas as pd
 from sklearn import metrics
 from generate_data import generate_synthetic_sv_data
 from gmm_types import GMM_MODELS
+from typing import Optional, List, Tuple
 
 
 def confusion_mat():
@@ -28,7 +29,7 @@ def run_gmm(case, svs, weights, n_samples, results):
         gmm, evidence_by_mode = generate_synthetic_sv_data(
             1, svs, n_samples=n_samples, p=weights, gmm_model=gmm_model
         )
-        results[gmm_model].append((case, svs, n_samples, gmm, evidence_by_mode))
+        results.append([case, gmm_model, svs, n_samples, gmm, evidence_by_mode])
 
 
 def get_len_L(evidence_by_mode):
@@ -47,13 +48,16 @@ def get_len_L(evidence_by_mode):
     return lengths, Ls
 
 
-def write_csv(all_results):
-    for gmm_model, results in all_results.items():
-        with open(
-            f"synthetic_data/results_{gmm_model}.csv", mode="w", newline=""
-        ) as out:
+def write_csv(all_results, *, write_new_file: bool = False):
+    with open(
+        "synthetic_data/results.csv",
+        mode="w" if write_new_file else "a",
+        newline="",
+    ) as out:
+        if write_new_file:
             fieldnames = [
                 "case",
+                "gmm_model",
                 "expected_num_modes",
                 "expected_lengths",
                 "expected_Ls",
@@ -64,20 +68,29 @@ def write_csv(all_results):
             ]
             csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
             csv_writer.writeheader()
-            for case, svs, n_samples, gmm, evidence_by_mode in results:
-                lengths, Ls = get_len_L(evidence_by_mode)
-                csv_writer.writerow(
-                    {
-                        "case": case,
-                        "expected_num_modes": int(case[0]),
-                        "expected_lengths": [sv[1] - sv[0] for sv in svs],
-                        "expected_Ls": [sv[0] for sv in svs],
-                        "num_modes": gmm.num_modes,
-                        "lengths": lengths,
-                        "Ls": Ls,
-                        "num_samples": n_samples,
-                    }
-                )
+        else:
+            csv_writer = csv.DictWriter(out)
+
+        for case, gmm_model, svs, n_samples, gmm, evidence_by_mode in all_results:
+            # there is an error where all generated points are getting filtered out in process_data
+            # skip those rows in that case
+            if gmm is None:
+                continue
+
+            lengths, Ls = get_len_L(evidence_by_mode)
+            csv_writer.writerow(
+                {
+                    "case": case,
+                    "gmm_model": gmm_model,
+                    "expected_num_modes": 3 if case in ["D", "E"] else 2,
+                    "expected_lengths": [sv[1] - sv[0] for sv in svs],
+                    "expected_Ls": [sv[0] for sv in svs],
+                    "num_modes": gmm.num_modes,
+                    "lengths": lengths,
+                    "Ls": Ls,
+                    "num_samples": n_samples,
+                }
+            )
 
 
 def is_valid_svs(svs):
@@ -94,6 +107,83 @@ def is_valid_svs(svs):
     return valid_sv
 
 
+"""Generates synthetic data to test the model with. See Figure 2 for the 5 scenarios."""
+
+
+def generate_data(case: str) -> List[Tuple[int, int]]:
+    SVLEN = 2553  #  median SV length
+    sv1_start = 100000
+    sv1_end = sv1_start + SVLEN
+
+    data = []
+    match case:
+        case "A":
+            for d in range(0, 60, 10):  # 510
+                data.append(
+                    [
+                        case,
+                        [
+                            (sv1_start, sv1_end),
+                            (int(100000 + d / 2), int(sv1_end - d / 2)),
+                        ],
+                    ]
+                )
+        case "B":
+            for d in range(0, 60, 10):
+                sv2_start = sv1_start - d
+                data.append(
+                    [case, [(sv2_start, sv2_start + SVLEN), (sv1_start, sv1_end)]]
+                )
+        case "C":
+            sv2_end = sv1_end + 500 + SVLEN
+            for d in range(0, 60, 10):
+                data.append([case, [(sv1_start, sv1_end), (sv1_end + d, sv2_end)]])
+        case "D":
+            pass
+        case "E":
+            pass
+        case _:
+            raise Exception("Invalid case")
+
+    return data
+
+
+def d_accuracy_test(test_case: Optional[str] = None):
+    N_SAMPLES = [47, 181]  # the median and mean number of samples
+    WEIGHTS = [0.5, 0.5]
+
+    # generate synthetic data
+    if test_case is None:
+        data = []
+        for case in ["A", "B", "C", "D", "E"]:
+            data.extend(generate_data(case))
+    else:
+        data = generate_data(test_case)
+
+    with multiprocessing.Manager() as manager:
+        cpu_count = multiprocessing.cpu_count()
+        p = multiprocessing.Pool(cpu_count)
+        results = manager.list()
+        args = []
+        for case, svs in data:
+            # TODO: increase number of iterations
+            # for _ in range(10):
+            for n_samples in N_SAMPLES:
+                args.append((case, svs, WEIGHTS, n_samples, results))
+
+        p.starmap(run_gmm, args)
+        p.close()
+        p.join()
+
+        # results: [(case, gmm_model, svs, n_samples, gmm, evidence_by_mode), ...]
+        write_csv(results, write_new_file=test_case is None)
+
+
+def plot_d_accuracy():
+    pass
+
+
+# DEPRECATED
 def run_gmm_synthetic_data():
     n_samples = [
         30,
@@ -187,4 +277,4 @@ def run_gmm_synthetic_data():
 
 
 if __name__ == "__main__":
-    run_gmm_synthetic_data()
+    d_accuracy_test()
