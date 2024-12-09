@@ -3,6 +3,7 @@ import multiprocessing
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import math
 from sklearn import metrics
 from generate_data import generate_synthetic_sv_data
 from gmm_types import GMM_MODELS
@@ -24,12 +25,12 @@ def confusion_mat():
         plt.show()
 
 
-def run_gmm(case, svs, weights, n_samples, results):
+def run_gmm(case, d, svs, weights, n_samples, results):
     for gmm_model in GMM_MODELS:
         gmm, evidence_by_mode = generate_synthetic_sv_data(
             1, svs, n_samples=n_samples, p=weights, gmm_model=gmm_model
         )
-        results.append([case, gmm_model, svs, n_samples, gmm, evidence_by_mode])
+        results.append([case, d, gmm_model, svs, n_samples, gmm, evidence_by_mode])
 
 
 def get_len_L(evidence_by_mode):
@@ -39,12 +40,12 @@ def get_len_L(evidence_by_mode):
         lens = []
         starts = []
         for evidence in mode:
-            max_l = max([paired_end[0] for paired_end in evidence.paired_ends])
-            min_r = min([paired_end[1] for paired_end in evidence.paired_ends])
-            lens.append(min_r - max_l - 450)  # 450 is the length of the read
-            starts.append(max_l)
-        lengths.append(np.mean(lens))
-        Ls.append(np.mean(starts))
+            mean_l = np.mean([paired_end[0] for paired_end in evidence.paired_ends])
+            mean_r = np.mean([paired_end[1] for paired_end in evidence.paired_ends])
+            lens.append(mean_r - mean_l - 450)  # 450 is the length of the read
+            starts.append(mean_l)
+        lengths.append(int(np.mean(lens)))
+        Ls.append(int(np.mean(starts)))
     return lengths, Ls
 
 
@@ -57,6 +58,7 @@ def write_csv(all_results, *, write_new_file: bool = False):
         if write_new_file:
             fieldnames = [
                 "case",
+                "d",
                 "gmm_model",
                 "expected_num_modes",
                 "expected_lengths",
@@ -71,7 +73,7 @@ def write_csv(all_results, *, write_new_file: bool = False):
         else:
             csv_writer = csv.DictWriter(out)
 
-        for case, gmm_model, svs, n_samples, gmm, evidence_by_mode in all_results:
+        for case, d, gmm_model, svs, n_samples, gmm, evidence_by_mode in all_results:
             # there is an error where all generated points are getting filtered out in process_data
             # skip those rows in that case
             if gmm is None:
@@ -81,6 +83,7 @@ def write_csv(all_results, *, write_new_file: bool = False):
             csv_writer.writerow(
                 {
                     "case": case,
+                    "d": d,
                     "gmm_model": gmm_model,
                     "expected_num_modes": 3 if case in ["D", "E"] else 2,
                     "expected_lengths": [sv[1] - sv[0] for sv in svs],
@@ -107,41 +110,56 @@ def is_valid_svs(svs):
     return valid_sv
 
 
+def get_coordinates(sv1, sv2, d):
+    x1, y1 = sv1
+    x2, y2 = sv2
+    dist = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+    x3 = int(x1 + d * (x2 - x1) / dist)
+    y3 = int(y1 + d * (y2 - y1) / dist)
+    return (x3, y3)
+
+
 """Generates synthetic data to test the model with. See Figure 2 for the 5 scenarios."""
 
 
 def generate_data(case: str) -> List[Tuple[int, int]]:
     SVLEN = 2553  #  median SV length
-    sv1_start = 100000
-    sv1_end = sv1_start + SVLEN
+    SV1_L = 100000
+    SV1_R = SV1_L + SVLEN
+    SV1 = (SV1_L, SV1_R)
+
+    # for case D and E
+    SV2_L = 101000
+    SV2_LEN = 2003
+    SV2 = (SV2_L, SV2_L + SV2_LEN)
+
+    SV3_L = 100782
+    SV3_LEN = 3383
+    SV3 = (SV3_L, SV3_L + SV3_LEN)
+
+    MIDPOINT = (100500, 100500 + 2278)
 
     data = []
     match case:
         case "A":
-            for d in range(0, 60, 10):  # 510
-                data.append(
-                    [
-                        case,
-                        [
-                            (sv1_start, sv1_end),
-                            (int(100000 + d / 2), int(sv1_end - d / 2)),
-                        ],
-                    ]
-                )
+            for d in range(0, 510, 10):
+                data.append([case, d, [SV1, (int(100000 + d / 2), int(SV1_R - d / 2))]])
         case "B":
-            for d in range(0, 60, 10):
-                sv2_start = sv1_start - d
-                data.append(
-                    [case, [(sv2_start, sv2_start + SVLEN), (sv1_start, sv1_end)]]
-                )
+            for d in range(0, 510, 10):
+                sv2_start = SV1_L - d
+                data.append([case, d, [(sv2_start, sv2_start + SVLEN), SV1]])
         case "C":
-            sv2_end = sv1_end + 500 + SVLEN
-            for d in range(0, 60, 10):
-                data.append([case, [(sv1_start, sv1_end), (sv1_end + d, sv2_end)]])
+            sv2_end = SV1_R + 500 + SVLEN
+            for d in range(0, 510, 10):
+                data.append([case, d, [SV1, (SV1_R + d, sv2_end)]])
         case "D":
-            pass
+            for d in range(0, 1150, 10):
+                sv3 = get_coordinates(SV1, SV3, d)
+                data.append([case, d, [SV1, SV2, sv3]])
         case "E":
-            pass
+            for d in range(0, 1150, 10):
+                sv3 = get_coordinates(MIDPOINT, SV3, d)
+                data.append([case, d, [SV1, SV2, sv3]])
         case _:
             raise Exception("Invalid case")
 
@@ -150,7 +168,6 @@ def generate_data(case: str) -> List[Tuple[int, int]]:
 
 def d_accuracy_test(test_case: Optional[str] = None):
     N_SAMPLES = [47, 181]  # the median and mean number of samples
-    WEIGHTS = [0.5, 0.5]
 
     # generate synthetic data
     if test_case is None:
@@ -165,11 +182,11 @@ def d_accuracy_test(test_case: Optional[str] = None):
         p = multiprocessing.Pool(cpu_count)
         results = manager.list()
         args = []
-        for case, svs in data:
-            # TODO: increase number of iterations
-            # for _ in range(10):
-            for n_samples in N_SAMPLES:
-                args.append((case, svs, WEIGHTS, n_samples, results))
+        for case, d, svs in data:
+            weights = [1.0 / len(svs)] * len(svs)
+            for _ in range(10):
+                for n_samples in N_SAMPLES:
+                    args.append((case, d, svs, weights, n_samples, results))
 
         p.starmap(run_gmm, args)
         p.close()
