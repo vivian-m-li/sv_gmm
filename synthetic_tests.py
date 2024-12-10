@@ -168,7 +168,7 @@ def generate_data(case: str) -> List[Tuple[int, int]]:
 
 
 def d_accuracy_test(test_case: Optional[str] = None):
-    N_SAMPLES = [47, 181]  # the median and mean number of samples
+    N_SAMPLES = [47, 181, 500]  # the median and mean number of samples
 
     # generate synthetic data
     if test_case is None:
@@ -193,7 +193,7 @@ def d_accuracy_test(test_case: Optional[str] = None):
         p.close()
         p.join()
 
-        # results: [(case, gmm_model, svs, n_samples, gmm, evidence_by_mode), ...]
+        # results: [(case, d, gmm_model, svs, n_samples, gmm, evidence_by_mode), ...]
         write_csv(results, write_new_file=test_case is None)
 
 
