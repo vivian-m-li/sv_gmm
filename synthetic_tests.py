@@ -142,15 +142,16 @@ def generate_data(case: str) -> List[Tuple[int, int]]:
     data = []
     match case:
         case "A":
-            for d in range(0, 510, 10):
+            for d in range(0, 510, 2):
                 data.append([case, d, [SV1, (int(100000 + d / 2), int(SV1_R - d / 2))]])
         case "B":
-            for d in range(0, 510, 10):
+            for d in range(0, 510, 2):
                 sv2_start = SV1_L - d
                 data.append([case, d, [(sv2_start, sv2_start + SVLEN), SV1]])
         case "C":
+            # TODO: all of the values end up getting filtered out since the SVs are distinct
             sv2_end = SV1_R + 500 + SVLEN
-            for d in range(0, 510, 10):
+            for d in range(0, 510, 2):
                 data.append([case, d, [SV1, (SV1_R + d, sv2_end)]])
         case "D":
             for d in range(0, 1150, 10):
@@ -184,7 +185,7 @@ def d_accuracy_test(test_case: Optional[str] = None):
         args = []
         for case, d, svs in data:
             weights = [1.0 / len(svs)] * len(svs)
-            for _ in range(10):
+            for _ in range(50):
                 for n_samples in N_SAMPLES:
                     args.append((case, d, svs, weights, n_samples, results))
 
@@ -194,10 +195,6 @@ def d_accuracy_test(test_case: Optional[str] = None):
 
         # results: [(case, gmm_model, svs, n_samples, gmm, evidence_by_mode), ...]
         write_csv(results, write_new_file=test_case is None)
-
-
-def plot_d_accuracy():
-    pass
 
 
 # DEPRECATED

@@ -12,7 +12,7 @@ import matplotlib.patches as patches
 from brokenaxes import brokenaxes
 from matplotlib.ticker import FixedLocator, StrMethodFormatter
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
-from collections import Counter
+from collections import Counter, defaultdict
 from typing import List
 from em import run_gmm, run_em
 from em_1d import run_em as run_em1d, get_scatter_data
@@ -859,6 +859,37 @@ def analyze_ancestry() -> None:
     ax2.set_title("Superpopulation Counts", fontsize=14)
     ax2.set_xlabel("Superpopulation", fontsize=12)
     ax2.set_ylabel("Count", fontsize=12)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_d_accuracy():
+    df = pd.read_csv("synthetic_data/results.csv")
+    fig, axs = plt.subplots(2, 3, figsize=(18, 12), sharey=True)
+    df = df[df["num_samples"] == 47]
+
+    for idx, case in enumerate(["A", "B", "C", "D", "E"]):
+        ax = axs[idx // 3, idx % 3]
+        case_df = df[df["case"] == case]
+        for i, model in enumerate(GMM_MODELS):
+            accuracy_by_dist = defaultdict(list)
+            model_df = case_df[case_df["gmm_model"] == model]
+            for _, row in model_df.iterrows():
+                dist = row["d"]
+                correct = 1 if row["num_modes"] == row["expected_num_modes"] else 0
+                accuracy_by_dist[dist].append(correct)
+            distances = sorted(accuracy_by_dist.keys())
+            accuracies = [
+                sum(accuracy_by_dist[d]) / len(accuracy_by_dist[d]) for d in distances
+            ]
+            # instead of plotting the distances/accuracies, can you fit a curve to the data and plot that?
+            ax.plot(distances, accuracies, label=model, color=COLORS[i])
+        ax.set_title(f"Case {case}")
+        ax.set_xlabel("Distance")
+        if idx == 0:
+            ax.set_ylabel("Accuracy")
+        ax.legend()
 
     plt.tight_layout()
     plt.show()
