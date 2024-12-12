@@ -250,12 +250,12 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
         sample_means = np.array(all_sample_means[i])
         bax.axvline(
             np.mean(sample_means[0::2]),
-            color=COLORS[mode_indices[i]],
+            color=COLORS[mode_indices_reversed[i]],
             linestyle="--",
         )
         bax.axvline(
             np.mean(sample_means[1::2]),
-            color=COLORS[mode_indices[i]],
+            color=COLORS[mode_indices_reversed[i]],
             linestyle="--",
         )
 
@@ -864,12 +864,14 @@ def analyze_ancestry() -> None:
     plt.show()
 
 
-def plot_d_accuracy():
+def plot_d_accuracy(n_samples: int):
     df = pd.read_csv("synthetic_data/results.csv")
     fig, axs = plt.subplots(2, 3, figsize=(18, 12), sharey=True)
-    df = df[df["num_samples"] == 47]
+    df = df[df["num_samples"] == n_samples]
 
-    for idx, case in enumerate(["A", "B", "C", "D", "E"]):
+    for idx, case in enumerate(
+        ["A", "B", "C", "D", "E"]
+    ):  # skipping case C since it filters out all data
         ax = axs[idx // 3, idx % 3]
         case_df = df[df["case"] == case]
         for i, model in enumerate(GMM_MODELS):
@@ -891,6 +893,7 @@ def plot_d_accuracy():
             ax.set_ylabel("Accuracy")
         ax.legend()
 
+    plt.suptitle(f"N={n_samples}")
     plt.tight_layout()
     plt.show()
 
