@@ -49,9 +49,12 @@ def get_len_L(evidence_by_mode):
     return lengths, Ls
 
 
-def write_csv(all_results, *, write_new_file: bool = False):
+def write_csv(
+    all_results, *, write_new_file: bool = False, fixed_n_samples: Optional[int] = None
+):
+    file = f"synthetic_data/results{'' if fixed_n_samples is None else fixed_n_samples}.csv"
     with open(
-        "synthetic_data/results.csv",
+        file,
         mode="w" if write_new_file else "a",
         newline="",
     ) as out:
@@ -167,9 +170,7 @@ def generate_data(case: str) -> List[Tuple[int, int]]:
     return data
 
 
-def d_accuracy_test(test_case: Optional[str] = None):
-    N_SAMPLES = [47, 181, 500]  # the median and mean number of samples
-
+def d_accuracy_test(n_samples: int, test_case: Optional[str] = None):
     # generate synthetic data
     if test_case is None:
         data = []
@@ -185,16 +186,17 @@ def d_accuracy_test(test_case: Optional[str] = None):
         args = []
         for case, d, svs in data:
             weights = [1.0 / len(svs)] * len(svs)
-            for _ in range(50):
-                for n_samples in N_SAMPLES:
-                    args.append((case, d, svs, weights, n_samples, results))
+            for _ in range(
+                1
+            ):  # TODO: increase the number of iterations to get a smoother curve
+                args.append((case, d, svs, weights, n_samples, results))
 
         p.starmap(run_gmm, args)
         p.close()
         p.join()
 
         # results: [(case, d, gmm_model, svs, n_samples, gmm, evidence_by_mode), ...]
-        write_csv(results, write_new_file=test_case is None)
+        write_csv(results, write_new_file=test_case is None, fixed_n_samples=n_samples)
 
 
 # DEPRECATED
@@ -291,4 +293,5 @@ def run_gmm_synthetic_data():
 
 
 if __name__ == "__main__":
-    d_accuracy_test()
+    N_SAMPLES = [47, 181, 500]  # the median and mean number of samples
+    d_accuracy_test(n_samples=47)

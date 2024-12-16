@@ -96,10 +96,10 @@ def generate_synthetic_sv_data(
         mode_start, mode_end = svs[mode]
         for _ in range(num_evidence):
             read_length = int(random.gauss(450, 50))
-            # split = random.randint(1, read_length - 1) # if the read is too close to the start/end of the SV, it gets filtered out
-            split = random.randint(
-                int(read_length / 2) - 100, int(read_length / 2) + 100
-            )
+            split = random.randint(1, read_length - 1)
+            # split = random.randint(
+            #     int(read_length / 2) - 100, int(read_length / 2) + 100
+            # ) # to prevent the read from being filtered out (too far from the y=x line)
             evidence_start = mode_start - split
             evidence_stop = mode_end + (read_length - split)
             evidence[sample].extend([evidence_start, evidence_stop])

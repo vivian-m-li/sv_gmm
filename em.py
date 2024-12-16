@@ -5,6 +5,7 @@ from gmm_types import *
 from typing import Tuple, List, Dict, Union, Optional
 
 RESPONSIBILITY_THRESHOLD = 1e-10
+INCLUDE_HINGE_LOSS = True  # set this to false when testing with synthetic data
 
 """
 GMM/EM helper functions
@@ -54,7 +55,8 @@ def calc_log_likelihood(
         likelihood_i = np.sum(pdf)
         logL += np.log(likelihood_i)
 
-    logL -= calc_hinge_loss(len(x), mu)
+    if INCLUDE_HINGE_LOSS:
+        logL -= calc_hinge_loss(len(x), mu)
     return logL
 
 

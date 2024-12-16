@@ -867,8 +867,8 @@ def analyze_ancestry() -> None:
 def plot_d_accuracy(n_samples: int):
     df = pd.read_csv("synthetic_data/results.csv")
     fig, axs = plt.subplots(2, 3, figsize=(18, 12), sharey=True)
+    fig.delaxes(axs[1, 2])
     df = df[df["num_samples"] == n_samples]
-
     for idx, case in enumerate(
         ["A", "B", "C", "D", "E"]
     ):  # skipping case C since it filters out all data
@@ -885,7 +885,6 @@ def plot_d_accuracy(n_samples: int):
             accuracies = [
                 sum(accuracy_by_dist[d]) / len(accuracy_by_dist[d]) for d in distances
             ]
-            # instead of plotting the distances/accuracies, can you fit a curve to the data and plot that?
             ax.plot(distances, accuracies, label=model, color=COLORS[i])
         ax.set_title(f"Case {case}")
         ax.set_xlabel("Distance")

@@ -177,17 +177,19 @@ def filter_and_plot_sequences_bokeh(
 
     for i, (sample_id, yi) in enumerate(y.items()):
         z = yi.copy()
-        for j in range(0, len(yi), 2):  # look at pairs of points (L-R coordinates)
-            # filter out points that are too far from the original SV's L and R coordinates
-            if (
-                yi[j] < (L - 2 * read_length)
-                or yi[j] > (L + 1.5 * read_length)
-                or yi[j + 1] < (R - 2 * read_length)
-                or yi[j + 1] > (R + 5 * read_length)
-            ):
-                z[j] = z[j + 1] = (
-                    0  # setting the values to nan was giving me an error on the synthetic data
-                )
+
+        # Remove the filtering process so the model can capture "outliers" that are actually SVs
+        # for j in range(0, len(yi), 2):  # look at pairs of points (L-R coordinates)
+        #     # filter out points that are too far from the original SV's L and R coordinates
+        #     if (
+        #         yi[j] < (L - 2 * read_length)
+        #         or yi[j] > (L + 1.5 * read_length)
+        #         or yi[j + 1] < (R - 2 * read_length)
+        #         or yi[j + 1] > (R + 5 * read_length)
+        #     ):
+        #         z[j] = z[j + 1] = (
+        #             0  # setting the values to nan was giving me an error on the synthetic data
+        #         )
 
         z = z[z != 0]
         z_filtered = z.copy()
