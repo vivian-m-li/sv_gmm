@@ -1,3 +1,4 @@
+import os
 import random
 import colorsys
 import gzip
@@ -865,7 +866,12 @@ def analyze_ancestry() -> None:
 
 
 def plot_d_accuracy(n_samples: int):
-    df = pd.read_csv("synthetic_data/results.csv")
+    file = f"synthetic_data/results{n_samples}.csv"
+    if not os.path.exists(file):
+        print(f"File for {n_samples} samples does not exist")
+        return
+
+    df = pd.read_csv(file)
     fig, axs = plt.subplots(2, 3, figsize=(18, 12), sharey=True)
     fig.delaxes(axs[1, 2])
     df = df[df["num_samples"] == n_samples]

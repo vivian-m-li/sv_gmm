@@ -186,9 +186,7 @@ def d_accuracy_test(n_samples: int, test_case: Optional[str] = None):
         args = []
         for case, d, svs in data:
             weights = [1.0 / len(svs)] * len(svs)
-            for _ in range(
-                1
-            ):  # TODO: increase the number of iterations to get a smoother curve
+            for _ in range(100):
                 args.append((case, d, svs, weights, n_samples, results))
 
         p.starmap(run_gmm, args)
