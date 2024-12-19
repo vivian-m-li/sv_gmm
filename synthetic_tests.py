@@ -1,3 +1,4 @@
+import sys
 import csv
 import multiprocessing
 import numpy as np
@@ -291,5 +292,6 @@ def run_gmm_synthetic_data():
 
 
 if __name__ == "__main__":
-    N_SAMPLES = [47, 181, 500]  # the median and mean number of samples
-    d_accuracy_test(n_samples=47)
+    # N_SAMPLES = [47, 181, 500]  # the median and mean number of samples
+    n_samples = int(sys.argv[1])
+    d_accuracy_test(n_samples=n_samples)

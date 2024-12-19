@@ -1,4 +1,5 @@
 import os
+import ast
 import random
 import colorsys
 import gzip
@@ -536,6 +537,11 @@ def get_svs_intersecting_genes(df: pd.DataFrame):
     return df[df["id"].isin(intersecting_svs)]
 
 
+"""
+Plots the rectangle shapes showing the distribution of all SVs and how they're split
+"""
+
+
 def plot_processed_sv_stats(filter_intersecting_genes: bool = False):
     df = pd.read_csv("1000genomes/sv_stats.csv")
     df = df[df["num_samples"] > 0]
@@ -701,6 +707,11 @@ def plot_processed_sv_stats(filter_intersecting_genes: bool = False):
     plt.show()
 
 
+"""
+For each # of modes, plots a boxplot of the sample size for each SV
+"""
+
+
 def plot_sample_size_per_mode(filter_intersecting_genes: bool = False):
     df = pd.read_csv("1000genomes/sv_stats.csv")
     if filter_intersecting_genes:
@@ -724,6 +735,11 @@ def plot_sample_size_per_mode(filter_intersecting_genes: bool = False):
     ax.set_xlabel("")
     ax.set_ylabel("Sample Size")
     plt.show()
+
+
+"""
+For an SV, plots the evidence that has been removed due to not enough evidence or deviation from the y=x+b line
+"""
 
 
 def plot_removed_evidence(sv_evidence: List[Evidence], L: int, R: int):
@@ -797,6 +813,11 @@ def query_sample(sample: str, chr: str, L: int, R: int):
     return sequence
 
 
+"""
+Populates each sample with its sex, population, and superpopulation information
+"""
+
+
 def populate_sample_info(
     sv_evidence: List[Evidence],
     chr: str,
@@ -822,6 +843,11 @@ def populate_sample_info(
             superpopulation=superpopulation,
             allele=allele,
         )
+
+
+"""
+Plots a bar chart of the total ancestry and superancestry counts from the 1000 Genomes samples
+"""
 
 
 def analyze_ancestry() -> None:
@@ -863,6 +889,45 @@ def analyze_ancestry() -> None:
 
     plt.tight_layout()
     plt.show()
+
+
+"""
+Plots the allele frequencies for the SVs before and after being split by SVeperator
+"""
+
+
+def plot_afs():
+    sv_df = pd.read_csv("1000genomes/sv_stats.csv", low_memory=False)
+    sv_df = sv_df[sv_df["num_samples"] > 0]
+    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+    for num_modes in range(3):
+        x = []  # original AFs
+        y = []  # new AFs
+        df = sv_df[sv_df["num_modes"] == num_modes + 1]
+        for _, row in df.iterrows():
+            original_af = float(ast.literal_eval(row["af"])[0])
+            modes = ast.literal_eval(row["modes"])
+            for i in range(num_modes + 1):
+                x.append(original_af)
+                y.append(modes[i]["af"])
+        axs[num_modes].scatter(x, y, color=COLORS[num_modes], alpha=0.6)
+        axs[num_modes].plot([0, 1], [0, 1], linestyle="--", color="grey")
+        axs[num_modes].set_title(f"Num Modes={num_modes + 1}")
+    fig.text(0.5, 0.04, "Original Allele Frequency", ha="center", fontsize=12)
+    fig.text(
+        0.095,
+        0.5,
+        "New Allele Frequency",
+        va="center",
+        rotation="vertical",
+        fontsize=12,
+    )
+    plt.show()
+
+
+"""
+Plots the accuracy of each of the GMM models for each example (see Figure 2) and distance
+"""
 
 
 def plot_d_accuracy(n_samples: int):
