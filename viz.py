@@ -4,6 +4,7 @@ import random
 import colorsys
 import gzip
 import math
+import re
 import numpy as np
 import pandas as pd
 from scipy.stats import norm, sem
@@ -930,7 +931,7 @@ Plots the accuracy of each of the GMM models for each example (see Figure 2) and
 """
 
 
-def plot_d_accuracy(n_samples: int):
+def plot_d_accuracy_by_n(n_samples: int):
     file = f"synthetic_data/results{n_samples}.csv"
     if not os.path.exists(file):
         print(f"File for {n_samples} samples does not exist")
@@ -968,6 +969,72 @@ def plot_d_accuracy(n_samples: int):
     plt.show()
 
 
-def processed_svs_intersecting_genes(num_modes: int):
-    # create a bed file with the each mode from each variant as a separate row and use bedtools intersect
-    pass
+def plot_d_accuracy_by_case(case: str):
+    files = [f for f in os.listdir("synthetic_data") if re.match(r"results\d+\.csv", f)]
+    n_samples = sorted(
+        [int(re.search(r"results(\d+)\.csv", f).group(1)) for f in files]
+    )
+    midpoint = len(n_samples) / 2
+    vals_to_plot = [
+        n_samples[0],
+        n_samples[int(midpoint / 2)],
+        n_samples[int(midpoint)],
+        n_samples[int(midpoint / 2 + midpoint)],
+        n_samples[-1],
+    ]
+
+    d_acc_vals = defaultdict(list)  # only the d at accuracy = 80%
+    all_d_acc_vals = defaultdict(
+        list
+    )  # for the small plots below the large plot, for vals_to_plot
+    for n in n_samples:
+        file = f"synthetic_data/results{n}.csv"
+        df = pd.read_csv(file)
+        df = df[df["case"] == case]
+
+        for model in GMM_MODELS:
+            accuracy_by_dist = defaultdict(list)
+            model_df = df[df["gmm_model"] == model]
+            for _, row in model_df.iterrows():
+                dist = row["d"]
+                correct = 1 if row["num_modes"] == row["expected_num_modes"] else 0
+                accuracy_by_dist[dist].append(correct)
+            distances = sorted(accuracy_by_dist.keys())
+            accuracies = np.array(
+                [sum(accuracy_by_dist[d]) / len(accuracy_by_dist[d]) for d in distances]
+            )
+            (indices,) = np.where(accuracies >= 0.8)
+            if len(indices) > 0:
+                d_acc_vals[model].append(distances[indices[0]])
+            else:
+                d_acc_vals[model].append(np.nan)  # TODO: set np.inf or just don't plot
+
+            if n in vals_to_plot:
+                all_d_acc_vals[model].append([distances, accuracies])
+
+    fig = plt.figure(figsize=(12, 8))
+    gs = fig.add_gridspec(2, len(vals_to_plot), height_ratios=[3, 1])
+    ax_large = fig.add_subplot(gs[0, :])
+    axs_small = [fig.add_subplot(gs[1, i]) for i in range(len(vals_to_plot))]
+
+    for i, model in enumerate(GMM_MODELS):
+        color = COLORS[i]
+        vals = d_acc_vals[model]
+        ax_large.plot(n_samples, vals, label=model, color=color)
+        ax_large.scatter(n_samples, vals, label=model, color=color)
+        ax_large.set_ylim(0, 1150 if case in ["D", "E"] else 510)
+        ax_large.legend(loc="upper right")
+        ax_large.set_xlabel("N", fontsize=14)
+        ax_large.set_ylabel("Distance at 80% Accuracy", fontsize=14, labelpad=15)
+        for j, ax in enumerate(axs_small):
+            distances, accuracies = all_d_acc_vals[model][j]
+            ax.plot(distances, accuracies, label=model, color=color)
+            ax.scatter(distances, accuracies, color=color, alpha=0.6)
+            ax.set_title(f"N={vals_to_plot[j]}")
+            if j == 0:
+                ax.set_ylabel("Accuracy", fontsize=12)
+        fig.text(0.5, 0.0, "Distance", ha="center", fontsize=12)
+
+    plt.suptitle(f"Case {case}", fontsize=18)
+    plt.tight_layout()
+    plt.show()
