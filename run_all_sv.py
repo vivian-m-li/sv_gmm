@@ -1,3 +1,4 @@
+import sys
 import os
 import csv
 import pandas as pd
@@ -153,6 +154,7 @@ def create_sv_stats_file():
 
 def run_all_sv(
     *,
+    rerun_all_svs: bool = False,
     query_chr: Optional[str] = None,
     subset: Optional[List[Tuple[str, int, int]]] = None,
 ):
@@ -170,7 +172,12 @@ def run_all_sv(
             ].iloc[0]
             write_sv_stats(row.to_dict(), population_size, sample_ids)
     else:
-        processed_sv_ids = set([file.strip(".csv") for file in os.listdir(FILE_DIR)])
+        if rerun_all_svs:
+            processed_sv_ids = set()
+        else:
+            processed_sv_ids = set(
+                [file.strip(".csv") for file in os.listdir(FILE_DIR)]
+            )
         rows = []
         if query_chr is not None:
             for _, row in deletions_df[deletions_df["chr"] == query_chr].iterrows():
@@ -193,4 +200,5 @@ def run_all_sv(
 
 
 if __name__ == "__main__":
-    run_all_sv()
+    rerun_all_svs = False if len(sys.argv) < 2 else bool(sys.argv[1])
+    run_all_sv(rerun_all_svs=rerun_all_svs)
