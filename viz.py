@@ -1004,6 +1004,7 @@ def plot_d_accuracy_by_case(case: str):
                 [sum(accuracy_by_dist[d]) / len(accuracy_by_dist[d]) for d in distances]
             )
             (indices,) = np.where(accuracies >= 0.8)
+            # TODO: why is the 2d model failing at distance = 270?
             if len(indices) > 0:
                 d_acc_vals[model].append(distances[indices[0]])
             else:
@@ -1021,15 +1022,14 @@ def plot_d_accuracy_by_case(case: str):
         color = COLORS[i]
         vals = d_acc_vals[model]
         ax_large.plot(n_samples, vals, label=model, color=color)
-        ax_large.scatter(n_samples, vals, label=model, color=color)
-        ax_large.set_ylim(0, 1150 if case in ["D", "E"] else 510)
+        ax_large.scatter(n_samples, vals, color=color)
+        ax_large.set_ylim(-10, 1100 if case in ["D", "E"] else 500)
         ax_large.legend(loc="upper right")
         ax_large.set_xlabel("N", fontsize=14)
         ax_large.set_ylabel("Distance at 80% Accuracy", fontsize=14, labelpad=15)
         for j, ax in enumerate(axs_small):
             distances, accuracies = all_d_acc_vals[model][j]
             ax.plot(distances, accuracies, label=model, color=color)
-            ax.scatter(distances, accuracies, color=color, alpha=0.6)
             ax.set_title(f"N={vals_to_plot[j]}")
             if j == 0:
                 ax.set_ylabel("Accuracy", fontsize=12)

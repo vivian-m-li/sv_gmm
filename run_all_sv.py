@@ -93,7 +93,7 @@ def write_sv_stats(
     sv_stat.svlen_post = int(
         np.mean(
             [sv.length - 450 for lst in all_svlen for sv in lst]
-        )  # 450 is the length of the read
+        )  # 450 is the length of the read - TODO: get the read length for each sample
     )
 
     mode_coords = []
@@ -108,13 +108,13 @@ def write_sv_stats(
         min_start = float("inf")
         max_end = float("-inf")
         for evidence in mode:
-            max_l = max([paired_end[0] for paired_end in evidence.paired_ends])
-            min_r = min([paired_end[1] for paired_end in evidence.paired_ends])
-            lengths.append(min_r - max_l - 450)  # 450 is the length of the read
-            starts.append(max_l)
-            ends.append(min_r)
-            min_start = min(min_start, max_l)
-            max_end = max(max_end, min_r)
+            mean_l = np.mean([paired_end[0] for paired_end in evidence.paired_ends])
+            mean_r = np.mean([paired_end[1] for paired_end in evidence.paired_ends])
+            lengths.append(mean_r - mean_l - 450)  # 450 is the length of the read
+            starts.append(mean_l)
+            ends.append(mean_r)
+            min_start = min(min_start, mean_l)
+            max_end = max(max_end, mean_r)
         mode_coords.append((min_start, max_end))
 
         mode_stat = ModeStat(
