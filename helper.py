@@ -1,4 +1,5 @@
 import os
+import subprocess
 import pandas as pd
 import csv
 from dataclasses import fields
@@ -78,5 +79,34 @@ def get_sample_sequencing_centers():
     return df
 
 
+def get_insert_sizes():
+    samples_df = pd.read_csv("1000genomes/bam_bas_files.tsv", sep="\t")
+    pattern = r"data\/.*\/alignment\/.*\.mapped\.ILLUMINA\.bwa\..+\.low_coverage\.\d+\.bam\.bas"
+    bas_files_df = samples_df[samples_df["BAS FILE"].str.fullmatch(pattern)]
+    bas_files_df["sample_id"] = bas_files_df["BAS FILE"].str.extract(
+        r"\/(.+)\/alignment"
+    )
+
+    for _, row in bas_files_df.iterrows():
+        bas_file = row["BAS FILE"]
+        sample_id = row["sample_id"]
+        if f"{sample_id}.tsv" in os.listdir("1000genomes/mapped_files"):
+            pass
+        subprocess.run(
+            ["bash", "get_mapped_files.sh"] + [sample_id, bas_file],
+            capture_output=True,
+            text=True,
+        )
+
+    df = pd.DataFrame(columns=["sample_id", "mean_insert_size"])
+    mapped_files = os.listdir("1000genomes/mapped_files")
+    for i, file in enumerate(mapped_files):
+        sample_id = file.strip(".tsv")
+        file_df = pd.read_csv(f"1000genomes/mapped_files/{file}", sep="\t")
+        mean_insert_size = int(np.mean(file_df["mean_insert_size"]))
+        df.loc[i] = [sample_id, mean_insert_size]
+    df.to_csv("1000genomes/insert_sizes.csv", index=False)
+
+
 if __name__ == "__main__":
-    get_sample_sequencing_centers()
+    get_insert_sizes()
