@@ -12,6 +12,7 @@ from scipy.special import logit
 from Bio import SeqIO, Seq
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import matplotlib.cm as cm
 from brokenaxes import brokenaxes
 from matplotlib.ticker import FixedLocator, StrMethodFormatter
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
@@ -19,6 +20,7 @@ from collections import Counter, defaultdict
 from typing import List
 from em import run_gmm, run_em
 from em_1d import run_em as run_em1d, get_scatter_data
+from helper import get_sample_sequencing_centers
 from gmm_types import *
 
 REFERENCE_FILE = "hs37d5.fa.gz"
@@ -420,13 +422,19 @@ def plot_2d_coords(
     axis1: str,
     axis2: str,
     add_error_bars: bool = False,
+    color_by: str = "mode",
 ):
     fig, ax_main = plt.subplots(figsize=(15, 8))
+    scatter_cm = cm.get_cmap("tab20").colors + cm.get_cmap("tab20b").colors
+    seq_center_df = get_sample_sequencing_centers()
+    color_lookup = {}
     for i, mode in enumerate(evidence_by_mode):
         x = []
         num_evidence = []
         sem_ax1 = []
         sem_ax2 = []
+        scatter_colors = []
+        scatter_labels = []
         for evidence in mode:
             ax1_vals = [GMM_AXES[axis1](x) for x in evidence.paired_ends]
             ax2_vals = [GMM_AXES[axis2](x) for x in evidence.paired_ends]
@@ -434,6 +442,20 @@ def plot_2d_coords(
             num_evidence.append(len(evidence.paired_ends))
             sem_ax1.append(sem(ax1_vals))
             sem_ax2.append(sem(ax2_vals))
+
+            seq_centers = ", ".join(
+                seq_center_df[seq_center_df["SAMPLE_NAME"] == evidence.sample.id][
+                    "CENTER_NAME"
+                ].values[0]
+            )
+            scatter_labels.append(seq_centers)
+            if color_by == "mode":
+                scatter_colors.append(COLORS[i])
+            elif color_by == "sequencing_center":
+                if seq_centers not in color_lookup:
+                    color = scatter_cm[len(color_lookup) % len(scatter_cm)]
+                    color_lookup[seq_centers] = color
+                scatter_colors.append(color_lookup[seq_centers])
         x = np.array(x)
         num_evidence = np.array(num_evidence)
 
@@ -442,7 +464,12 @@ def plot_2d_coords(
 
         # plot 2D data
         ax_main.scatter(
-            x[:, 0], x[:, 1], color=COLORS[i], sizes=num_evidence * 40, alpha=0.6
+            x[:, 0],
+            x[:, 1],
+            color=scatter_colors,
+            label=scatter_labels,
+            sizes=num_evidence * 40,
+            alpha=0.6,
         )
 
         if add_error_bars:

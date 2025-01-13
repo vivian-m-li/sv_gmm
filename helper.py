@@ -67,5 +67,14 @@ def get_num_new_svs():
     print(f"Number of new SVs: {num_two_modes + (num_three_modes * 2)}")
 
 
+def get_sample_sequencing_centers():
+    # data obtained from https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/20130502.phase3.sequence.index
+    df = pd.read_csv("1000genomes/20130502.phase3.sequence.index", sep="\t")
+    df["CENTER_NAME"] = df["CENTER_NAME"].str.upper()
+    df = df[["SAMPLE_NAME", "CENTER_NAME"]].drop_duplicates()
+    df = df.groupby("SAMPLE_NAME")["CENTER_NAME"].apply(list).reset_index()
+    return df
+
+
 if __name__ == "__main__":
-    get_num_new_svs()
+    get_sample_sequencing_centers()

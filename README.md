@@ -47,3 +47,8 @@ Remove approximately 10% of the data from each mode to reduce the overlap betwee
 <img width="500" alt="SV Lengths" src="https://github.com/user-attachments/assets/d50976f6-5989-41f7-85af-8706c194c25a">
 
 
+
+TODO:
+- assign a data collection method to each sample, filter out 1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release
+- scrape for mean insert size
+- scrape https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/20130502.phase3.sequence.index link for the sequencing center for each sample
