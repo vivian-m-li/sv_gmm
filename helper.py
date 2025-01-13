@@ -69,7 +69,9 @@ def get_num_new_svs():
 
 def get_sample_sequencing_centers():
     # data obtained from https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/20130502.phase3.sequence.index
-    df = pd.read_csv("1000genomes/20130502.phase3.sequence.index", sep="\t")
+    df = pd.read_csv(
+        "1000genomes/20130502.phase3.sequence.index", sep="\t", low_memory=False
+    )
     df["CENTER_NAME"] = df["CENTER_NAME"].str.upper()
     df = df[["SAMPLE_NAME", "CENTER_NAME"]].drop_duplicates()
     df = df.groupby("SAMPLE_NAME")["CENTER_NAME"].apply(list).reset_index()

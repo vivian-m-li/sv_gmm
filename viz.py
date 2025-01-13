@@ -1065,3 +1065,61 @@ def plot_d_accuracy_by_case(case: str):
     plt.suptitle(f"Case {case}", fontsize=18)
     plt.tight_layout()
     plt.show()
+
+
+def get_seq_center_distribution():
+    df = pd.read_csv("1000genomes/sv_stats.csv")
+    df = df[df["num_modes"] == 2]
+    seq_center_df = get_sample_sequencing_centers()
+    seq_centers_by_mode = defaultdict(lambda: Counter())
+    all_seq_centers = set()
+    for _, row in df.iterrows():
+        modes = ast.literal_eval(row.modes)
+        modes = sorted(modes, key=lambda x: x["start"])
+        for i, mode in enumerate(ast.literal_eval(row.modes)):
+            for sample_id in mode["sample_ids"]:
+                seq_centers = seq_center_df[seq_center_df["SAMPLE_NAME"] == sample_id][
+                    "CENTER_NAME"
+                ].values[0]
+                for seq_center in seq_centers:
+                    all_seq_centers.add(seq_center)
+                    seq_centers_by_mode[i][seq_center] += 1
+
+    return seq_centers_by_mode, list(all_seq_centers)
+
+
+def plot_seq_center_distribution(seq_centers_by_mode, all_seq_centers):
+    # For each mode, plot a pie chart of the distribution of sequencing centers
+    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+    seq_center_cm = cm.get_cmap("Set2").colors
+    for i in seq_centers_by_mode.keys():
+        seq_center_counts = seq_centers_by_mode[i]
+        values = [seq_center_counts[seq_center] for seq_center in all_seq_centers]
+        axs[i].pie(
+            values,
+            labels=all_seq_centers,
+            colors=seq_center_cm[: len(all_seq_centers)],
+            autopct="%1.1f%%",
+        )
+        axs[i].set_title(f"Mode {i+1}")
+    plt.show()
+
+    plt.figure()
+    totals = {
+        seq_center: sum(
+            [seq_centers_by_mode[i][seq_center] for i in seq_centers_by_mode.keys()]
+        )
+        for seq_center in all_seq_centers
+    }
+    pcts = {}
+    for mode, counter in seq_centers_by_mode.items():
+        pcts[mode] = [
+            counter[seq_center] / totals[seq_center] for seq_center in all_seq_centers
+        ]
+
+    bottom = np.zeros(len(all_seq_centers))
+    for mode, pct in pcts.items():
+        plt.bar(all_seq_centers, pct, 0.5, label=f"Mode {mode + 1}", bottom=bottom)
+        bottom += pct
+    plt.legend(loc="upper right")
+    plt.show()

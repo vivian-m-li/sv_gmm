@@ -415,10 +415,16 @@ def run_viz_gmm(
         )  # mutates sv_evidence with ancestry data and homo/heterozygous for each sample
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, L, R, gmm_model=gmm_model)
     if plot:
-        plot_evidence_by_mode(evidence_by_mode)
+        # plot_evidence_by_mode(evidence_by_mode)
+        # plot_2d_coords(
+        #     evidence_by_mode, axis1="L", axis2="Length", add_error_bars=False
+        # )
         plot_2d_coords(
-            evidence_by_mode, axis1="L", axis2="Length", add_error_bars=False
+            evidence_by_mode,
+            axis1="L",
+            axis2="R",
+            add_error_bars=False,
+            color_by="sequencing_center",
         )
-        plot_2d_coords(evidence_by_mode, axis1="L", axis2="R", add_error_bars=False)
 
     return gmm, evidence_by_mode
