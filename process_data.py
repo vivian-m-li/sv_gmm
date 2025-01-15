@@ -425,6 +425,7 @@ def run_viz_gmm(
             axis2="R",
             add_error_bars=False,
             color_by="sequencing_center",
+            size_by="insert_size",
         )
 
     return gmm, evidence_by_mode

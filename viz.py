@@ -423,10 +423,12 @@ def plot_2d_coords(
     axis2: str,
     add_error_bars: bool = False,
     color_by: str = "mode",
+    size_by="num_evidence",
 ):
     fig, ax_main = plt.subplots(figsize=(15, 8))
     scatter_cm = cm.get_cmap("tab20").colors + cm.get_cmap("tab20b").colors
     seq_center_df = get_sample_sequencing_centers()
+    insert_sizes_df = pd.read_csv("1000genomes/insert_sizes.csv")
     color_lookup = {}
     for i, mode in enumerate(evidence_by_mode):
         x = []
@@ -435,6 +437,7 @@ def plot_2d_coords(
         sem_ax2 = []
         scatter_colors = []
         scatter_labels = []
+        scatter_sizes = []
         for evidence in mode:
             ax1_vals = [GMM_AXES[axis1](x) for x in evidence.paired_ends]
             ax2_vals = [GMM_AXES[axis2](x) for x in evidence.paired_ends]
@@ -456,6 +459,16 @@ def plot_2d_coords(
                     color = scatter_cm[len(color_lookup) % len(scatter_cm)]
                     color_lookup[seq_centers] = color
                 scatter_colors.append(color_lookup[seq_centers])
+
+            if size_by == "num_evidence":
+                scatter_sizes.append(num_evidence[-1] * 40)
+            elif size_by == "insert_size":
+                scatter_sizes.append(
+                    insert_sizes_df[
+                        insert_sizes_df["sample_id"] == evidence.sample.id
+                    ].values[0]
+                )
+
         x = np.array(x)
         num_evidence = np.array(num_evidence)
 
@@ -468,7 +481,7 @@ def plot_2d_coords(
             x[:, 1],
             color=scatter_colors,
             label=scatter_labels,
-            sizes=num_evidence * 40,
+            sizes=scatter_sizes,
             alpha=0.6,
         )
 
@@ -1122,4 +1135,33 @@ def plot_seq_center_distribution(seq_centers_by_mode, all_seq_centers):
         plt.bar(all_seq_centers, pct, 0.5, label=f"Mode {mode + 1}", bottom=bottom)
         bottom += pct
     plt.legend(loc="upper right")
+    plt.show()
+
+
+def plot_insert_size_distribution(insert_sizes):
+    df = pd.read_csv("1000genomes/sv_stats.csv")
+    df = df[df["num_modes"] == 2]
+    insert_sizes_df = pd.read_csv("1000genomes/insert_sizes.csv")
+    insert_sizes = defaultdict(list)
+    for _, row in df.iterrows():
+        modes = ast.literal_eval(row.modes)
+        modes = sorted(modes, key=lambda x: x["start"])
+        for i, mode in enumerate(ast.literal_eval(row.modes)):
+            for sample_id in mode["sample_ids"]:
+                mean_insert_size = int(
+                    insert_sizes_df[insert_sizes_df["sample_id"] == sample_id][
+                        "mean_insert_size"
+                    ].values[0]
+                )
+                if mean_insert_size == 0:
+                    mean_insert_size = 450  # set a default value
+                insert_sizes[i].append(mean_insert_size)
+
+    # For each mode, plot a box plot of the distribution of insert sizes
+    plt.figure()
+    num_modes = len(insert_sizes)
+    values = [insert_sizes[i] for i in range(num_modes)]
+    plt.boxplot(values, labels=[f"Mode {i+1}" for i in range(num_modes)])
+    plt.ylabel("Mean Insert Size")
+    plt.title("Mean Insert Sizes by Mode")
     plt.show()
