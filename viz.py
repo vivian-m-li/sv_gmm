@@ -433,6 +433,7 @@ def plot_2d_coords(
     for i, mode in enumerate(evidence_by_mode):
         x = []
         num_evidence = []
+        mean_insert_sizes = []
         sem_ax1 = []
         sem_ax2 = []
         scatter_colors = []
@@ -460,14 +461,17 @@ def plot_2d_coords(
                     color_lookup[seq_centers] = color
                 scatter_colors.append(color_lookup[seq_centers])
 
+            mean_insert_size = insert_sizes_df[
+                insert_sizes_df["sample_id"] == evidence.sample.id
+            ]["mean_insert_size"].values[0]
+            if mean_insert_size == 0:
+                mean_insert_size = 450
+            mean_insert_sizes.append(mean_insert_size)
+
             if size_by == "num_evidence":
                 scatter_sizes.append(num_evidence[-1] * 40)
             elif size_by == "insert_size":
-                scatter_sizes.append(
-                    insert_sizes_df[
-                        insert_sizes_df["sample_id"] == evidence.sample.id
-                    ].values[0]
-                )
+                scatter_sizes.append(mean_insert_size)
 
         x = np.array(x)
         num_evidence = np.array(num_evidence)
@@ -501,7 +505,7 @@ def plot_2d_coords(
         ax_main.text(
             gmm.mu[0][0],
             gmm.mu[0][1],
-            f"n={len(mode)}\nAvg. num reads/sample: {np.mean(num_evidence):.1f}\nMSE {axis1}: {mse_x:.2f}\nMSE {axis2}: {mse_y:.2}",
+            f"n={len(mode)}\nAvg. num reads/sample: {np.mean(num_evidence):.1f}\nMean insert size: {int(np.mean(mean_insert_sizes))}\nMSE {axis1}: {mse_x:.2f}\nMSE {axis2}: {mse_y:.2}",
             fontsize=10,
             ha="center",
             va="center",
@@ -1080,7 +1084,7 @@ def plot_d_accuracy_by_case(case: str):
     plt.show()
 
 
-def get_seq_center_distribution():
+def plot_seq_center_distribution():
     df = pd.read_csv("1000genomes/sv_stats.csv")
     df = df[df["num_modes"] == 2]
     seq_center_df = get_sample_sequencing_centers()
@@ -1098,10 +1102,6 @@ def get_seq_center_distribution():
                     all_seq_centers.add(seq_center)
                     seq_centers_by_mode[i][seq_center] += 1
 
-    return seq_centers_by_mode, list(all_seq_centers)
-
-
-def plot_seq_center_distribution(seq_centers_by_mode, all_seq_centers):
     # For each mode, plot a pie chart of the distribution of sequencing centers
     fig, axs = plt.subplots(1, 2, figsize=(12, 6))
     seq_center_cm = cm.get_cmap("Set2").colors
