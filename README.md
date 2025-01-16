@@ -45,8 +45,3 @@ Remove approximately 10% of the data from each mode to reduce the overlap betwee
 
 #### Length of SVs For Each Mode
 <img width="500" alt="SV Lengths" src="https://github.com/user-attachments/assets/d50976f6-5989-41f7-85af-8706c194c25a">
-
-
-
-TODO:
-- assign a data collection method to each sample, filter out 1000 Genomes on GRCh38,1000 Genomes 30x on GRCh38,1000 Genomes phase 3 release

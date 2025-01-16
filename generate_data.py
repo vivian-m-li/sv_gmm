@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 import random
 import ast
 from process_data import run_viz_gmm
@@ -59,6 +60,11 @@ def assign_modes(weights, samples):
     return modes
 
 
+def get_random_insert_size(df):
+    # get a random value from the df
+    return df.sample().insert_size.values[0]
+
+
 """
 Generates synthetic SV data for testing purposes
 chr: chromosome number (does not support X/Y), as a str
@@ -74,6 +80,8 @@ def generate_synthetic_sv_data(
     p: Optional[List[float]] = None,
     gmm_model: str = "2d",
     plot: bool = False,
+    plot_reads: bool = False,
+    run_gmm: bool = True,
 ):
     num_svs = len(svs)
 
@@ -89,13 +97,21 @@ def generate_synthetic_sv_data(
     #     f"{num_samples} total samples, {[modes.count(i) for i in range(num_svs)]} samples per mode"
     # )
 
+    insert_size_df = pd.read_csv(
+        "1000genomes/insert_sizes.csv", dtype={"mean_insert_size": int}
+    )
+
     # For each sample, generate random evidence
     evidence = defaultdict(list)
+    insert_size_lookup = {}
     for sample, mode in zip(samples, modes):
-        num_evidence = random.randint(2, 20)
+        num_evidence = random.randint(2, 10)
         mode_start, mode_end = svs[mode]
+        insert_size = insert_size_df.sample()["mean_insert_size"].values[0]
+        insert_size_lookup[sample] = insert_size
+
         for _ in range(num_evidence):
-            read_length = int(random.gauss(450, 50))
+            read_length = min(600, max(50, int(random.gauss(insert_size, 25))))
             split = random.randint(1, read_length - 1)
             # split = random.randint(
             #     int(read_length / 2) - 100, int(read_length / 2) + 100
@@ -108,16 +124,32 @@ def generate_synthetic_sv_data(
     L = min([start for start, _ in svs])
     R = max([stop for _, stop in svs])
     evidence = {key: np.array(value) for key, value in evidence.items()}
-    gmm, evidence_by_mode = run_viz_gmm(
-        evidence,
-        file_name=None,
-        chr=str(chr),
-        L=L,
-        R=R,
-        plot=plot,
-        plot_bokeh=False,
-        synthetic_data=True,
-        gmm_model=gmm_model,
-    )
 
-    return gmm, evidence_by_mode
+    if plot_reads:
+        plt.figure()
+        for reads in evidence.values():
+            plt.scatter(
+                reads[::2],
+                reads[1::2],
+                color="blue",
+                alpha=0.6,
+            )
+        plt.xlabel("L")
+        plt.ylabel("R")
+        plt.show()
+
+    if run_gmm:
+        gmm, evidence_by_mode = run_viz_gmm(
+            evidence,
+            file_name=None,
+            chr=str(chr),
+            L=L,
+            R=R,
+            plot=plot,
+            plot_bokeh=False,
+            synthetic_data=True,
+            gmm_model=gmm_model,
+            # insert_size_lookup
+        )
+
+        return gmm, evidence_by_mode

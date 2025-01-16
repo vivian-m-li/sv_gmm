@@ -373,6 +373,7 @@ def plot_sv_lengths(evidence_by_mode: List[List[Evidence]]):
     for i, mode in enumerate(evidence_by_mode):
         all_lengths = []
         for evidence in mode:
+            # TODO: recalculate the lengths with individual insert sizes
             lengths = [
                 max(paired_end) - min(paired_end) - 450
                 for paired_end in evidence.paired_ends
@@ -440,18 +441,24 @@ def plot_2d_coords(
         scatter_labels = []
         scatter_sizes = []
         for evidence in mode:
-            ax1_vals = [GMM_AXES[axis1](x) for x in evidence.paired_ends]
-            ax2_vals = [GMM_AXES[axis2](x) for x in evidence.paired_ends]
+            ax1_vals = [GMM_AXES[axis1](x, 450) for x in evidence.paired_ends]
+            ax2_vals = [
+                GMM_AXES[axis2](x, 450) for x in evidence.paired_ends
+            ]  # TODO: update the function to include insert size as an arg
             x.append([np.mean(ax1_vals), np.mean(ax2_vals)])
             num_evidence.append(len(evidence.paired_ends))
             sem_ax1.append(sem(ax1_vals))
             sem_ax2.append(sem(ax2_vals))
 
-            seq_centers = ", ".join(
-                seq_center_df[seq_center_df["SAMPLE_NAME"] == evidence.sample.id][
-                    "CENTER_NAME"
-                ].values[0]
-            )
+            try:
+                seq_centers = ", ".join(
+                    seq_center_df[seq_center_df["SAMPLE_NAME"] == evidence.sample.id][
+                        "CENTER_NAME"
+                    ].values[0]
+                )
+            except IndexError:
+                seq_centers = "Unknown"  # to handle synthetic data
+
             scatter_labels.append(seq_centers)
             if color_by == "mode":
                 scatter_colors.append(COLORS[i])
@@ -461,11 +468,15 @@ def plot_2d_coords(
                     color_lookup[seq_centers] = color
                 scatter_colors.append(color_lookup[seq_centers])
 
-            mean_insert_size = insert_sizes_df[
-                insert_sizes_df["sample_id"] == evidence.sample.id
-            ]["mean_insert_size"].values[0]
+            try:
+                mean_insert_size = insert_sizes_df[
+                    insert_sizes_df["sample_id"] == evidence.sample.id
+                ]["mean_insert_size"].values[0]
+            except IndexError:
+                mean_insert_size = 450  # to handle synthetic data
+
             if mean_insert_size == 0:
-                mean_insert_size = 450
+                mean_insert_size = 450  # default value
             mean_insert_sizes.append(mean_insert_size)
 
             if size_by == "num_evidence":
@@ -1154,7 +1165,7 @@ def plot_insert_size_distribution(insert_sizes):
                     ].values[0]
                 )
                 if mean_insert_size == 0:
-                    mean_insert_size = 450  # set a default value
+                    mean_insert_size = 450  # default value
                 insert_sizes[i].append(mean_insert_size)
 
     # For each mode, plot a box plot of the distribution of insert sizes
@@ -1164,4 +1175,30 @@ def plot_insert_size_distribution(insert_sizes):
     plt.boxplot(values, labels=[f"Mode {i+1}" for i in range(num_modes)])
     plt.ylabel("Mean Insert Size")
     plt.title("Mean Insert Sizes by Mode")
+    plt.show()
+
+
+def plot_insert_size_by_seq_center():
+    insert_size_df = pd.read_csv(
+        "1000genomes/insert_sizes.csv",
+        dtype={"sample_id": str, "mean_insert_size": int},
+    )
+    seq_center_df = get_sample_sequencing_centers()
+
+    df = pd.merge(
+        seq_center_df, insert_size_df, left_on="SAMPLE_NAME", right_on="sample_id"
+    )
+    df.drop(columns=["SAMPLE_NAME"], inplace=True)
+    df.rename(columns={"CENTER_NAME": "center_name"}, inplace=True)
+
+    values = defaultdict(list)
+    for _, row in df.iterrows():
+        for center in row["center_name"]:
+            values[center].append(row["mean_insert_size"])
+
+    plt.figure()
+    plt.boxplot(values.values(), labels=values.keys())
+    plt.title("Mean Insert Size by Sequencing Center")
+    plt.xlabel("Sequencing Center")
+    plt.ylabel("Mean Insert Size")
     plt.show()

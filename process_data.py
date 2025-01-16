@@ -149,7 +149,7 @@ def filter_and_plot_sequences_bokeh(
     file_name: Optional[str],
     L: int,
     R: int,
-    read_length: int,
+    read_length: int,  # TODO: update the function to use a lookup
     sig: int = 50,
     plot_bokeh: bool,
 ) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
@@ -256,8 +256,9 @@ def plot_fitted_lines_bokeh(
     *,
     file_name: Optional[str],
     L: int,
-    read_length: int,
     R: int,
+    read_length: int,
+    insert_size_lookup: Dict[str, int],
     sig: int,
     plot_bokeh: bool,
 ) -> np.ndarray[np.ndarray[float]]:
@@ -275,6 +276,7 @@ def plot_fitted_lines_bokeh(
 
     p.add_tools(hover_tool)
     # Add a grey polygon for background
+    # TODO: update this polygon
     p.patch(
         [L - read_length - sig, L + sig, L + sig, L - read_length - sig],
         [R - 2 * sig, R + read_length, R + read_length + 2 * sig, R],
@@ -287,7 +289,7 @@ def plot_fitted_lines_bokeh(
     # Loop through each row in mb to add lines and points at the start of each line
     for i, row in enumerate(mb):
         if row[3] == 1:  # sv-flag is True
-            start_x = L - read_length
+            start_x = L - read_length  # TODO: update this based on the sample
             start_y = start_x + row[2]  # intercept
             p.line([start_x, L], [start_y, L + row[2]], line_width=2, color="red")
             p.scatter([start_x], [start_y], size=2, color="red", alpha=0.6)
@@ -328,6 +330,7 @@ def get_intercepts(
     file_name: Optional[str],
     L: int,
     R: int,
+    insert_size_lookup: Dict[str, int],
     plot_bokeh: bool,
 ) -> Tuple[np.ndarray[Tuple[float, int]], List[Evidence]]:
     mb, sv_evidence_unfiltered = filter_and_plot_sequences_bokeh(
@@ -346,6 +349,7 @@ def get_intercepts(
         L=L,
         R=R,
         read_length=450,
+        insert_size_lookup=insert_size_lookup,  # TODO: update the function to take a lookup
         sig=50,
         plot_bokeh=plot_bokeh,
     )
@@ -374,7 +378,18 @@ def run_viz_gmm(
     plot_bokeh: bool = False,
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
+    insert_size_lookup: Optional[Dict[str, int]] = None,
 ) -> None:
+    if insert_size_lookup is None:
+        insert_size_df = pd.read_csv(
+            "1000genomes/insert_sizes.csv",
+            dtype={"sample_id": str, "mean_insert_size": int},
+        )
+        insert_size_lookup = {
+            sample_id: mean_insert_size
+            for sample_id, mean_insert_size in insert_size_df.values
+        }
+
     # plots that don't update data format
     if plot_bokeh:
         data = list(squiggle_data.values())
@@ -385,13 +400,18 @@ def run_viz_gmm(
             lower_bound=L - 1900,
             upper_bound=R + 1900,
             L=L,
-            read_length=450,
+            read_length=450,  # TODO(later): update the function to take a lookup
             R=R,
         )
 
     # transforms data
     points, sv_evidence = get_intercepts(
-        squiggle_data, file_name=file_name, L=L, R=R, plot_bokeh=plot_bokeh
+        squiggle_data,
+        file_name=file_name,
+        L=L,
+        R=R,
+        insert_size_lookup=insert_size_lookup,
+        plot_bokeh=plot_bokeh,
     )
 
     if len(points) == 0:

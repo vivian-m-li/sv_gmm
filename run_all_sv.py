@@ -94,7 +94,7 @@ def write_sv_stats(
     sv_stat.svlen_post = int(
         np.mean(
             [sv.length - 450 for lst in all_svlen for sv in lst]
-        )  # 450 is the length of the read - TODO: get the read length for each sample
+        )  # 450 is the length of the read - TODO(later): get the actual read length for each sample
     )
 
     mode_coords = []

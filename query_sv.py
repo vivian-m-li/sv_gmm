@@ -102,7 +102,7 @@ def query_stix(
         squiggle_data = load_squiggle_data(processed_output_file)
     else:
         if not os.path.isfile(output_file):
-            # TODO: the stix query isn't getting anything for x/y chrs
+            # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
             subprocess.run(
                 ["bash", STIX_SCRIPT] + [l, r, output_file],
                 capture_output=True,
