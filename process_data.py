@@ -149,7 +149,7 @@ def filter_and_plot_sequences_bokeh(
     file_name: Optional[str],
     L: int,
     R: int,
-    read_length: int,  # TODO: update the function to use a lookup
+    insert_size_lookup: Dict[str, int],
     sig: int = 50,
     plot_bokeh: bool,
 ) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
@@ -159,7 +159,7 @@ def filter_and_plot_sequences_bokeh(
         title=f"L = {L}, R = {R}",
         width=800,
         height=600,
-        x_axis_label="distance from L",  # TODO: this only applies if we know L is the start of the SV - otherwise, why do we care?
+        x_axis_label="distance from L",  # TODO: this only applies if we know L is the start of the SV
         y_axis_label="deviation from y=x+b",
     )
 
@@ -198,6 +198,7 @@ def filter_and_plot_sequences_bokeh(
         ]
 
         if len(z) > 0:
+            # TODO: does this assume that the read length is the same for each sample?
             b = int(
                 np.mean(z[1::2]) - np.mean(z[0::2])
             )  # R - L (including read length)
@@ -217,6 +218,7 @@ def filter_and_plot_sequences_bokeh(
                     mean_l=mean_l,
                     removed=3 if sdl < 3 else 0,
                     paired_ends=paired_ends,
+                    mean_insert_size=insert_size_lookup[sample_id],
                 )
 
                 # if more than 3 pieces of evidence (paired read_length-r ends), then there is an SV here for this sample
@@ -238,6 +240,7 @@ def filter_and_plot_sequences_bokeh(
                     mean_l=mean_l,
                     removed=len(z) / 2,
                     paired_ends=paired_ends,
+                    mean_insert_size=insert_size_lookup[sample_id],
                 )
 
     p.grid.grid_line_alpha = 0.3
@@ -257,8 +260,6 @@ def plot_fitted_lines_bokeh(
     file_name: Optional[str],
     L: int,
     R: int,
-    read_length: int,
-    insert_size_lookup: Dict[str, int],
     sig: int,
     plot_bokeh: bool,
 ) -> np.ndarray[np.ndarray[float]]:
@@ -276,10 +277,12 @@ def plot_fitted_lines_bokeh(
 
     p.add_tools(hover_tool)
     # Add a grey polygon for background
-    # TODO: update this polygon
+    mean_insert_size = int(
+        np.mean([e.mean_insert_size for e in sv_evidence_unfiltered])
+    )
     p.patch(
-        [L - read_length - sig, L + sig, L + sig, L - read_length - sig],
-        [R - 2 * sig, R + read_length, R + read_length + 2 * sig, R],
+        [L - mean_insert_size - sig, L + sig, L + sig, L - mean_insert_size - sig],
+        [R - 2 * sig, R + mean_insert_size, R + mean_insert_size + 2 * sig, R],
         color="grey",
         line_color="grey",
     )
@@ -288,30 +291,33 @@ def plot_fitted_lines_bokeh(
     sv_evidence = []
     # Loop through each row in mb to add lines and points at the start of each line
     for i, row in enumerate(mb):
+        evidence = sv_evidence_unfiltered[i]
         if row[3] == 1:  # sv-flag is True
-            start_x = L - read_length  # TODO: update this based on the sample
+
+            start_x = (
+                L - evidence.mean_insert_size
+            )  # subtract the mean insert size for this sample
             start_y = start_x + row[2]  # intercept
             p.line([start_x, L], [start_y, L + row[2]], line_width=2, color="red")
             p.scatter([start_x], [start_y], size=2, color="red", alpha=0.6)
             start_points.append((start_x, start_y))
 
-            evidence = sv_evidence_unfiltered[i]
             evidence.start_y = start_y
             sv_evidence.append(evidence)
 
     start_points_array = np.array(start_points)
 
     p.line(
-        [L - read_length, L],
-        [R, R + read_length],
+        [L - mean_insert_size, L],
+        [R, R + mean_insert_size],
         line_width=5,
         color="black",
         line_dash="dashed",
     )  # y=x dashed line
-    p.x_range.start = L - read_length
+    p.x_range.start = L - mean_insert_size
     p.x_range.end = L
     p.y_range.start = R
-    p.y_range.end = R + read_length
+    p.y_range.end = R + mean_insert_size
     p.xaxis.major_label_text_font_size = "12pt"
     p.yaxis.major_label_text_font_size = "12pt"
     p.xaxis.formatter = NumeralTickFormatter(format="0")
@@ -338,7 +344,7 @@ def get_intercepts(
         file_name=file_name,
         L=L,
         R=R,
-        read_length=450,
+        insert_size_lookup=insert_size_lookup,
         sig=50,
         plot_bokeh=plot_bokeh,
     )
@@ -348,8 +354,6 @@ def get_intercepts(
         file_name=file_name,
         L=L,
         R=R,
-        read_length=450,
-        insert_size_lookup=insert_size_lookup,  # TODO: update the function to take a lookup
         sig=50,
         plot_bokeh=plot_bokeh,
     )
@@ -436,9 +440,13 @@ def run_viz_gmm(
     evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, L, R, gmm_model=gmm_model)
     if plot:
         # plot_evidence_by_mode(evidence_by_mode)
-        # plot_2d_coords(
-        #     evidence_by_mode, axis1="L", axis2="Length", add_error_bars=False
-        # )
+        plot_2d_coords(
+            evidence_by_mode,
+            axis1="L",
+            axis2="Length",
+            add_error_bars=False,
+            color_by="sequencing_center",
+        )
         plot_2d_coords(
             evidence_by_mode,
             axis1="L",

@@ -120,6 +120,7 @@ class Evidence:
     mean_l: int
     paired_ends: List[List[float]]
     removed: int  # 0 if not removed, 1 if removed due to 1 paired end only, 2 if removed due to 2 paired ends, 3 if removed due to deviation from y=x+b line
+    mean_insert_size: int
     start_y: float = 0
 
 

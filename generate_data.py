@@ -149,7 +149,7 @@ def generate_synthetic_sv_data(
             plot_bokeh=False,
             synthetic_data=True,
             gmm_model=gmm_model,
-            # insert_size_lookup
+            insert_size_lookup=insert_size_lookup,
         )
 
         return gmm, evidence_by_mode
