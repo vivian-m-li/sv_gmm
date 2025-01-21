@@ -91,11 +91,7 @@ def write_sv_stats(
     sv_stat.num_iterations = gmm.num_iterations
 
     all_svlen = get_svlen(evidence_by_mode)
-    sv_stat.svlen_post = int(
-        np.mean(
-            [sv.length - 450 for lst in all_svlen for sv in lst]
-        )  # 450 is the length of the read - TODO(later): get the actual read length for each sample
-    )
+    sv_stat.svlen_post = int(np.mean([sv.length for lst in all_svlen for sv in lst]))
 
     mode_coords = []
     for i, mode in enumerate(evidence_by_mode):
@@ -111,7 +107,7 @@ def write_sv_stats(
         for evidence in mode:
             mean_l = np.mean([paired_end[0] for paired_end in evidence.paired_ends])
             mean_r = np.mean([paired_end[1] for paired_end in evidence.paired_ends])
-            lengths.append(mean_r - mean_l - 450)  # 450 is the length of the read
+            lengths.append(mean_r - mean_l - evidence.mean_insert_size)
             starts.append(mean_l)
             ends.append(mean_r)
             min_start = min(min_start, mean_l)
