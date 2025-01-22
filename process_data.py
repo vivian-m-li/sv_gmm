@@ -446,14 +446,15 @@ def run_viz_gmm(
             axis2="Length",
             add_error_bars=False,
             color_by="sequencing_center",
-        )
-        plot_2d_coords(
-            evidence_by_mode,
-            axis1="L",
-            axis2="R",
-            add_error_bars=False,
-            color_by="sequencing_center",
             size_by="insert_size",
         )
+        # plot_2d_coords(
+        #     evidence_by_mode,
+        #     axis1="L",
+        #     axis2="R",
+        #     add_error_bars=False,
+        #     color_by="sequencing_center",
+        #     size_by="insert_size",
+        # )
 
     return gmm, evidence_by_mode

@@ -520,7 +520,7 @@ def plot_2d_coords(
         ax_main.text(
             gmm.mu[0][0],
             gmm.mu[0][1],
-            f"n={len(mode)}\nAvg. num reads/sample: {np.mean(num_evidence):.1f}\nMean insert size: {int(np.mean(mean_insert_sizes))}\nMSE {axis1}: {mse_x:.2f}\nMSE {axis2}: {mse_y:.2}",
+            f"n={len(mode)}\nAvg. num reads/sample: {np.mean(num_evidence):.1f}\nMean insert size: {int(np.mean(mean_insert_sizes))}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}",
             fontsize=10,
             ha="center",
             va="center",
@@ -1206,3 +1206,32 @@ def plot_insert_size_by_seq_center():
     plt.xlabel("Sequencing Center")
     plt.ylabel("Mean Insert Size")
     plt.show()
+
+
+def get_outlier_coverage():
+    outlier_coverage = []
+    nonoutlier_coverage = []
+    df = pd.read_csv("1000genomes/mean_coverage.csv")
+    outlier_df = df[df["num_samples"] == 1]
+    for _, row in outlier_df.iterrows():
+        modes = df[df["sv_id"] == row["sv_id"]]
+        for _, mode in modes.iterrows():
+            if mode["num_samples"] == 1:
+                outlier_coverage.append(mode["mean_coverage"])
+            else:
+                nonoutlier_coverage.append(mode["mean_coverage"])
+
+    plt.figure()
+    plt.boxplot(
+        [outlier_coverage, nonoutlier_coverage], labels=["Outliers", "Non-outliers"]
+    )
+    plt.ylabel("Mean Coverage")
+    plt.title("Average coverage (# paired end reads) for each sample in each mode")
+    plt.show()
+
+    print(
+        f"Outlier coverage mean={np.mean(outlier_coverage):.2f}, median={np.median(outlier_coverage)}"
+    )
+    print(
+        f"Non-outlier coverage mean={np.mean(nonoutlier_coverage):.2f}, median={np.median(nonoutlier_coverage)}"
+    )

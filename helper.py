@@ -1,4 +1,5 @@
 import os
+import ast
 import subprocess
 import pandas as pd
 import csv
@@ -113,5 +114,34 @@ def get_insert_sizes(get_files: bool = False):
     df.to_csv("1000genomes/insert_sizes.csv", index=False)
 
 
+def get_mean_coverage():
+    df = pd.read_csv("1000genomes/sv_stats.csv")
+    df = df[df["num_modes"] > 1]
+    coverage_df = pd.DataFrame(columns=["sv_id", "num_samples", "mean_coverage"])
+    for _, sv in df.iterrows():
+        modes = ast.literal_eval(sv["modes"])
+        chr = sv["chr"]
+        L = sv["start"]
+        R = sv["stop"]
+        file = f"processed_stix_output/{chr}:{L}-{L}_{chr}:{R}-{R}.csv"
+        squiggle_data = {}
+        with open(file, newline="") as csvfile:
+            reader = csv.reader(csvfile)
+            for row in reader:
+                squiggle_data[row[0]] = np.array([float(x) for x in row[1:]])
+        for mode in modes:
+            mean_coverage = np.mean(
+                [len(squiggle_data[sample_id]) for sample_id in mode["sample_ids"]]
+            )
+            coverage_df.loc[len(coverage_df)] = [
+                sv["id"],
+                mode["num_samples"],
+                mean_coverage,
+            ]
+
+    coverage_df.to_csv("1000genomes/mean_coverage.csv", index=False)
+
+
 if __name__ == "__main__":
-    get_insert_sizes()
+    concat_processed_sv_files()
+    get_num_new_svs()
