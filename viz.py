@@ -1211,27 +1211,25 @@ def plot_insert_size_by_seq_center():
 def get_outlier_coverage():
     outlier_coverage = []
     nonoutlier_coverage = []
-    df = pd.read_csv("1000genomes/mean_coverage.csv")
+    df = pd.read_csv("1000genomes/coverage.csv")
     outlier_df = df[df["num_samples"] == 1]
     for _, row in outlier_df.iterrows():
         modes = df[df["sv_id"] == row["sv_id"]]
         for _, mode in modes.iterrows():
+            coverage = ast.literal_eval(mode["coverage"])
             if mode["num_samples"] == 1:
-                outlier_coverage.append(mode["mean_coverage"])
+                outlier_coverage.append(coverage[0])
             else:
-                nonoutlier_coverage.append(mode["mean_coverage"])
+                nonoutlier_coverage.extend(coverage)
 
     plt.figure()
     plt.boxplot(
-        [outlier_coverage, nonoutlier_coverage], labels=["Outliers", "Non-outliers"]
+        [outlier_coverage, nonoutlier_coverage],
+        labels=[
+            f"Outliers (1-sample modes)\nn={len(outlier_coverage)}, μ={np.mean(outlier_coverage):.2f}, median={np.median(outlier_coverage)}",
+            f"Non-outliers\nn={len(nonoutlier_coverage)}, μ={np.mean(nonoutlier_coverage):.2f}, median={np.median(nonoutlier_coverage)}",
+        ],
     )
-    plt.ylabel("Mean Coverage")
-    plt.title("Average coverage (# paired end reads) for each sample in each mode")
+    plt.ylabel("Coverage")
+    plt.title("Coverage (# paired end reads) for each sample in each mode")
     plt.show()
-
-    print(
-        f"Outlier coverage mean={np.mean(outlier_coverage):.2f}, median={np.median(outlier_coverage)}"
-    )
-    print(
-        f"Non-outlier coverage mean={np.mean(nonoutlier_coverage):.2f}, median={np.median(nonoutlier_coverage)}"
-    )

@@ -3,6 +3,7 @@ import ast
 import subprocess
 import pandas as pd
 import csv
+from scipy.spatial.distance import braycurtis
 from dataclasses import fields
 from gmm_types import *
 
@@ -117,7 +118,7 @@ def get_insert_sizes(get_files: bool = False):
 def get_mean_coverage():
     df = pd.read_csv("1000genomes/sv_stats.csv")
     df = df[df["num_modes"] > 1]
-    coverage_df = pd.DataFrame(columns=["sv_id", "num_samples", "mean_coverage"])
+    coverage_df = pd.DataFrame(columns=["sv_id", "num_samples", "coverage"])
     for _, sv in df.iterrows():
         modes = ast.literal_eval(sv["modes"])
         chr = sv["chr"]
@@ -130,18 +131,58 @@ def get_mean_coverage():
             for row in reader:
                 squiggle_data[row[0]] = np.array([float(x) for x in row[1:]])
         for mode in modes:
-            mean_coverage = np.mean(
-                [len(squiggle_data[sample_id]) for sample_id in mode["sample_ids"]]
-            )
+            coverage = [
+                int(len(squiggle_data[sample_id]) / 2)
+                for sample_id in mode["sample_ids"]
+            ]
+
             coverage_df.loc[len(coverage_df)] = [
                 sv["id"],
                 mode["num_samples"],
-                mean_coverage,
+                coverage,
             ]
 
-    coverage_df.to_csv("1000genomes/mean_coverage.csv", index=False)
+    coverage_df.to_csv("1000genomes/coverage.csv", index=False)
+
+
+def write_ancestry_dissimilarity():
+    df = pd.read_csv("1000genomes/sv_stats.csv")
+    ancestry_df = pd.read_csv("1000genomes/ancestry.tsv", delimiter="\t")
+    df = df[df["num_modes"] == 2]
+
+    results_df = pd.DataFrame(
+        columns=["chr", "start", "stop", "num_samples", "dissimilarity"]
+    )
+    for i, row in df.iterrows():
+        ancestry = []
+        row["num_samples"]
+        modes = ast.literal_eval(
+            row["modes"]
+        )  # currently a str type, parse into a list
+        for mode in modes:
+            sample_ids = mode["sample_ids"]
+            ancestry_comp = {anc: 0 for anc in ["SAS", "EAS", "EUR", "AMR", "AFR"]}
+            for sample_id in sample_ids:
+                ancestry_row = ancestry_df[ancestry_df["Sample name"] == sample_id]
+                superpopulation = (
+                    ancestry_row["Superpopulation code"].values[0].split(",")[0]
+                )
+                ancestry_comp[superpopulation] += 1
+            ancestry_comp = {k: v / len(sample_ids) for k, v in ancestry_comp.items()}
+            ancestry.append([v for v in ancestry_comp.values()])
+
+        dissimilarity = braycurtis(ancestry[0], ancestry[1])
+        results_df.loc[i] = [
+            row["chr"],
+            row["start"],
+            row["stop"],
+            row["num_samples"],
+            dissimilarity,
+        ]
+
+    results_df = results_df.sort_values(by="dissimilarity", ascending=False)
+    results_df.to_csv("1000genomes/ancestry_dissimilarity.csv")
 
 
 if __name__ == "__main__":
-    concat_processed_sv_files()
-    get_num_new_svs()
+    write_ancestry_dissimilarity()
