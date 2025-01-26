@@ -98,6 +98,8 @@ def write_sv_stats(
         sample_ids = [e.sample.id for e in mode]
         num_samples = len(sample_ids)
         num_homozygous = len([e.sample for e in mode if e.sample.allele == "(1, 1)"])
+        num_heterozygous = num_samples - num_homozygous
+        af = ((num_homozygous * 2) + num_heterozygous) / population_size * 2
 
         lengths = []
         starts = []
@@ -122,11 +124,11 @@ def write_sv_stats(
             end=int(np.mean(ends)),
             end_sd=np.std(ends),
             num_samples=num_samples,
-            num_heterozygous=num_samples - num_homozygous,
+            num_heterozygous=num_heterozygous,
             num_homozygous=num_homozygous,
             sample_ids=sample_ids,
             num_pruned=gmm.num_pruned[i],
-            af=num_samples / population_size,
+            af=af,
         )
         sv_stat.modes.append(mode_stat)
 
@@ -151,6 +153,7 @@ def create_sv_stats_file():
 def run_all_sv(
     *,
     rerun_all_svs: bool = False,
+    num_iterations: int = 1,
     query_chr: Optional[str] = None,
     subset: Optional[List[Tuple[str, int, int]]] = None,
 ):
@@ -189,7 +192,8 @@ def run_all_sv(
             for row in rows:
                 if row.id in processed_sv_ids:
                     continue
-                args.append((row.to_dict(), population_size, sample_ids))
+                for _ in range(num_iterations):
+                    args.append((row.to_dict(), population_size, sample_ids))
             p.starmap(write_sv_stats, args)
             p.close()
             p.join()
@@ -197,4 +201,4 @@ def run_all_sv(
 
 if __name__ == "__main__":
     rerun_all_svs = False if len(sys.argv) < 2 else bool(sys.argv[1])
-    run_all_sv(rerun_all_svs=rerun_all_svs)
+    run_all_sv(rerun_all_svs=rerun_all_svs, num_iterations=7)
