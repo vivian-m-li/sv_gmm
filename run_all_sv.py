@@ -154,6 +154,7 @@ def create_sv_stats_file():
 def run_all_sv(
     *,
     rerun_all_svs: bool = False,
+    run_ambiguous_svs: bool = False,
     num_iterations: int = 1,
     query_chr: Optional[str] = None,
     subset: Optional[List[Tuple[str, int, int]]] = None,
@@ -182,6 +183,12 @@ def run_all_sv(
         if query_chr is not None:
             for _, row in deletions_df[deletions_df["chr"] == query_chr].iterrows():
                 rows.append(row)
+        elif run_ambiguous_svs:
+            with open("1000genomes/svs_to_rerun.txt") as f:
+                for line in f:
+                    sv_id = line.strip()
+                    row = deletions_df[deletions_df["id"] == sv_id].iloc[0]
+                    rows.append(row)
         else:
             for _, row in deletions_df.iterrows():
                 rows.append(row)
@@ -193,7 +200,7 @@ def run_all_sv(
             for row in rows:
                 if row.id in processed_sv_ids:
                     continue
-                for i in range(num_iterations):
+                for i in range(8, num_iterations):
                     args.append((row.to_dict(), population_size, sample_ids, i))
             p.starmap(write_sv_stats, args)
             p.close()
@@ -202,4 +209,4 @@ def run_all_sv(
 
 if __name__ == "__main__":
     rerun_all_svs = False if len(sys.argv) < 2 else bool(sys.argv[1])
-    run_all_sv(rerun_all_svs=rerun_all_svs, num_iterations=7)
+    run_all_sv(rerun_all_svs=rerun_all_svs, run_ambiguous_svs=True, num_iterations=100)

@@ -48,6 +48,34 @@ def concat_processed_sv_files():
                     out.write(line)
 
 
+def concat_multi_processed_sv_files():
+    with open("1000genomes/sv_stats_merged.csv", mode="w", newline="") as out:
+        fieldnames = [field.name for field in fields(SVInfoGMM)]
+        csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
+        csv_writer.writeheader()
+        for file in os.listdir("processed_svs"):
+            if "iteration" not in file:
+                continue
+            with open(f"processed_svs/{file}") as f:
+                for line in f:
+                    out.write(line)
+
+
+def get_ambiguous_svs():
+    df = pd.read_csv("1000genomes/sv_stats_merged.csv")
+    unique_svs = df["id"].unique()
+    rerun_sv_ids = []
+    for sv_id in unique_svs:
+        sv_df = df[df["id"] == sv_id]
+        num_modes = sv_df["num_modes"].unique()
+        if len(num_modes) > 1:
+            rerun_sv_ids.append(sv_id)
+
+    with open("1000genomes/svs_to_rerun.txt", "w") as f:
+        for sv_id in rerun_sv_ids:
+            f.write(f"{sv_id}\n")
+
+
 def get_num_intersecting_genes():
     df = pd.read_csv(
         "1000genomes/intersect_num_overlap.csv", header=None, delimiter="\t"
@@ -185,4 +213,4 @@ def write_ancestry_dissimilarity():
 
 
 if __name__ == "__main__":
-    write_ancestry_dissimilarity()
+    get_ambiguous_svs()
