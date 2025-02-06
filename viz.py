@@ -1233,3 +1233,38 @@ def get_outlier_coverage():
     plt.ylabel("Coverage")
     plt.title("Coverage (# paired end reads) for each sample in each mode")
     plt.show()
+
+
+def bootstrap_runs_histogram():
+    sv_stats_df = pd.read_csv("1000genomes/sv_stats_merged.csv", low_memory=False)
+
+    resolved_df = sv_stats_df.groupby("id").filter(lambda x: len(x) <= 7)
+    ambiguous_df = sv_stats_df.groupby("id").filter(lambda x: len(x) > 7)
+
+    fig = plt.figure()
+    x_labels = ["1 Mode", "2 Modes", "3 Modes"]
+    bottom = np.zeros(3)
+
+    for df, label in zip(
+        [resolved_df, ambiguous_df], ["Resolved SVs", "Ambiguous SVs"]
+    ):
+        unique_svs = df["id"].unique()
+        print("num unique svs", len(unique_svs))
+        data = np.zeros(3)
+        for sv_id in unique_svs:
+            sv_df = df[df["id"] == sv_id]
+            num_modes_count = Counter(sv_df["num_modes"])
+            num_modes = max(num_modes_count, key=num_modes_count.get)
+            if np.isnan(num_modes):
+                print(sv_id)
+                continue
+            num_modes = int(num_modes)
+            idx = 0 if num_modes == 0 else num_modes - 1
+            data[idx] += 1
+
+        plt.bar(x_labels, data, label=label, bottom=bottom)
+        bottom += data
+
+    plt.ylabel("Number of SVs")
+    plt.legend()
+    plt.show()

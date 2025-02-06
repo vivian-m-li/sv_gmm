@@ -213,4 +213,4 @@ def write_ancestry_dissimilarity():
 
 
 if __name__ == "__main__":
-    get_ambiguous_svs()
+    concat_multi_processed_sv_files()
