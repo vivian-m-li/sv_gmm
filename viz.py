@@ -885,17 +885,15 @@ def populate_sample_info(
     R: int,
 ) -> None:
     ancestry_df = pd.read_csv("1000genomes/ancestry.tsv", delimiter="\t")
-    deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+    deletions_df = pd.read_csv(f"1000genomes/deletions_by_chr/chr{chr}.csv")
+    deletions_row = deletions_df[
+        (deletions_df["start"] == L) & (deletions_df["stop"] == R)
+    ].iloc[0]
     for evidence in sv_evidence:
         sample_id = evidence.sample.id
         ancestry_row = ancestry_df[ancestry_df["Sample name"] == sample_id]
         superpopulation = ancestry_row["Superpopulation code"].values[0].split(",")[0]
-        deletions_row = deletions_df[
-            (deletions_df["chr"] == chr)
-            & (deletions_df["start"] == L)
-            & (deletions_df["stop"] == R)
-        ]
-        allele = deletions_row.iloc[0][sample_id]
+        allele = deletions_row[sample_id]
         evidence.sample = Sample(
             id=sample_id,
             sex=ancestry_row["Sex"].values[0],

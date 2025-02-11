@@ -8,7 +8,7 @@ from em import run_gmm
 from em_1d import run_gmm as run_gmm_1d
 from viz import *
 from gmm_types import *
-from profiler import profile, dump_stats
+from profiler import profile, dump_stats, print_stats
 
 
 def sv_viz(data: List[np.ndarray[float]], *, file_name: str):
@@ -156,19 +156,20 @@ def filter_and_plot_sequences_bokeh(
 ) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
     ux = get_unique_x_values(list(y.values()))
 
-    p = figure(
-        title=f"L = {L}, R = {R}",
-        width=800,
-        height=600,
-        x_axis_label="distance from L",  # TODO: this only applies if we know L is the start of the SV
-        y_axis_label="deviation from y=x+b",
-    )
+    if plot_bokeh:
+        p = figure(
+            title=f"L = {L}, R = {R}",
+            width=800,
+            height=600,
+            x_axis_label="distance from L",  # TODO: this only applies if we know L is the start of the SV
+            y_axis_label="deviation from y=x+b",
+        )
 
-    # Background rectangle
-    p.quad(top=sig, bottom=-sig, left=0, right=max(ux) - min(ux), color="#F0F0F0")
+        # Background rectangle
+        p.quad(top=sig, bottom=-sig, left=0, right=max(ux) - min(ux), color="#F0F0F0")
 
-    # y=x line
-    p.line(ux - min(ux), ux - ux, line_dash="dashed", line_width=1, color="black")
+        # y=x line
+        p.line(ux - min(ux), ux - ux, line_dash="dashed", line_width=1, color="black")
 
     mb = np.zeros(
         (len(y), 4)
@@ -199,7 +200,6 @@ def filter_and_plot_sequences_bokeh(
         ]
 
         if len(z) > 0:
-            # TODO: does this assume that the read length is the same for each sample?
             b = int(
                 np.mean(z[1::2]) - np.mean(z[0::2])
             )  # R - L (including read length)
@@ -225,16 +225,20 @@ def filter_and_plot_sequences_bokeh(
                 # if more than 3 pieces of evidence (paired read_length-r ends), then there is an SV here for this sample
                 # include if >=3 (x,y) points within 2 sig distance of y=x+b line
                 if sdl >= 3:
-                    p.line(xp, yp, line_width=2, color=colors[i % len(colors)])
-                    p.scatter(xp, yp, size=6, color=colors[i % len(colors)], alpha=0.6)
                     mb[i, 3] = 1
-                else:  # this sample does not have an SV
-                    p.line(xp, yp, line_width=2, color="#999999")
-                    p.scatter(xp, yp, size=6, color="#999999", alpha=0.6)
+
+                if plot_bokeh:  # remove plotting to improve efficiency
+                    if sdl >= 3:
+                        p.line(xp, yp, line_width=2, color=colors[i % len(colors)])
+                        p.scatter(
+                            xp, yp, size=6, color=colors[i % len(colors)], alpha=0.6
+                        )
+                        mb[i, 3] = 1
+                    else:  # this sample does not have an SV
+                        p.line(xp, yp, line_width=2, color="#999999")
+                        p.scatter(xp, yp, size=6, color="#999999", alpha=0.6)
             else:  # not enough evidence for an SV
                 mb[i, :] = [-np.inf, len(z) // 2, -np.inf, 0]
-                p.line(z[0::2], z[1::2], line_width=2, color="#999999")
-                p.scatter(z[0::2], z[1::2], size=6, color="#999999", alpha=0.6)
                 sv_evidence[i] = Evidence(
                     sample=Sample(id=sample_id),
                     intercept=0,
@@ -244,9 +248,12 @@ def filter_and_plot_sequences_bokeh(
                     mean_insert_size=insert_size_lookup[sample_id],
                 )
 
-    p.grid.grid_line_alpha = 0.3
+                if plot_bokeh:
+                    p.line(z[0::2], z[1::2], line_width=2, color="#999999")
+                    p.scatter(z[0::2], z[1::2], size=6, color="#999999", alpha=0.6)
 
     if plot_bokeh and file_name is not None:
+        p.grid.grid_line_alpha = 0.3
         output_file(f"{file_name}_sequences.html")
         save(p)
 
@@ -264,29 +271,32 @@ def plot_fitted_lines_bokeh(
     sig: int,
     plot_bokeh: bool,
 ) -> np.ndarray[np.ndarray[float]]:
-    p = figure(
-        title="Fitted Lines Plot",
-        width=800,
-        height=600,
-        x_axis_label="Reverse position",
-        y_axis_label="Forward position",
-        tools="pan, wheel_zoom, box_zoom, reset",
-    )
-    hover_tool = HoverTool(
-        tooltips=[("x", "$x{0,0}"), ("y", "$y{0,0}")]
-    )  # Corrected tooltips for hover display
-
-    p.add_tools(hover_tool)
-    # Add a grey polygon for background
     mean_insert_size = int(
         np.mean([e.mean_insert_size for e in sv_evidence_unfiltered])
     )
-    p.patch(
-        [L - mean_insert_size - sig, L + sig, L + sig, L - mean_insert_size - sig],
-        [R - 2 * sig, R + mean_insert_size, R + mean_insert_size + 2 * sig, R],
-        color="grey",
-        line_color="grey",
-    )
+
+    if plot_bokeh:
+        p = figure(
+            title="Fitted Lines Plot",
+            width=800,
+            height=600,
+            x_axis_label="Reverse position",
+            y_axis_label="Forward position",
+            tools="pan, wheel_zoom, box_zoom, reset",
+        )
+        hover_tool = HoverTool(
+            tooltips=[("x", "$x{0,0}"), ("y", "$y{0,0}")]
+        )  # Corrected tooltips for hover display
+
+        p.add_tools(hover_tool)
+
+        # Add a grey polygon for background
+        p.patch(
+            [L - mean_insert_size - sig, L + sig, L + sig, L - mean_insert_size - sig],
+            [R - 2 * sig, R + mean_insert_size, R + mean_insert_size + 2 * sig, R],
+            color="grey",
+            line_color="grey",
+        )
 
     start_points = []
     sv_evidence = []
@@ -299,32 +309,33 @@ def plot_fitted_lines_bokeh(
                 L - evidence.mean_insert_size
             )  # subtract the mean insert size for this sample
             start_y = start_x + row[2]  # intercept
-            p.line([start_x, L], [start_y, L + row[2]], line_width=2, color="red")
-            p.scatter([start_x], [start_y], size=2, color="red", alpha=0.6)
             start_points.append((start_x, start_y))
+
+            if plot_bokeh:
+                p.line([start_x, L], [start_y, L + row[2]], line_width=2, color="red")
+                p.scatter([start_x], [start_y], size=2, color="red", alpha=0.6)
 
             evidence.start_y = start_y
             sv_evidence.append(evidence)
 
     start_points_array = np.array(start_points)
 
-    p.line(
-        [L - mean_insert_size, L],
-        [R, R + mean_insert_size],
-        line_width=5,
-        color="black",
-        line_dash="dashed",
-    )  # y=x dashed line
-    p.x_range.start = L - mean_insert_size
-    p.x_range.end = L
-    p.y_range.start = R
-    p.y_range.end = R + mean_insert_size
-    p.xaxis.major_label_text_font_size = "12pt"
-    p.yaxis.major_label_text_font_size = "12pt"
-    p.xaxis.formatter = NumeralTickFormatter(format="0")
-    p.yaxis.formatter = NumeralTickFormatter(format="0")
-
     if plot_bokeh and file_name is not None:
+        p.line(
+            [L - mean_insert_size, L],
+            [R, R + mean_insert_size],
+            line_width=5,
+            color="black",
+            line_dash="dashed",
+        )  # y=x dashed line
+        p.x_range.start = L - mean_insert_size
+        p.x_range.end = L
+        p.y_range.start = R
+        p.y_range.end = R + mean_insert_size
+        p.xaxis.major_label_text_font_size = "12pt"
+        p.yaxis.major_label_text_font_size = "12pt"
+        p.xaxis.formatter = NumeralTickFormatter(format="0")
+        p.yaxis.formatter = NumeralTickFormatter(format="0")
         output_file(f"{file_name}_fitted_lines.html")
         save(p)
 
@@ -372,7 +383,7 @@ def get_intercepts(
     return points, sv_evidence
 
 
-# @profile
+@profile
 def run_viz_gmm(
     squiggle_data: Dict[str, np.ndarray[float]],
     *,
@@ -459,5 +470,6 @@ def run_viz_gmm(
         #     size_by="insert_size",
         # )
 
-    # dump_stats("run_viz_gmm")
+    dump_stats("run_viz_gmm")
+    quit()
     return gmm, evidence_by_mode

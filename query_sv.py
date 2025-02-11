@@ -89,7 +89,7 @@ def get_reference_samples(
     return ref_samples
 
 
-@profile
+# @profile
 def query_stix(
     l: str,
     r: str,
@@ -164,7 +164,6 @@ def query_stix(
         )
 
     # dump_stats("query_stix")
-    print_stats()
     return squiggle_data
 
 
