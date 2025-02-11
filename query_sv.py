@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from process_data import run_viz_gmm
 from typing import List, Dict
+from profiler import profile, print_stats, dump_stats
 
 
 STIX_SCRIPT = "./query_stix.sh"
@@ -67,21 +68,28 @@ def parse_input(input: str) -> str:
     return giggle_format(chromosome, position)
 
 
+def get_sample_ids():
+    sample_ids = set()
+    with open("1000genomes/sample_ids.txt", "r") as f:
+        for line in f:
+            sample_ids.add(line.strip())
+    return sample_ids
+
+
 def get_reference_samples(
-    df: pd.DataFrame,
     squiggle_data: Dict[str, np.ndarray[float]],
     chr: str,
     start: int,
     stop: int,
 ) -> List[str]:
-    row = df[(df["chr"] == chr) & (df["start"] == start) & (df["stop"] == stop)]
-    samples = [
-        sample_id for sample_id in df.columns[11:-1] if sample_id in squiggle_data
-    ]
+    df = pd.read_csv(f"1000genomes/deletions_by_chr/chr{chr}.csv")
+    row = df[(df["start"] == start) & (df["stop"] == stop)]
+    samples = squiggle_data.keys()
     ref_samples = [col for col in samples if row.iloc[0][col] == "(0, 0)"]
     return ref_samples
 
 
+@profile
 def query_stix(
     l: str,
     r: str,
@@ -128,18 +136,15 @@ def query_stix(
             writer.writerows(processed_stix_output)
 
     chr, start, stop = reverse_giggle_format(l, r)
-    deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
 
     # remove samples queried by stix but missing in the 1000genomes columns
-    sample_ids = set(deletions_df.columns[11:-1])
+    sample_ids = get_sample_ids()
     missing_keys = set(squiggle_data.keys()) - sample_ids
     for key in missing_keys:
         squiggle_data.pop(key, None)
 
     if filter_reference:
-        ref_samples = get_reference_samples(
-            deletions_df, squiggle_data, chr, start, stop
-        )
+        ref_samples = get_reference_samples(squiggle_data, chr, start, stop)
         for ref in ref_samples:
             squiggle_data.pop(ref, None)
 
@@ -158,6 +163,8 @@ def query_stix(
             plot_bokeh=False,
         )
 
+    # dump_stats("query_stix")
+    print_stats()
     return squiggle_data
 
 
@@ -175,11 +182,20 @@ def main():
         type=str,
         help="Right position of the structural variant, format=chromosome:position",
     )
+    parser.add_argument(
+        "-p",
+        type=bool,
+        help="Plot the length and L coordinate of each sample",
+        default=False,
+        nargs="?",
+        const=True,
+    )
 
     args = parser.parse_args()
     l = parse_input(args.l)
     r = parse_input(args.r)
-    query_stix(l, r)
+    p = args.p
+    query_stix(l, r, True, plot=p)
 
 
 if __name__ == "__main__":

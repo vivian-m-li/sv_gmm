@@ -212,5 +212,20 @@ def write_ancestry_dissimilarity():
     results_df.to_csv("1000genomes/ancestry_dissimilarity.csv")
 
 
+def extract_data_from_deletions_df():
+    deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+
+    sample_ids = set(deletions_df.columns[11:-1])
+    with open("1000genomes/sample_ids.txt", "w") as f:
+        for sample_id in sample_ids:
+            f.write(f"{sample_id}\n")
+
+    # split the deletions into separate files by chromosome
+    os.mkdir("1000genomes/deletions_by_chr")
+    for i in range(1, 23):
+        chr_df = deletions_df[deletions_df["chr"] == f"{i}"]
+        chr_df.to_csv(f"1000genomes/deletions_by_chr/chr{i}.csv", index=False)
+
+
 if __name__ == "__main__":
-    concat_multi_processed_sv_files()
+    extract_data_from_deletions_df()

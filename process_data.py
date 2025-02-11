@@ -8,6 +8,7 @@ from em import run_gmm
 from em_1d import run_gmm as run_gmm_1d
 from viz import *
 from gmm_types import *
+from profiler import profile, dump_stats
 
 
 def sv_viz(data: List[np.ndarray[float]], *, file_name: str):
@@ -371,6 +372,7 @@ def get_intercepts(
     return points, sv_evidence
 
 
+# @profile
 def run_viz_gmm(
     squiggle_data: Dict[str, np.ndarray[float]],
     *,
@@ -457,4 +459,5 @@ def run_viz_gmm(
         #     size_by="insert_size",
         # )
 
+    # dump_stats("run_viz_gmm")
     return gmm, evidence_by_mode
