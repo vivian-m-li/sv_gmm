@@ -221,6 +221,7 @@ def extract_data_from_deletions_df():
             f.write(f"{sample_id}\n")
 
     # split the deletions into separate files by chromosome
+    # another option is to create a lookup for row index in deletions_df by chr, start, stop, sample_id and
     os.mkdir("1000genomes/deletions_by_chr")
     for i in range(1, 23):
         chr_df = deletions_df[deletions_df["chr"] == f"{i}"]

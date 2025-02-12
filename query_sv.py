@@ -89,7 +89,6 @@ def get_reference_samples(
     return ref_samples
 
 
-# @profile
 def query_stix(
     l: str,
     r: str,
@@ -163,7 +162,6 @@ def query_stix(
             plot_bokeh=False,
         )
 
-    # dump_stats("query_stix")
     return squiggle_data
 
 

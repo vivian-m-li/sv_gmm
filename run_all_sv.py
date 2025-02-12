@@ -200,7 +200,7 @@ def run_all_sv(
             for row in rows:
                 if row.id in processed_sv_ids:
                     continue
-                for i in range(8, num_iterations):
+                for i in range(1, num_iterations + 1):
                     args.append((row.to_dict(), population_size, sample_ids, i))
             p.starmap(write_sv_stats, args)
             p.close()
@@ -209,4 +209,4 @@ def run_all_sv(
 
 if __name__ == "__main__":
     rerun_all_svs = False if len(sys.argv) < 2 else bool(sys.argv[1])
-    run_all_sv(rerun_all_svs=rerun_all_svs, run_ambiguous_svs=True, num_iterations=100)
+    run_all_sv(rerun_all_svs=rerun_all_svs)
