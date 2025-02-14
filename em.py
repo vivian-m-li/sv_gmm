@@ -167,14 +167,17 @@ def run_em(
     n, mu, cov, p, logL = init_em(x, num_modes)  # initialize parameters
     all_params.append(GMM2D(mu, cov, p, logL[0]))
 
+    # only need to estimate mean and covariance matrix if we have 1 mode
+    if num_modes == 1:
+        return all_params, 0
+
     max_iterations = 30
     i = 0
     while i < max_iterations:
-        # update likelihood
-        gmm = em(x, num_modes, n, mu, cov, p)
+        prev_gmm = all_params[-1]
+        gmm = em(x, num_modes, n, prev_gmm.mu, prev_gmm.cov, prev_gmm.p)
         logL.append(gmm.logL)
         all_params.append(gmm)
-        mu, cov, p = gmm.mu, gmm.cov, gmm.p
 
         # Convergence check
         if abs(logL[-1] - logL[-2]) < 0.05:
