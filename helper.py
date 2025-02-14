@@ -7,11 +7,14 @@ from scipy.spatial.distance import braycurtis
 from dataclasses import fields
 from gmm_types import *
 
+PROCESSED_STIX_DIR = "processed_stix_output"
+PROCESSED_SVS_DIR = "processed_svs"
+
 
 def find_missing_sample_ids():
     sample_ids = set()
-    for file in os.listdir("processed_stix_output"):
-        with open(f"processed_stix_output/{file}") as f:
+    for file in os.listdir(PROCESSED_STIX_DIR):
+        with open(f"{PROCESSED_STIX_DIR}/{file}") as f:
             for line in f:
                 sample_id = line.strip().split(",")[0]
                 if sample_id[0].isalpha():
@@ -29,7 +32,9 @@ def find_missing_sample_ids():
 
 
 def find_missing_processed_svs():
-    processed_sv_ids = set([file.strip(".csv") for file in os.listdir("processed_svs")])
+    processed_sv_ids = set(
+        [file.strip(".csv") for file in os.listdir(PROCESSED_SVS_DIR)]
+    )
     deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
     missing = set(deletions_df["id"]) - processed_sv_ids
     print(len(missing))
@@ -42,8 +47,8 @@ def concat_processed_sv_files():
         fieldnames = [field.name for field in fields(SVInfoGMM)]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
         csv_writer.writeheader()
-        for file in os.listdir("processed_svs"):
-            with open(f"processed_svs/{file}") as f:
+        for file in os.listdir(PROCESSED_SVS_DIR):
+            with open(f"{PROCESSED_SVS_DIR}/{file}") as f:
                 for line in f:
                     out.write(line)
 
@@ -53,10 +58,10 @@ def concat_multi_processed_sv_files():
         fieldnames = [field.name for field in fields(SVInfoGMM)]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
         csv_writer.writeheader()
-        for file in os.listdir("processed_svs"):
+        for file in os.listdir(PROCESSED_SVS_DIR):
             if "iteration" not in file:
                 continue
-            with open(f"processed_svs/{file}") as f:
+            with open(f"{PROCESSED_SVS_DIR}/{file}") as f:
                 for line in f:
                     out.write(line)
 
@@ -152,7 +157,7 @@ def get_mean_coverage():
         chr = sv["chr"]
         L = sv["start"]
         R = sv["stop"]
-        file = f"processed_stix_output/{chr}:{L}-{L}_{chr}:{R}-{R}.csv"
+        file = f"{PROCESSED_STIX_DIR}/{chr}:{L}-{L}_{chr}:{R}-{R}.csv"
         squiggle_data = {}
         with open(file, newline="") as csvfile:
             reader = csv.reader(csvfile)
@@ -228,5 +233,28 @@ def extract_data_from_deletions_df():
         chr_df.to_csv(f"1000genomes/deletions_by_chr/chr{i}.csv", index=False)
 
 
+def get_insert_size_diff():
+    df = pd.read_csv(
+        "1000genomes/insert_sizes_scraped.csv",
+        dtype={"sample_id": str, "mean_insert_size": int},
+    )
+    df2 = pd.read_csv(
+        "1000genomes/insert_sizes.csv",
+        dtype={"sample_id": str, "mean_insert_size": float},
+    )
+
+    df2 = df2.rename(columns={"mean_insert_size": "true_mean_insert_size"})
+    # join df2 to df
+    df = df.merge(
+        df2,
+        on="sample_id",
+        how="inner",
+    )
+    df["diff"] = abs(df["mean_insert_size"] - df["true_mean_insert_size"])
+    mean_diff = df["diff"].mean()
+    print(mean_diff)
+    df.to_csv("1000genomes/insert_size_compare.csv", index=False)
+
+
 if __name__ == "__main__":
-    extract_data_from_deletions_df()
+    concat_processed_sv_files()

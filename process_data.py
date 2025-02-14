@@ -398,10 +398,10 @@ def run_viz_gmm(
     if insert_size_lookup is None:
         insert_size_df = pd.read_csv(
             "1000genomes/insert_sizes.csv",
-            dtype={"sample_id": str, "mean_insert_size": int},
+            dtype={"sample_id": str, "mean_insert_size": float},
         )
         insert_size_lookup = {
-            sample_id: mean_insert_size
+            sample_id: int(mean_insert_size)
             for sample_id, mean_insert_size in insert_size_df.values
         }
 
