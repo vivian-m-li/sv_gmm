@@ -6,6 +6,7 @@ import csv
 import pandas as pd
 import numpy as np
 from process_data import run_viz_gmm
+from run_dirichlet import dirichlet
 from typing import List, Dict
 from profiler import profile, print_stats, dump_stats
 
@@ -95,6 +96,7 @@ def query_stix(
     run_gmm: bool = True,
     *,
     filter_reference: bool = True,
+    single_trial: bool = True,
     plot: bool = True,
 ):
     for directory in [FILE_DIR, PROCESSED_FILE_DIR, PLOT_DIR]:
@@ -152,15 +154,28 @@ def query_stix(
             # print("No structural variants found in this region.")
             return
 
-        run_viz_gmm(
-            squiggle_data,
-            file_name=f"{PLOT_DIR}/{file_name}",
-            chr=chr,
-            L=start,
-            R=stop,
-            plot=plot,
-            plot_bokeh=False,
-        )
+        if single_trial:
+            run_viz_gmm(
+                squiggle_data,
+                file_name=f"{PLOT_DIR}/{file_name}",
+                chr=chr,
+                L=start,
+                R=stop,
+                plot=plot,
+                plot_bokeh=False,
+            )
+        else:
+            dirichlet(
+                squiggle_data,
+                **{
+                    "file_name": f"{PLOT_DIR}/{file_name}",
+                    "chr": chr,
+                    "L": start,
+                    "R": stop,
+                    "plot": plot,
+                    "plot_bokeh": False,
+                },
+            )
 
     return squiggle_data
 
@@ -187,12 +202,21 @@ def main():
         nargs="?",
         const=True,
     )
+    parser.add_argument(
+        "-d",
+        type=bool,
+        help="Rerun the SV until >= 80% confident in the outcome",
+        default=False,
+        nargs="?",
+        const=True,
+    )
 
     args = parser.parse_args()
     l = parse_input(args.l)
     r = parse_input(args.r)
     p = args.p
-    query_stix(l, r, True, plot=p)
+    d = args.d
+    query_stix(l, r, True, single_trial=not d, plot=p)
 
 
 if __name__ == "__main__":

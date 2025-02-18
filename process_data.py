@@ -382,6 +382,17 @@ def get_intercepts(
     return points, sv_evidence
 
 
+def get_insert_size_lookup() -> Dict[str, int]:
+    insert_size_df = pd.read_csv(
+        "1000genomes/insert_sizes.csv",
+        dtype={"sample_id": str, "mean_insert_size": float},
+    )
+    return {
+        sample_id: int(mean_insert_size)
+        for sample_id, mean_insert_size in insert_size_df.values
+    }
+
+
 def run_viz_gmm(
     squiggle_data: Dict[str, np.ndarray[float]],
     *,
@@ -394,16 +405,9 @@ def run_viz_gmm(
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
     insert_size_lookup: Optional[Dict[str, int]] = None,
-) -> None:
+):
     if insert_size_lookup is None:
-        insert_size_df = pd.read_csv(
-            "1000genomes/insert_sizes.csv",
-            dtype={"sample_id": str, "mean_insert_size": float},
-        )
-        insert_size_lookup = {
-            sample_id: int(mean_insert_size)
-            for sample_id, mean_insert_size in insert_size_df.values
-        }
+        insert_size_lookup = get_insert_size_lookup()
 
     # plots that don't update data format
     if plot_bokeh:
