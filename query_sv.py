@@ -6,7 +6,7 @@ import csv
 import pandas as pd
 import numpy as np
 from process_data import run_viz_gmm
-from run_dirichlet import dirichlet
+from run_dirichlet import run_dirichlet
 from typing import List, Dict
 from profiler import profile, print_stats, dump_stats
 
@@ -165,7 +165,7 @@ def query_stix(
                 plot_bokeh=False,
             )
         else:
-            dirichlet(
+            run_dirichlet(
                 squiggle_data,
                 **{
                     "file_name": f"{PLOT_DIR}/{file_name}",

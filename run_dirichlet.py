@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import seaborn as sns
+from scipy.stats import dirichlet
 from collections import Counter
 from process_data import run_viz_gmm
 from gmm_types import *
@@ -30,7 +32,10 @@ def animate_dirichlet(ps):
     ax.set_xlabel("Trials")
     ax.set_ylabel("Probability")
 
-    lines = [ax.plot([], [], label=f"Mode {i+1}", color=COLORS[i])[0] for i in range(3)]
+    lines = [
+        ax.plot([], [], label=f"{i+1} mode{'s' if i > 0 else ''}", color=COLORS[i])[0]
+        for i in range(3)
+    ]
     ax.legend()
 
     def init():
@@ -53,12 +58,35 @@ def animate_dirichlet(ps):
     plt.show()
 
 
-def dirichlet(squiggle_data, **kwargs):
+def animate_dirichlet_heatmap(history):
+    """Animates the evolution of the Dirichlet distribution heatmap over trials."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+
+    def update(frame):
+        ax.clear()
+        alpha = history[frame]
+        samples = dirichlet(alpha).rvs(size=10000)
+        x = samples[:, 0] + 0.5 * samples[:, 1]
+        y = np.sqrt(3) / 2 * samples[:, 1]
+        sns.kdeplot(x=x, y=y, fill=True, cmap="Blues", levels=30, ax=ax)
+        # ax.hexbin(x, y, gridsize=50, cmap="Blues")
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, np.sqrt(3) / 2)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_title(f"Dirichlet Distribution Heatmap - Trial {frame+1}")
+
+    ani = animation.FuncAnimation(fig, update, frames=len(history), repeat=False)
+    plt.show()
+
+
+def run_dirichlet(squiggle_data, **kwargs):
     display_output = kwargs.get("plot", False)
 
     alphas = np.array([1, 1, 1])  # initialize alpha values
     outcomes = []  # num_modes
     ps = []  # probabilities over time
+    history = []  # alphas over time
     gmms = []
     n = 0
     while n < MAX_N:
@@ -68,6 +96,7 @@ def dirichlet(squiggle_data, **kwargs):
 
         alphas = update_dirichlet(alphas, outcomes)
         probabilities = alphas / np.sum(alphas)
+        history.append(alphas.copy())
         ps.append(probabilities)
 
         if display_output:
@@ -85,5 +114,7 @@ def dirichlet(squiggle_data, **kwargs):
         n += 1
 
     if display_output:
+        animate_dirichlet_heatmap(history)
         animate_dirichlet(ps)
+
     return gmms, ps
