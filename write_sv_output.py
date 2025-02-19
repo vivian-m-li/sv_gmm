@@ -7,11 +7,8 @@ from gmm_types import *
 from typing import Set
 
 
-FILE_DIR = "processed_svs"
-
-
-def write_sv_file(sv: SVInfoGMM, iteration: int):
-    with open(f"{FILE_DIR}/{sv.id}_iteration={iteration}.csv", mode="w") as file:
+def write_sv_file(sv: SVInfoGMM, file_dir: str, iteration: int):
+    with open(f"{file_dir}/{sv.id}_iteration={iteration}.csv", mode="w") as file:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
         csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
         csv_writer.writerow(asdict(sv))
@@ -69,10 +66,11 @@ def write_sv_stats(
     gmm: Optional[GMM],
     evidence_by_mode: List[List[Evidence]],
     population_size: int,
+    file_dir: str,
     iteration: int = 0,
 ) -> None:
     if gmm is None:
-        write_sv_file(sv_stat, iteration)
+        write_sv_file(sv_stat, file_dir, iteration)
         return
 
     sv_stat.num_pruned = sum(gmm.num_pruned) + len(gmm.outliers)
@@ -126,7 +124,7 @@ def write_sv_stats(
             if mode_coords[i][1] > mode_coords[i + 1][0]:
                 sv_stat.overlap_between_modes = True
 
-    write_sv_file(sv_stat, iteration)
+    write_sv_file(sv_stat, file_dir, iteration)
 
 
 def dataclass_to_columns(dataclass_type):

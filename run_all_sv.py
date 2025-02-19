@@ -4,8 +4,10 @@ import pandas as pd
 import multiprocessing
 from process_data import *
 from gmm_types import *
-from write_sv_output import FILE_DIR, write_sv_stats, init_sv_stat_row, write_sv_file
+from write_sv_output import write_sv_stats, init_sv_stat_row, write_sv_file
 from typing import Set
+
+FILE_DIR = "processed_svs"
 
 
 def run_all_sv_wrapper(
@@ -25,7 +27,7 @@ def run_all_sv_wrapper(
             plot_bokeh=False,
         )
 
-    write_sv_stats(sv_stat, gmm, evidence_by_mode, population_size, iteration)
+    write_sv_stats(sv_stat, gmm, evidence_by_mode, FILE_DIR, population_size, iteration)
 
 
 def run_all_sv(

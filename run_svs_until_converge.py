@@ -7,6 +7,8 @@ from run_dirichlet import run_dirichlet
 from typing import Set
 
 
+FILE_DIR = "processed_svs_converge"
+
 def run_dirichlet_wrapper(row: Dict, population_size: int, sample_set: Set[int]):
     sv_stat, squiggle_data = init_sv_stat_row(row, sample_set)
     if len(squiggle_data) == 0:
@@ -25,7 +27,7 @@ def run_dirichlet_wrapper(row: Dict, population_size: int, sample_set: Set[int])
         )
 
     for i, (gmm, evidence_by_mode) in enumerate(gmms):
-        write_sv_stats(sv_stat, gmm, evidence_by_mode, population_size, i)
+        write_sv_stats(sv_stat, gmm, evidence_by_mode, population_size, FILE_DIR, i)
 
 
 def run_svs_until_convergence():
