@@ -91,11 +91,10 @@ def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]
     gmms = []  # keep track of output gmms
     n = 0
     while n < MAX_N:
-        gmm, evidence_by_mode = run_trial(
-            squiggle_data, **kwargs
-        )  # outputs tuple of gmm and evidence_by_mode
+        gmm, evidence_by_mode = run_trial(squiggle_data, **kwargs) 
         gmms.append((gmm, evidence_by_mode))
-        outcomes.append(gmm.num_modes)
+        num_modes = 1 if gmm is None else gmm.num_modes
+        outcomes.append(num_modes)
 
         alpha = update_dirichlet(alpha, outcomes)
         probabilities = alpha / np.sum(alpha)
@@ -104,7 +103,7 @@ def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]
 
         if display_output:
             print(
-                f"Trial {n + 1}: outcome={gmm.num_modes}, probabilities={probabilities}"
+                f"Trial {n + 1}: outcome={num_modes}, probabilities={probabilities}"
             )
 
         if np.max(probabilities) > 0.95:

@@ -29,6 +29,8 @@ def run_dirichlet_wrapper(row: Dict, population_size: int, sample_set: Set[int])
 
     for i, (gmm, evidence_by_mode) in enumerate(gmms):
         write_sv_stats(sv_stat, gmm, evidence_by_mode, population_size, FILE_DIR, i)
+    
+    print(f"{row['chr']}:{row["start"]}:{row["stop"]}")
 
 
 def run_svs_until_convergence():
@@ -39,7 +41,7 @@ def run_svs_until_convergence():
 
     rows = []
     # test with a small sample first
-    deletions_df = deletions_df.head(50)
+    deletions_df = deletions_df.head(20)
     for _, row in deletions_df.iterrows():
         rows.append(row)
 

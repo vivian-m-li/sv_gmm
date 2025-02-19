@@ -192,7 +192,7 @@ def filter_and_plot_sequences_bokeh(
         #             0  # setting the values to nan was giving me an error on the synthetic data
         #         )
 
-        z = z[z != 0]
+        z = z[(z != 0) & (~np.isnan(z))]
         z_filtered = z.copy()
         paired_ends = [
             [z_filtered[i], z_filtered[i + 1]] for i in range(0, len(z_filtered), 2)
@@ -434,7 +434,7 @@ def run_viz_gmm(
     )
 
     if len(points) == 0:
-        warnings.warn("No structural variants found in this region.")
+        # warnings.warn("No structural variants found in this region.")
         return None, []
 
     if gmm_model == "2d":
