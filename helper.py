@@ -41,6 +41,7 @@ def find_missing_processed_svs():
     print(missing)
     return missing
 
+
 def get_ambiguous_svs():
     df = pd.read_csv("1000genomes/sv_stats_merged.csv")
     unique_svs = df["id"].unique()
