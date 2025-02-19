@@ -2,12 +2,13 @@ import pandas as pd
 import multiprocessing
 from process_data import *
 from gmm_types import *
-from write_sv_output import write_sv_stats, init_sv_stat_row, write_sv_file
+from write_sv_output import write_sv_stats, init_sv_stat_row, concat_multi_processed_sv_files
 from run_dirichlet import run_dirichlet
 from typing import Set
 
 
 FILE_DIR = "processed_svs_converge"
+OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
 def run_dirichlet_wrapper(row: Dict, population_size: int, sample_set: Set[int]):
     sv_stat, squiggle_data = init_sv_stat_row(row, sample_set)
@@ -38,7 +39,7 @@ def run_svs_until_convergence():
 
     rows = []
     # test with a small sample first
-    deletions_df = deletions_df[deletions_df["chr"] == "1"].head(10)
+    deletions_df = deletions_df.head(50)
     for _, row in deletions_df.iterrows():
         rows.append(row)
 
@@ -51,6 +52,8 @@ def run_svs_until_convergence():
         p.starmap(run_dirichlet_wrapper, args)
         p.close()
         p.join()
+
+    concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME)
 
 
 if __name__ == "__main__":

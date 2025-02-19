@@ -15,7 +15,7 @@ def run_trial(squiggle_data, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
     kwargs["plot"] = False
     kwargs["plot_bokeh"] = False
     gmm, evidence_by_mode = run_viz_gmm(squiggle_data, **kwargs)
-    return (gmm, evidence_by_mode)
+    return gmm, evidence_by_mode
 
 
 def update_dirichlet(alphas: np.ndarray, outcomes: List[int]) -> np.ndarray:
@@ -91,10 +91,10 @@ def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]
     gmms = []  # keep track of output gmms
     n = 0
     while n < MAX_N:
-        gmm = run_trial(
+        gmm, evidence_by_mode = run_trial(
             squiggle_data, **kwargs
         )  # outputs tuple of gmm and evidence_by_mode
-        gmms.append(gmm)
+        gmms.append((gmm, evidence_by_mode))
         outcomes.append(gmm.num_modes)
 
         alpha = update_dirichlet(alpha, outcomes)

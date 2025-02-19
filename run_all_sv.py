@@ -4,11 +4,11 @@ import pandas as pd
 import multiprocessing
 from process_data import *
 from gmm_types import *
-from write_sv_output import write_sv_stats, init_sv_stat_row, write_sv_file
+from write_sv_output import write_sv_stats, init_sv_stat_row, concat_multi_processed_sv_files
 from typing import Set
 
 FILE_DIR = "processed_svs"
-
+OUTPUT_FILE_NAME = "sv_stats.csv"
 
 def run_all_sv_wrapper(
     row: Dict, population_size: int, sample_set: Set[int], iteration: int = 0
@@ -27,7 +27,7 @@ def run_all_sv_wrapper(
             plot_bokeh=False,
         )
 
-    write_sv_stats(sv_stat, gmm, evidence_by_mode, FILE_DIR, population_size, iteration)
+    write_sv_stats(sv_stat, gmm, evidence_by_mode, population_size, FILE_DIR, iteration)
 
 
 def run_all_sv(
@@ -84,6 +84,8 @@ def run_all_sv(
             p.starmap(run_all_sv_wrapper, args)
             p.close()
             p.join()
+        
+    concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME)
 
 
 if __name__ == "__main__":

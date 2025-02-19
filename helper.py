@@ -41,31 +41,6 @@ def find_missing_processed_svs():
     print(missing)
     return missing
 
-
-def concat_processed_sv_files():
-    with open("1000genomes/sv_stats.csv", mode="w", newline="") as out:
-        fieldnames = [field.name for field in fields(SVInfoGMM)]
-        csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
-        csv_writer.writeheader()
-        for file in os.listdir(PROCESSED_SVS_DIR):
-            with open(f"{PROCESSED_SVS_DIR}/{file}") as f:
-                for line in f:
-                    out.write(line)
-
-
-def concat_multi_processed_sv_files():
-    with open("1000genomes/sv_stats_merged.csv", mode="w", newline="") as out:
-        fieldnames = [field.name for field in fields(SVInfoGMM)]
-        csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
-        csv_writer.writeheader()
-        for file in os.listdir(PROCESSED_SVS_DIR):
-            if "iteration" not in file:
-                continue
-            with open(f"{PROCESSED_SVS_DIR}/{file}") as f:
-                for line in f:
-                    out.write(line)
-
-
 def get_ambiguous_svs():
     df = pd.read_csv("1000genomes/sv_stats_merged.csv")
     unique_svs = df["id"].unique()
@@ -257,4 +232,4 @@ def get_insert_size_diff():
 
 
 if __name__ == "__main__":
-    concat_processed_sv_files()
+    get_num_new_svs()

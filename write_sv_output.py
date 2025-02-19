@@ -6,6 +6,29 @@ from process_data import *
 from gmm_types import *
 from typing import Set
 
+def concat_processed_sv_files(file_dir: str, output_file_name: str):
+    with open(f"1000genomes/{output_file_name}", mode="w", newline="") as out:
+        fieldnames = [field.name for field in fields(SVInfoGMM)]
+        csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
+        csv_writer.writeheader()
+        for file in os.listdir(file_dir):
+            with open(f"{file_dir}/{file}") as f:
+                for line in f:
+                    out.write(line)
+
+
+def concat_multi_processed_sv_files(file_dir: str, output_file_name: str):
+    with open(f"1000genomes/{output_file_name}", mode="w", newline="") as out:
+        fieldnames = [field.name for field in fields(SVInfoGMM)]
+        csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
+        csv_writer.writeheader()
+        for file in os.listdir(file_dir):
+            if "iteration" not in file:
+                continue
+            with open(f"{file_dir}/{file}") as f:
+                for line in f:
+                    out.write(line)
+
 
 def write_sv_file(sv: SVInfoGMM, file_dir: str, iteration: int):
     with open(f"{file_dir}/{sv.id}_iteration={iteration}.csv", mode="w") as file:
