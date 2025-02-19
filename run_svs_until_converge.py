@@ -1,6 +1,5 @@
 import sys
 import os
-import csv
 import pandas as pd
 import multiprocessing
 from process_data import *
