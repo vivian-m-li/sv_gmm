@@ -4,7 +4,28 @@ import pandas as pd
 import multiprocessing
 from process_data import *
 from gmm_types import *
-from write_sv_output import FILE_DIR, write_sv_stats
+from write_sv_output import FILE_DIR, write_sv_stats, init_sv_stat_row, write_sv_file
+from typing import Set
+
+
+def run_all_sv_wrapper(
+    row: Dict, population_size: int, sample_set: Set[int], iteration: int = 0
+):
+    sv_stat, squiggle_data = init_sv_stat_row(row, sample_set)
+    if len(squiggle_data) == 0:
+        gmm, evidence_by_mode = None, []
+    else:
+        gmm, evidence_by_mode = run_viz_gmm(
+            squiggle_data,
+            file_name=None,
+            chr=row["chr"],
+            L=row["start"],
+            R=row["stop"],
+            plot=False,
+            plot_bokeh=False,
+        )
+
+    write_sv_stats(sv_stat, gmm, evidence_by_mode, population_size, iteration)
 
 
 def run_all_sv(
@@ -58,7 +79,7 @@ def run_all_sv(
                     continue
                 for i in range(1, num_iterations + 1):
                     args.append((row.to_dict(), population_size, sample_ids, i))
-            p.starmap(write_sv_stats, args)
+            p.starmap(run_all_sv_wrapper, args)
             p.close()
             p.join()
 

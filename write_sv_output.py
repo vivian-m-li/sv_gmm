@@ -1,8 +1,5 @@
-import sys
-import os
 import csv
 import pandas as pd
-import multiprocessing
 from dataclasses import fields, asdict
 from query_sv import query_stix, giggle_format
 from process_data import *
@@ -28,12 +25,7 @@ def get_reference_samples(
     return ref_samples
 
 
-def write_sv_stats(
-    row: Dict,
-    population_size: int,
-    sample_set: Set[int],
-    iteration: int = 0,
-) -> None:
+def init_sv_stat_row(row: Dict, sample_set: Set[int]) -> Tuple[SVInfoGMM, Dict]:
     sv_stat = SVInfoGMM(
         id=row["id"],
         chr=row["chr"],
@@ -53,7 +45,6 @@ def write_sv_stats(
         overlap_between_modes=False,
         modes=[],
     )
-
     start = giggle_format(str(row["chr"]), row["start"])
     end = giggle_format(str(row["chr"]), row["stop"])
 
@@ -70,20 +61,16 @@ def write_sv_stats(
     for ref in reference_samples:
         squiggle_data.pop(ref, None)
 
-    if len(squiggle_data) == 0:
-        write_sv_file(sv_stat, iteration)
-        return
+    return sv_stat, squiggle_data
 
-    gmm, evidence_by_mode = run_viz_gmm(
-        squiggle_data,
-        file_name=None,
-        chr=row["chr"],
-        L=row["start"],
-        R=row["stop"],
-        plot=False,
-        plot_bokeh=False,
-    )
 
+def write_sv_stats(
+    sv_stat: SVInfoGMM,
+    gmm: Optional[GMM],
+    evidence_by_mode: List[List[Evidence]],
+    population_size: int,
+    iteration: int = 0,
+) -> None:
     if gmm is None:
         write_sv_file(sv_stat, iteration)
         return

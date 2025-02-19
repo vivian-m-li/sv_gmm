@@ -6,18 +6,19 @@ from scipy.stats import dirichlet
 from collections import Counter
 from process_data import run_viz_gmm
 from gmm_types import *
+from typing import List, Tuple
 
 MAX_N = 1000
 
 
-def run_trial(squiggle_data, **kwargs):
+def run_trial(squiggle_data, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
     kwargs["plot"] = False
     kwargs["plot_bokeh"] = False
     gmm, evidence_by_mode = run_viz_gmm(squiggle_data, **kwargs)
-    return gmm
+    return (gmm, evidence_by_mode)
 
 
-def update_dirichlet(alphas, outcomes):
+def update_dirichlet(alphas: np.ndarray, outcomes: List[int]) -> np.ndarray:
     counts = Counter(outcomes)
     for num_modes, count in counts.items():
         alphas[num_modes - 1] += count
@@ -80,23 +81,25 @@ def animate_dirichlet_heatmap(history):
     plt.show()
 
 
-def run_dirichlet(squiggle_data, **kwargs):
+def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]:
     display_output = kwargs.get("plot", False)
 
-    alphas = np.array([1, 1, 1])  # initialize alpha values
+    alpha = np.array([1, 1, 1])  # initialize alpha values
     outcomes = []  # num_modes
     ps = []  # probabilities over time
-    history = []  # alphas over time
-    gmms = []
+    alphas = []  # alphas over time
+    gmms = []  # keep track of output gmms
     n = 0
     while n < MAX_N:
-        gmm = run_trial(squiggle_data, **kwargs)
+        gmm = run_trial(
+            squiggle_data, **kwargs
+        )  # outputs tuple of gmm and evidence_by_mode
         gmms.append(gmm)
         outcomes.append(gmm.num_modes)
 
-        alphas = update_dirichlet(alphas, outcomes)
-        probabilities = alphas / np.sum(alphas)
-        history.append(alphas.copy())
+        alpha = update_dirichlet(alpha, outcomes)
+        probabilities = alpha / np.sum(alpha)
+        alphas.append(alpha.copy())
         ps.append(probabilities)
 
         if display_output:
@@ -114,7 +117,7 @@ def run_dirichlet(squiggle_data, **kwargs):
         n += 1
 
     if display_output:
-        animate_dirichlet_heatmap(history)
+        animate_dirichlet_heatmap(alphas)
         animate_dirichlet(ps)
 
     return gmms, ps
