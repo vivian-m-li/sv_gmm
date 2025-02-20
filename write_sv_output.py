@@ -6,6 +6,7 @@ from process_data import *
 from gmm_types import *
 from typing import Set
 
+
 def concat_processed_sv_files(file_dir: str, output_file_name: str):
     with open(f"1000genomes/{output_file_name}", mode="w", newline="") as out:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
@@ -158,3 +159,23 @@ def create_sv_stats_file():
     df_fields = [field.name for field in fields(SVInfoGMM)]
     df = pd.DataFrame(columns=df_fields)
     return df
+
+
+def write_posterior_distributions(sv_stat, alphas, posteriors, file_dir):
+    file = f"{file_dir}/{sv_stat.id}_posteriors.csv"
+    fieldnames = [
+        "trial",
+        "alpha",
+        "posterior_probabilities",
+        "posterior_variances",
+    ]
+    csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
+    for i, (alpha, (probs, vars)) in enumerate(zip(alphas, posteriors)):
+        csv_writer.writerow(
+            {
+                "trial": i + 1,
+                "alpha": alpha,
+                "posterior_probabilities": probs,
+                "posterior_variances": vars,
+            }
+        )

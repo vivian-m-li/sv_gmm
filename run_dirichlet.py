@@ -3,57 +3,65 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import seaborn as sns
 import pandas as pd
+from scipy.integrate import nquad
 from scipy.stats import dirichlet
 from collections import Counter
 from process_data import run_viz_gmm
 from gmm_types import *
 from typing import List, Tuple
 
-MAX_N = 1000
+MAX_N = 100
+
+"""Visualizations of the Dirichlet process"""
 
 
-def run_trial(squiggle_data, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
-    kwargs["plot"] = False
-    kwargs["plot_bokeh"] = False
-    gmm, evidence_by_mode = run_viz_gmm(squiggle_data, **kwargs)
-    return gmm, evidence_by_mode
-
-
-def update_dirichlet(alphas: np.ndarray, outcomes: List[int]) -> np.ndarray:
-    counts = Counter(outcomes)
-    for num_modes, count in counts.items():
-        alphas[num_modes - 1] += count
-    return alphas
-
-
-def animate_dirichlet(ps):
+def animate_dirichlet(posterior_distributions):
     """Animates the evolution of the Dirichlet probabilities over trials."""
     fig, ax = plt.subplots()
     ax.set_ylim(0, 1)
-    ax.set_xlim(1, len(ps))
+    ax.set_xlim(1, len(posterior_distributions))
     ax.set_xlabel("Trials")
-    ax.set_ylabel("Probability")
 
+    ax.set_ylabel("Probability")
     lines = [
         ax.plot([], [], label=f"{i+1} mode{'s' if i > 0 else ''}", color=COLORS[i])[0]
         for i in range(3)
+    ]
+    error_bands = [
+        ax.fill_between([], [], [], color=COLORS[i], alpha=0.2) for i in range(3)
     ]
     ax.legend()
 
     def init():
         for line in lines:
             line.set_data([], [])
-        return lines
+        return lines + error_bands
 
     def update(frame):
         x = np.arange(frame + 1) + 1
         for i, line in enumerate(lines):
-            y = [h[i] for h in ps[: frame + 1]]
+            y = [h[0][i] for h in posterior_distributions[: frame + 1]]
             line.set_data(x, y)
-        return lines
+        for i, band in enumerate(error_bands):
+            y = [h[0][i] for h in posterior_distributions[: frame + 1]]
+            yerr = [np.sqrt(h[1][i]) for h in posterior_distributions[: frame + 1]]
+            band.remove()
+            error_bands[i] = ax.fill_between(
+                x,
+                np.array(y) - np.array(yerr),
+                np.array(y) + np.array(yerr),
+                color=COLORS[i],
+                alpha=0.2,
+            )
+        return lines + error_bands
 
     ani = animation.FuncAnimation(
-        fig, update, frames=len(ps), init_func=init, blit=False, repeat=True
+        fig,
+        update,
+        frames=len(posterior_distributions),
+        init_func=init,
+        blit=False,
+        repeat=True,
     )
     ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
     ax.legend(loc="upper left")
@@ -113,48 +121,79 @@ def animate_dirichlet_history(df):
     outcomes = df["num_modes"].values
     alphas = [alpha]
     for i in range(len(outcomes)):
-        alpha = update_dirichlet(alpha, outcomes[: i + 1])
+        # alpha = update_dirichlet(alpha, outcomes[: i + 1]) #TODO: fix this
         alphas.append(alpha.copy())
     animate_dirichlet_heatmap(alphas)
+
+
+def run_trial(squiggle_data, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
+    kwargs["plot"] = False
+    kwargs["plot_bokeh"] = False
+    gmm, evidence_by_mode = run_viz_gmm(squiggle_data, **kwargs)
+    return gmm, evidence_by_mode
 
 
 def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]:
     display_output = kwargs.get("plot", False)
 
     alpha = np.array([1, 1, 1])  # initialize alpha values
-    outcomes = []  # num_modes
-    ps = [alpha / np.sum(alpha)]  # probabilities over time
+    counts = np.array([0, 0, 0])  # count of num_modes
     alphas = [alpha]  # alphas over time
+    posterior_distributions = []  # distributions over time
     gmms = []  # keep track of output gmms
     n = 0
     while n < MAX_N:
+        n += 1  # number of trials
+
+        # Run the model to get the next outcome
         gmm, evidence_by_mode = run_trial(squiggle_data, **kwargs)
         gmms.append((gmm, evidence_by_mode))
         num_modes = 1 if gmm is None else gmm.num_modes
-        outcomes.append(num_modes)
+        counts[num_modes - 1] += 1
 
-        alpha = update_dirichlet(alpha, outcomes)
-        probabilities = alpha / np.sum(alpha)
-        alphas.append(alpha.copy())
-        ps.append(probabilities)
+        # Update the alpha values (used as a conjugate prior for Bayes)
+        alpha_posterior = alpha + counts
+        alphas.append(alpha_posterior)
+
+        # Get the posterior distributions for each of the 3 modes
+        posterior_probs = alpha_posterior / np.sum(alpha_posterior)
+        sum_alpha_post = np.sum(alpha_posterior)
+        posterior_var = (alpha_posterior * (sum_alpha_post - alpha_posterior)) / (
+            sum_alpha_post**2 * (sum_alpha_post + 1)
+        )
+        posterior_distributions.append((posterior_probs, posterior_var))
+
+        # Calculate the difference in means between the two most probable modes
+        # sort posterior_mus
+        posterior_mu_sorted_indices = np.argsort(posterior_probs)
+        posterior_mu_sorted = posterior_probs[posterior_mu_sorted_indices]
+        diff_in_means = posterior_mu_sorted[-1] - posterior_mu_sorted[-2]
+
+        # Calculate the confidence interval for our difference in means
+        diff_var = (posterior_var[posterior_mu_sorted_indices[-1]]) / n + (
+            posterior_var[[posterior_mu_sorted_indices[-2]]]
+        ) / n
+        confidence = 1.96 * np.sqrt(diff_var)
+        ci = [diff_in_means - confidence, diff_in_means + confidence]
 
         if display_output:
-            print(f"Trial {n + 1}: outcome={num_modes}, probabilities={probabilities}")
+            print(f"Trial {n}: outcome={num_modes}, probabilities={posterior_probs}")
 
-        if np.max(probabilities) >= 0.8:
+        # Check our stopping condition
+        if ci[0] >= 0.6:
             if display_output:
                 print(
-                    f"Stopping after {n + 1} iterations, {np.argmax(probabilities) + 1} modes"
+                    f"Stopping after {n} iterations, {np.argmax(posterior_probs) + 1} modes"
                 )
             break
 
-        n += 1
-
     if display_output:
-        animate_dirichlet_heatmap(alphas)
-        animate_dirichlet(ps)
+        if ci[0] >= 0.3 and ci[1] < 0.6:
+            print(f"No clear convergence after {n} iterations")
+        # animate_dirichlet_heatmap(alphas)
+        animate_dirichlet(posterior_distributions)
 
-    return gmms, ps
+    return gmms, posterior_distributions
 
 
 if __name__ == "__main__":

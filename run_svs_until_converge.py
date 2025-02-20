@@ -2,7 +2,12 @@ import pandas as pd
 import multiprocessing
 from process_data import *
 from gmm_types import *
-from write_sv_output import write_sv_stats, init_sv_stat_row, concat_multi_processed_sv_files
+from write_sv_output import (
+    write_sv_stats,
+    init_sv_stat_row,
+    concat_multi_processed_sv_files,
+    write_posterior_distributions,
+)
 from run_dirichlet import run_dirichlet
 from typing import Set
 
@@ -10,12 +15,13 @@ from typing import Set
 FILE_DIR = "processed_svs_converge"
 OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
+
 def run_dirichlet_wrapper(row: Dict, population_size: int, sample_set: Set[int]):
     sv_stat, squiggle_data = init_sv_stat_row(row, sample_set)
     if len(squiggle_data) == 0:
         gmms = [(None, [])]
     else:
-        gmms, _ = run_dirichlet(
+        gmms, alphas, posterior_distributions = run_dirichlet(
             squiggle_data,
             **{
                 "file_name": None,
@@ -29,8 +35,10 @@ def run_dirichlet_wrapper(row: Dict, population_size: int, sample_set: Set[int])
 
     for i, (gmm, evidence_by_mode) in enumerate(gmms):
         write_sv_stats(sv_stat, gmm, evidence_by_mode, population_size, FILE_DIR, i)
-    
-    print(f"{row['chr']}:{row["start"]}:{row["stop"]}")
+
+    write_posterior_distributions(sv_stat, alphas, posterior_distributions, FILE_DIR)
+
+    print(sv_stat.id)
 
 
 def run_svs_until_convergence():
