@@ -164,7 +164,6 @@ def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]
         posterior_distributions.append((posterior_probs, posterior_var))
 
         # Calculate the difference in means between the two most probable modes
-        # sort posterior_mus
         posterior_mu_sorted_indices = np.argsort(posterior_probs)
         posterior_mu_sorted = posterior_probs[posterior_mu_sorted_indices]
         diff_in_means = posterior_mu_sorted[-1] - posterior_mu_sorted[-2]
@@ -180,7 +179,7 @@ def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]
             print(f"Trial {n}: outcome={num_modes}, probabilities={posterior_probs}")
 
         # Check our stopping condition
-        if ci[0] >= 0.6:
+        if ci[0] >= 0.6 or (ci[0] >= 0.3 and ci[1] < 0.6):
             if display_output:
                 print(
                     f"Stopping after {n} iterations, {np.argmax(posterior_probs) + 1} modes"
@@ -188,12 +187,10 @@ def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]
             break
 
     if display_output:
-        if ci[0] >= 0.3 and ci[1] < 0.6:
-            print(f"No clear convergence after {n} iterations")
         # animate_dirichlet_heatmap(alphas)
         animate_dirichlet(posterior_distributions)
 
-    return gmms, posterior_distributions
+    return gmms, alphas, posterior_distributions
 
 
 if __name__ == "__main__":

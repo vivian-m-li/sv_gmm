@@ -162,20 +162,21 @@ def create_sv_stats_file():
 
 
 def write_posterior_distributions(sv_stat, alphas, posteriors, file_dir):
-    file = f"{file_dir}/{sv_stat.id}_posteriors.csv"
-    fieldnames = [
-        "trial",
-        "alpha",
-        "posterior_probabilities",
-        "posterior_variances",
-    ]
-    csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
-    for i, (alpha, (probs, vars)) in enumerate(zip(alphas, posteriors)):
-        csv_writer.writerow(
-            {
-                "trial": i + 1,
-                "alpha": alpha,
-                "posterior_probabilities": probs,
-                "posterior_variances": vars,
-            }
-        )
+    with open(f"{file_dir}/{sv_stat.id}_posteriors.csv", mode="w", newline="") as file:
+        fieldnames = [
+            "trial",
+            "alpha",
+            "posterior_probabilities",
+            "posterior_variances",
+        ]
+        csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
+        csv_writer.writeheader()
+        for i, (alpha, (probs, vars)) in enumerate(zip(alphas, posteriors)):
+            csv_writer.writerow(
+                {
+                    "trial": i + 1,
+                    "alpha": alpha,
+                    "posterior_probabilities": probs,
+                    "posterior_variances": vars,
+                }
+            )
