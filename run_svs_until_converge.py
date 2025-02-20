@@ -51,8 +51,6 @@ def run_svs_until_convergence():
     sample_ids = set(deletions_df.columns[11:-1])  # 2504 samples
 
     rows = []
-    # test with a smaller sample first
-    deletions_df = deletions_df.head(100)
     for _, row in deletions_df.iterrows():
         rows.append(row)
 
