@@ -8,18 +8,14 @@ FILE_DIR = "1000genomes"
 
 
 def load_vcf_bed():
-    vcf_in = pysam.VariantFile(
-        f"{FILE_DIR}/ALL.wgs.integrated_sv_map_v2.20130502.svs.genotypes.deletions.vcf.gz"
-    )
+    vcf_in = pysam.VariantFile(f"{FILE_DIR}/1kg_hg38_deletions.vcf")
     with open(f"{FILE_DIR}/deletions.bed", "w") as f:
         for record in vcf_in.fetch():
             f.write(f"{record.chrom}\t{record.start}\t{record.stop}\t{record.id}\n")
 
 
 def load_vcf():
-    vcf_in = pysam.VariantFile(
-        f"{FILE_DIR}/ALL.wgs.integrated_sv_map_v2.20130502.svs.genotypes.deletions.vcf.gz"
-    )
+    vcf_in = pysam.VariantFile(f"{FILE_DIR}/1kg_hg38_deletions.vcf")
     header = [
         "id",
         "chr",
@@ -61,7 +57,7 @@ def load_vcf():
 def get_num_samples(row_index: int, row, lookup: Dict[int, int]):
     start = giggle_format(str(row.chr), row.start)
     end = giggle_format(str(row.chr), row.stop)
-    squiggle_data = query_stix(start, end, False)
+    squiggle_data = query_stix(start, end, False, plot=False)
     if len(squiggle_data) > 0:
         intercepts, _ = get_intercepts(
             squiggle_data,
