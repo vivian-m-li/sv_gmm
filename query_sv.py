@@ -90,11 +90,12 @@ def get_reference_samples(
 
 
 def query_stix_bash(l: int, r: int, output_dir: str, file_name: str, multi_files: bool):
-    bash_file = "query_stix_multifile" if multi_files else "query_stix.sh"
+    bash_file = "query_stix_multifile.sh" if multi_files else "query_stix.sh"
     if multi_files:
-        output_file = f"{output_dir}/partial_outputs/{file_name}.txt"
+        output_file = f"{output_dir}/partial_outputs/{file_name}"
     else:
-        output_file = f"{output_dir}/{file_name}.txt"
+        output_file = f"{output_dir}/{file_name}"
+
     subprocess.run(
         ["bash", bash_file] + [l, r, output_file],
         capture_output=True,
@@ -140,7 +141,7 @@ def query_stix(
         if not os.path.isfile(output_file):
             # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
             multi_files = sequence_data_type == "high_cov_hg38"
-            query_stix_bash(l, r, FILE_DIR, output_file, multi_files)
+            query_stix_bash(l, r, FILE_DIR, file_name, multi_files)
         df = txt_to_df(output_file)
 
         grouped = df.groupby("file_id")

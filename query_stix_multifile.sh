@@ -10,7 +10,7 @@ cd "$STIX_DB"
 
 for idx in {0..9}
 do
-  $STIX_BUILD -i "giggle_index_$idx" -d "1kg.$idx.ped.db" -s 500 -t DEL -l "$l" -r "$r" -g > $"$CURRENT_DIR/$output_file_$idx"
+  $STIX_BUILD -i "giggle_index_$idx" -d "1kg.$idx.ped.db" -s 500 -t DEL -l "$l" -r "$r" -g > $"$CURRENT_DIR/${output_file}_${idx}.txt"
 done
 
 cd "$CURRENT_DIR"
