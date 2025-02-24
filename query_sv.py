@@ -11,7 +11,6 @@ from typing import List, Dict
 from profiler import profile, print_stats, dump_stats
 
 
-STIX_SCRIPT = "./query_stix.sh"
 FILE_DIR = "stix_output"
 PROCESSED_FILE_DIR = "processed_stix_output"
 PLOT_DIR = "plots"
@@ -90,6 +89,33 @@ def get_reference_samples(
     return ref_samples
 
 
+def query_stix_bash(l: int, r: int, output_dir: str, file_name: str, multi_files: bool):
+    bash_file = "query_stix_multifile" if multi_files else "query_stix.sh"
+    if multi_files:
+        output_file = f"{output_dir}/partial_outputs/{file_name}.txt"
+    else:
+        output_file = f"{output_dir}/{file_name}.txt"
+    subprocess.run(
+        ["bash", bash_file] + [l, r, output_file],
+        capture_output=True,
+        text=True,
+    )
+
+    if multi_files:
+        with open(f"{output_dir}/{file_name}.txt", "w") as out_file:
+            for i in range(10):
+                with open(
+                    f"{output_dir}/partial_outputs/{file_name}_{i}.txt", "r"
+                ) as partial_file:
+                    out_file.write(
+                        partial_file.read()
+                    )  # write the partial file to the main file
+
+                os.remove(
+                    f"{output_dir}/partial_outputs/{file_name}_{i}.txt"
+                )  # remove partial file
+
+
 def query_stix(
     l: str,
     r: str,
@@ -98,6 +124,7 @@ def query_stix(
     filter_reference: bool = True,
     single_trial: bool = True,
     plot: bool = True,
+    sequence_data_type: str = "high_cov_hg38",  # or low_cov_hg37
 ):
     for directory in [FILE_DIR, PROCESSED_FILE_DIR, PLOT_DIR]:
         if not os.path.exists(directory):
@@ -112,11 +139,8 @@ def query_stix(
     else:
         if not os.path.isfile(output_file):
             # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
-            subprocess.run(
-                ["bash", STIX_SCRIPT] + [l, r, output_file],
-                capture_output=True,
-                text=True,
-            )
+            multi_files = sequence_data_type == "high_cov_hg38"
+            query_stix_bash(l, r, FILE_DIR, output_file, multi_files)
         df = txt_to_df(output_file)
 
         grouped = df.groupby("file_id")
