@@ -15,7 +15,7 @@ def load_vcf_bed():
 
 
 def load_vcf():
-    vcf_in = pysam.VariantFile(f"{FILE_DIR}/1kg_hg38_deletions.vcf")
+    vcf_in = pysam.VariantFile(f"{FILE_DIR}/1kg.subset.vcf.gz")
     header = [
         "id",
         "chr",
@@ -32,6 +32,8 @@ def load_vcf():
     data = []
     for record in vcf_in.fetch():
         info = dict(record.info)
+        if info['SVTYPE'] != 'DEL':
+            continue
         row = [
             record.id,
             record.chrom,
