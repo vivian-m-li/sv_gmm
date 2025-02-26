@@ -133,6 +133,37 @@ def run_trial(squiggle_data, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
     return gmm, evidence_by_mode
 
 
+def calculate_posteriors(alpha):
+    p = alpha / np.sum(alpha)
+    sum_alpha_post = np.sum(alpha)
+    var = (alpha * (sum_alpha_post - alpha)) / (
+        sum_alpha_post**2 * (sum_alpha_post + 1)
+    )
+    return p, var
+
+
+def calculate_ci(p, var, n):
+    # Calculate the difference in means between the two most probable modes
+    posterior_mu_sorted_indices = np.argsort(p)
+    posterior_mu_sorted = p[posterior_mu_sorted_indices]
+    diff_in_means = posterior_mu_sorted[-1] - posterior_mu_sorted[-2]
+
+    # Calculate the confidence interval for our difference in means
+    diff_var = (var[posterior_mu_sorted_indices[-1]]) / n + (
+        var[[posterior_mu_sorted_indices[-2]]]
+    ) / n
+    confidence = 1.96 * np.sqrt(diff_var)
+    ci = [diff_in_means - confidence, diff_in_means + confidence]
+
+    return ci
+
+
+def calculate_posteriors_from_trials(outcomes):
+    counts = Counter(outcomes)
+    alpha = np.array([1, 1, 1]) + np.array([counts[1], counts[2], counts[3]])
+    return calculate_posteriors(alpha)
+
+
 def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]:
     display_output = kwargs.get("plot", False)
 
@@ -156,34 +187,19 @@ def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]
         alphas.append(alpha_posterior)
 
         # Get the posterior distributions for each of the 3 modes
-        posterior_probs = alpha_posterior / np.sum(alpha_posterior)
-        sum_alpha_post = np.sum(alpha_posterior)
-        posterior_var = (alpha_posterior * (sum_alpha_post - alpha_posterior)) / (
-            sum_alpha_post**2 * (sum_alpha_post + 1)
-        )
-        posterior_distributions.append((posterior_probs, posterior_var))
+        p, var = calculate_posteriors(alpha_posterior)
+        posterior_distributions.append((p, var))
 
-        # Calculate the difference in means between the two most probable modes
-        posterior_mu_sorted_indices = np.argsort(posterior_probs)
-        posterior_mu_sorted = posterior_probs[posterior_mu_sorted_indices]
-        diff_in_means = posterior_mu_sorted[-1] - posterior_mu_sorted[-2]
-
-        # Calculate the confidence interval for our difference in means
-        diff_var = (posterior_var[posterior_mu_sorted_indices[-1]]) / n + (
-            posterior_var[[posterior_mu_sorted_indices[-2]]]
-        ) / n
-        confidence = 1.96 * np.sqrt(diff_var)
-        ci = [diff_in_means - confidence, diff_in_means + confidence]
+        # Calculate the confidence interval
+        ci = calculate_ci(p, var, n)
 
         if display_output:
-            print(f"Trial {n}: outcome={num_modes}, probabilities={posterior_probs}")
+            print(f"Trial {n}: outcome={num_modes}, probabilities={p}")
 
         # Check our stopping condition
-        if ci[0] >= 0.6 or (ci[0] >= 0.3 and ci[1] < 0.6):
+        if ci[0] >= 0.6:
             if display_output:
-                print(
-                    f"Stopping after {n} iterations, {np.argmax(posterior_probs) + 1} modes"
-                )
+                print(f"Stopping after {n} iterations, {np.argmax(p) + 1} modes")
             break
 
     if display_output:
