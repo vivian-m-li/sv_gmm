@@ -146,8 +146,12 @@ def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]
 
         # Run the model to get the next outcome
         gmm, evidence_by_mode = run_trial(squiggle_data, **kwargs)
+        if gmm is None: # all samples are getting filtered out
+            gmms.append((None, []))
+            break
+
         gmms.append((gmm, evidence_by_mode))
-        num_modes = 1 if gmm is None else gmm.num_modes
+        num_modes = gmm.num_modes
         counts[num_modes - 1] += 1
 
         # Update the alpha values (used as a conjugate prior for Bayes)

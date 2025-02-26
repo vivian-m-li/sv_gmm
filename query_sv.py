@@ -68,9 +68,9 @@ def parse_input(input: str) -> str:
     return giggle_format(chromosome, position)
 
 
-def get_sample_ids():
+def get_sample_ids(file_root: str = "1000genomes"):
     sample_ids = set()
-    with open("1000genomes/sample_ids.txt", "r") as f:
+    with open(f"{file_root}/sample_ids.txt", "r") as f:
         for line in f:
             sample_ids.add(line.strip())
     return sample_ids
@@ -81,8 +81,9 @@ def get_reference_samples(
     chr: str,
     start: int,
     stop: int,
+    file_root: str = "1000genomes"
 ) -> List[str]:
-    df = pd.read_csv(f"1000genomes/deletions_by_chr/chr{chr}.csv")
+    df = pd.read_csv(f"{file_root}/deletions_by_chr/chr{chr}.csv")
     row = df[(df["start"] == start) & (df["stop"] == stop)]
     samples = squiggle_data.keys()
     ref_samples = [col for col in samples if row.iloc[0][col] == "(0, 0)"]
@@ -131,9 +132,18 @@ def query_stix(
         if not os.path.exists(directory):
             os.mkdir(directory)
 
+    file_root = "1000genomes"
+    if sequence_data_type == "low_cov_hg37":
+        file_root = "1kg_low_cov_hg37"
+
     file_name = f"{l}_{r}"
     output_file = f"{FILE_DIR}/{file_name}.txt"
     processed_output_file = f"{PROCESSED_FILE_DIR}/{file_name}.csv"
+    
+
+    if sequence_data_type == "low_cov_hg37":
+        output_file = f"{file_root}/{output_file}"
+        processed_output_file = f"{file_root}/{processed_output_file}"
 
     if os.path.isfile(processed_output_file):
         squiggle_data = load_squiggle_data(processed_output_file)
@@ -164,13 +174,13 @@ def query_stix(
     chr, start, stop = reverse_giggle_format(l, r)
 
     # remove samples queried by stix but missing in the 1000genomes columns
-    sample_ids = get_sample_ids()
+    sample_ids = get_sample_ids(file_root)
     missing_keys = set(squiggle_data.keys()) - sample_ids
     for key in missing_keys:
         squiggle_data.pop(key, None)
 
     if filter_reference:
-        ref_samples = get_reference_samples(squiggle_data, chr, start, stop)
+        ref_samples = get_reference_samples(squiggle_data, chr, start, stop, file_root)
         for ref in ref_samples:
             squiggle_data.pop(ref, None)
 
@@ -235,13 +245,20 @@ def main():
         nargs="?",
         const=True,
     )
+    parser.add_argument(
+        "-sdt",
+        type=str,
+        help="Sequencing data type",
+        default="high_cov_hg38"
+    )
 
     args = parser.parse_args()
     l = parse_input(args.l)
     r = parse_input(args.r)
     p = args.p
     d = args.d
-    query_stix(l, r, True, single_trial=not d, plot=p)
+    sequence_data_type = "high_cov_hg38" if args.sdt != "low_cov_hg37" else args.sdt
+    query_stix(l, r, True, single_trial=not d, plot=p, sequence_data_type=sequence_data_type)
 
 
 if __name__ == "__main__":
