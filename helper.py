@@ -4,11 +4,24 @@ import subprocess
 import pandas as pd
 import csv
 from scipy.spatial.distance import braycurtis
-from dataclasses import fields
 from gmm_types import *
+from collections import defaultdict, Counter
 
 PROCESSED_STIX_DIR = "processed_stix_output"
 PROCESSED_SVS_DIR = "processed_svs"
+
+
+def get_deletions_df():
+    return pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+
+
+def get_sv_stats_df():
+    return pd.read_csv("1000genomes/sv_stats.csv")
+
+
+def get_sv_stats_converge_df():
+    # change this path to high cov data
+    return pd.read_csv("1kg_low_cov_hg37/sv_stats_converge.csv", low_memory=False)
 
 
 def find_missing_sample_ids():
@@ -21,7 +34,7 @@ def find_missing_sample_ids():
                     sample_ids.add(sample_id)
 
     # print(len(sample_ids))  # 2535
-    deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+    deletions_df = get_deletions_df()
     missing = sample_ids - set(deletions_df.columns[11:-1])
 
     # print(len(missing))  # 31
@@ -35,7 +48,7 @@ def find_missing_processed_svs():
     processed_sv_ids = set(
         [file.strip(".csv") for file in os.listdir(PROCESSED_SVS_DIR)]
     )
-    deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+    deletions_df = get_deletions_df()
     missing = set(deletions_df["id"]) - processed_sv_ids
     print(len(missing))
     print(missing)
@@ -71,7 +84,7 @@ def get_num_intersecting_genes():
 
 
 def get_num_new_svs():
-    df = pd.read_csv("1000genomes/sv_stats.csv")
+    df = get_sv_stats_df()
     df = df[df["num_samples"] > 0]
     mode_data = [df[df["num_modes"] == i + 1] for i in range(3)]
     num_two_modes = len(mode_data[1])
@@ -125,7 +138,7 @@ def get_insert_sizes(get_files: bool = False):
 
 
 def get_mean_coverage():
-    df = pd.read_csv("1000genomes/sv_stats.csv")
+    df = get_sv_stats_df()
     df = df[df["num_modes"] > 1]
     coverage_df = pd.DataFrame(columns=["sv_id", "num_samples", "coverage"])
     for _, sv in df.iterrows():
@@ -155,7 +168,7 @@ def get_mean_coverage():
 
 
 def write_ancestry_dissimilarity():
-    df = pd.read_csv("1000genomes/sv_stats.csv")
+    df = get_sv_stats_df()
     ancestry_df = pd.read_csv("1000genomes/ancestry.tsv", delimiter="\t")
     df = df[df["num_modes"] == 2]
 
@@ -194,7 +207,7 @@ def write_ancestry_dissimilarity():
 
 
 def extract_data_from_deletions_df():
-    deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+    deletions_df = get_deletions_df()
 
     sample_ids = set(deletions_df.columns[11:-1])
     with open("1000genomes/sample_ids.txt", "w") as f:
@@ -232,5 +245,76 @@ def get_insert_size_diff():
     df.to_csv("1000genomes/insert_size_compare.csv", index=False)
 
 
+def calculate_posteriors(alpha):
+    p = alpha / np.sum(alpha)
+    sum_alpha_post = np.sum(alpha)
+    var = (alpha * (sum_alpha_post - alpha)) / (
+        sum_alpha_post**2 * (sum_alpha_post + 1)
+    )
+    return p, var
+
+
+def calculate_ci(p, var, n):
+    # Calculate the difference in means between the two most probable modes
+    posterior_mu_sorted_indices = np.argsort(p)
+    posterior_mu_sorted = p[posterior_mu_sorted_indices]
+    diff_in_means = posterior_mu_sorted[-1] - posterior_mu_sorted[-2]
+
+    # Calculate the confidence interval for our difference in means
+    diff_var = (var[posterior_mu_sorted_indices[-1]]) / n + (
+        var[[posterior_mu_sorted_indices[-2]]]
+    ) / n
+    confidence = 1.96 * np.sqrt(diff_var)
+    ci = [diff_in_means - confidence, diff_in_means + confidence]
+
+    return ci
+
+
+def calculate_posteriors_from_trials(outcomes):
+    counts = Counter(outcomes)
+    alpha = np.array([1, 1, 1]) + np.array([counts[1], counts[2], counts[3]])
+    return calculate_posteriors(alpha)
+
+
+def get_n_modes():
+    sv_df = pd.DataFrame(columns=["sv_id", "num_modes", "confidence"])
+    df = get_sv_stats_converge_df()
+    svs = df["id"].unique()
+    for sv_id in svs:
+        outcomes = df[df["id"] == sv_id]["num_modes"].values
+        counter = Counter(outcomes)
+        num_modes = max(counter, key=counter.get)
+        num_modes = 1 if num_modes == 0 else num_modes
+        p, var = calculate_posteriors_from_trials(outcomes)
+        ci = calculate_ci(p, var, len(outcomes))
+        new_row = [sv_id, num_modes]
+        if ci[0] >= 0.6:
+            new_row.append("high")
+        elif ci[0] >= 0.3 and ci[1] < 0.6:
+            new_row.append("medium")
+        else:
+            new_row.append("low")
+        sv_df.loc[len(sv_df)] = new_row
+    sv_df.to_csv("1000genomes/svs_n_modes.csv", index=False)
+
+
+def get_outliers(sv_rows):
+    n = len(sv_rows)
+    outlier_counts = defaultdict(lambda: 0)
+    for row in sv_rows:
+        modes = ast.literal_eval(row["modes"])
+        for mode in modes:
+            if mode["num_samples"] == 1:
+                outlier_sample = mode["sample_ids"][0]
+                outlier_counts[outlier_sample] += 1
+
+    confident_outliers = []
+    for outlier, count in outlier_counts.items():
+        if count / n > 0.9:
+            confident_outliers.append(outlier)
+
+    return confident_outliers
+
+
 if __name__ == "__main__":
-    get_num_new_svs()
+    get_n_modes()

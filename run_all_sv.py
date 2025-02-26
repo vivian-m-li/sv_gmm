@@ -4,11 +4,17 @@ import pandas as pd
 import multiprocessing
 from process_data import *
 from gmm_types import *
-from write_sv_output import write_sv_stats, init_sv_stat_row, concat_multi_processed_sv_files
+from write_sv_output import (
+    write_sv_stats,
+    init_sv_stat_row,
+    concat_multi_processed_sv_files,
+)
+from helper import get_deletions_df
 from typing import Set
 
 FILE_DIR = "processed_svs"
 OUTPUT_FILE_NAME = "sv_stats.csv"
+
 
 def run_all_sv_wrapper(
     row: Dict, population_size: int, sample_set: Set[int], iteration: int = 0
@@ -38,7 +44,7 @@ def run_all_sv(
     query_chr: Optional[str] = None,
     subset: Optional[List[Tuple[str, int, int]]] = None,
 ):
-    deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+    deletions_df = get_deletions_df()
 
     population_size = deletions_df.shape[1] - 12
     sample_ids = set(deletions_df.columns[11:-1])  # 2504 samples
@@ -84,7 +90,7 @@ def run_all_sv(
             p.starmap(run_all_sv_wrapper, args)
             p.close()
             p.join()
-        
+
     concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME)
 
 

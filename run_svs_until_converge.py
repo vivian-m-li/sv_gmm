@@ -9,6 +9,7 @@ from write_sv_output import (
     write_posterior_distributions,
 )
 from run_dirichlet import run_dirichlet
+from helper import get_deletions_df
 from typing import Set
 
 
@@ -45,7 +46,7 @@ def run_dirichlet_wrapper(row: Dict, population_size: int, sample_set: Set[int])
 
 
 def run_svs_until_convergence():
-    deletions_df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+    deletions_df = get_deletions_df()
 
     population_size = deletions_df.shape[1] - 12
     sample_ids = set(deletions_df.columns[11:-1])  # 2504 samples

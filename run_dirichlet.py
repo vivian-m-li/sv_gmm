@@ -3,10 +3,9 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import seaborn as sns
 import pandas as pd
-from scipy.integrate import nquad
 from scipy.stats import dirichlet
-from collections import Counter
 from process_data import run_viz_gmm
+from helper import *
 from gmm_types import *
 from typing import List, Tuple
 
@@ -133,37 +132,6 @@ def run_trial(squiggle_data, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
     return gmm, evidence_by_mode
 
 
-def calculate_posteriors(alpha):
-    p = alpha / np.sum(alpha)
-    sum_alpha_post = np.sum(alpha)
-    var = (alpha * (sum_alpha_post - alpha)) / (
-        sum_alpha_post**2 * (sum_alpha_post + 1)
-    )
-    return p, var
-
-
-def calculate_ci(p, var, n):
-    # Calculate the difference in means between the two most probable modes
-    posterior_mu_sorted_indices = np.argsort(p)
-    posterior_mu_sorted = p[posterior_mu_sorted_indices]
-    diff_in_means = posterior_mu_sorted[-1] - posterior_mu_sorted[-2]
-
-    # Calculate the confidence interval for our difference in means
-    diff_var = (var[posterior_mu_sorted_indices[-1]]) / n + (
-        var[[posterior_mu_sorted_indices[-2]]]
-    ) / n
-    confidence = 1.96 * np.sqrt(diff_var)
-    ci = [diff_in_means - confidence, diff_in_means + confidence]
-
-    return ci
-
-
-def calculate_posteriors_from_trials(outcomes):
-    counts = Counter(outcomes)
-    alpha = np.array([1, 1, 1]) + np.array([counts[1], counts[2], counts[3]])
-    return calculate_posteriors(alpha)
-
-
 def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]:
     display_output = kwargs.get("plot", False)
 
@@ -210,6 +178,6 @@ def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]
 
 
 if __name__ == "__main__":
-    df = pd.read_csv("1000genomes/sv_stats_converge.csv", low_memory=False)
+    df = get_sv_stats_converge_df()
     df = df[df["id"] == "DEL_pindel_98"]
     animate_dirichlet_history(df)

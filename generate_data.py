@@ -5,6 +5,7 @@ import random
 import ast
 from process_data import run_viz_gmm
 from query_sv import giggle_format, query_stix
+from helper import get_deletions_df
 from collections import defaultdict
 from typing import List, Tuple, Optional
 
@@ -14,7 +15,7 @@ Data generation functions
 
 
 def query_random_svs(num_sample_range):
-    df = pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+    df = get_deletions_df()
     df = df[df.num_samples >= num_sample_range[0]]
     df = df[df.num_samples <= num_sample_range[1]]
     for _ in range(50):

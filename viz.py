@@ -20,7 +20,7 @@ from collections import Counter, defaultdict
 from typing import List
 from em import run_gmm, run_em
 from em_1d import run_em as run_em1d, get_scatter_data
-from helper import get_sample_sequencing_centers
+from helper import get_sample_sequencing_centers, get_sv_stats_df
 from gmm_types import *
 
 REFERENCE_FILE = "hs37d5.fa.gz"
@@ -603,7 +603,7 @@ Plots the rectangle shapes showing the distribution of all SVs and how they're s
 
 
 def plot_processed_sv_stats(filter_intersecting_genes: bool = False):
-    df = pd.read_csv("1000genomes/sv_stats.csv")
+    df = get_sv_stats_df()
     df = df[df["num_samples"] > 0]
 
     if filter_intersecting_genes:
@@ -773,7 +773,7 @@ For each # of modes, plots a boxplot of the sample size for each SV
 
 
 def plot_sample_size_per_mode(filter_intersecting_genes: bool = False):
-    df = pd.read_csv("1000genomes/sv_stats.csv")
+    df = get_sv_stats_df()
     if filter_intersecting_genes:
         df = get_svs_intersecting_genes(df)
 
@@ -955,7 +955,7 @@ Plots the allele frequencies for the SVs before and after being split by SVepera
 
 
 def plot_afs():
-    sv_df = pd.read_csv("1000genomes/sv_stats.csv", low_memory=False)
+    sv_df = get_sv_stats_df()
     sv_df = sv_df[sv_df["num_samples"] > 0]
     fig, axs = plt.subplots(1, 3, figsize=(18, 6))
     for num_modes in range(3):
@@ -1098,7 +1098,7 @@ def plot_d_accuracy_by_case(case: str):
 
 
 def plot_seq_center_distribution():
-    df = pd.read_csv("1000genomes/sv_stats.csv")
+    df = get_sv_stats_df()
     df = df[df["num_modes"] == 2]
     seq_center_df = get_sample_sequencing_centers()
     seq_centers_by_mode = defaultdict(lambda: Counter())
@@ -1152,7 +1152,7 @@ def plot_seq_center_distribution():
 
 
 def plot_insert_size_distribution(insert_sizes):
-    df = pd.read_csv("1000genomes/sv_stats.csv")
+    df = get_sv_stats_df()
     df = df[df["num_modes"] == 2]
     insert_sizes_df = pd.read_csv("1000genomes/insert_sizes.csv")
     insert_sizes = defaultdict(list)
