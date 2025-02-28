@@ -4,11 +4,7 @@ import pandas as pd
 import multiprocessing
 from process_data import *
 from gmm_types import *
-from write_sv_output import (
-    write_sv_stats,
-    init_sv_stat_row,
-    concat_multi_processed_sv_files,
-)
+from write_sv_output import *
 from helper import get_deletions_df
 from typing import Set
 
@@ -19,7 +15,11 @@ OUTPUT_FILE_NAME = "sv_stats.csv"
 def run_all_sv_wrapper(
     row: Dict, population_size: int, sample_set: Set[int], iteration: int = 0
 ):
-    sv_stat, squiggle_data = init_sv_stat_row(row, sample_set)
+    squiggle_data, num_samples = get_raw_data(row["chr"], row["start"], row["stop"])
+    sv_stat = init_sv_stat_row(
+        row, num_samples=num_samples, num_reference=num_samples - len(squiggle_data)
+    )
+
     if len(squiggle_data) == 0:
         gmm, evidence_by_mode = None, []
     else:

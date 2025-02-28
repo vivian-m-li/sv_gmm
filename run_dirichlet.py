@@ -146,7 +146,7 @@ def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]
 
         # Run the model to get the next outcome
         gmm, evidence_by_mode = run_trial(squiggle_data, **kwargs)
-        if gmm is None: # all samples are getting filtered out
+        if gmm is None:  # all samples are filtered out
             gmms.append((None, []))
             break
 

@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from process_data import run_viz_gmm
 from run_dirichlet import run_dirichlet
+from helper import get_sample_ids
 from typing import List, Dict
 from profiler import profile, print_stats, dump_stats
 
@@ -68,20 +69,12 @@ def parse_input(input: str) -> str:
     return giggle_format(chromosome, position)
 
 
-def get_sample_ids(file_root: str = "1000genomes"):
-    sample_ids = set()
-    with open(f"{file_root}/sample_ids.txt", "r") as f:
-        for line in f:
-            sample_ids.add(line.strip())
-    return sample_ids
-
-
 def get_reference_samples(
     squiggle_data: Dict[str, np.ndarray[float]],
     chr: str,
     start: int,
     stop: int,
-    file_root: str = "1000genomes"
+    file_root: str = "1000genomes",
 ) -> List[str]:
     df = pd.read_csv(f"{file_root}/deletions_by_chr/chr{chr}.csv")
     row = df[(df["start"] == start) & (df["stop"] == stop)]
@@ -134,12 +127,11 @@ def query_stix(
 
     file_root = "1000genomes"
     if sequence_data_type == "low_cov_hg37":
-        file_root = "1kg_low_cov_hg37"
+        file_root = "1kgp_low_cov_hg37"
 
     file_name = f"{l}_{r}"
     output_file = f"{FILE_DIR}/{file_name}.txt"
     processed_output_file = f"{PROCESSED_FILE_DIR}/{file_name}.csv"
-    
 
     if sequence_data_type == "low_cov_hg37":
         output_file = f"{file_root}/{output_file}"
@@ -246,10 +238,7 @@ def main():
         const=True,
     )
     parser.add_argument(
-        "-sdt",
-        type=str,
-        help="Sequencing data type",
-        default="high_cov_hg38"
+        "-sdt", type=str, help="Sequencing data type", default="high_cov_hg38"
     )
 
     args = parser.parse_args()
@@ -258,7 +247,9 @@ def main():
     p = args.p
     d = args.d
     sequence_data_type = "high_cov_hg38" if args.sdt != "low_cov_hg37" else args.sdt
-    query_stix(l, r, True, single_trial=not d, plot=p, sequence_data_type=sequence_data_type)
+    query_stix(
+        l, r, True, single_trial=not d, plot=p, sequence_data_type=sequence_data_type
+    )
 
 
 if __name__ == "__main__":

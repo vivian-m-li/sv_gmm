@@ -11,17 +11,24 @@ PROCESSED_STIX_DIR = "processed_stix_output"
 PROCESSED_SVS_DIR = "processed_svs"
 
 
-def get_deletions_df():
-    return pd.read_csv("1000genomes/deletions_df.csv", low_memory=False)
+def get_deletions_df(stem: str = "1000genomes"):
+    return pd.read_csv(f"{stem}/deletions_df.csv", low_memory=False)
 
 
-def get_sv_stats_df():
-    return pd.read_csv("1000genomes/sv_stats.csv")
+def get_sv_stats_df(stem: str = "1000genomes"):
+    return pd.read_csv(f"{stem}/sv_stats.csv")
 
 
-def get_sv_stats_converge_df():
-    # change this path to high cov data
-    return pd.read_csv("1kg_low_cov_hg37/sv_stats_converge.csv", low_memory=False)
+def get_sv_stats_converge_df(stem: str = "1000genomes"):
+    return pd.read_csv(f"{stem}/sv_stats_converge.csv", low_memory=False)
+
+
+def get_sample_ids(file_root: str = "1000genomes"):
+    sample_ids = set()
+    with open(f"{file_root}/sample_ids.txt", "r") as f:
+        for line in f:
+            sample_ids.add(line.strip())
+    return sample_ids
 
 
 def find_missing_sample_ids():
@@ -301,7 +308,7 @@ def get_n_modes():
 def get_outliers(sv_rows):
     n = len(sv_rows)
     outlier_counts = defaultdict(lambda: 0)
-    for row in sv_rows:
+    for i, row in sv_rows.iterrows():
         modes = ast.literal_eval(row["modes"])
         for mode in modes:
             if mode["num_samples"] == 1:
@@ -316,5 +323,16 @@ def get_outliers(sv_rows):
     return confident_outliers
 
 
+def get_sv_chr(sv_id: str):
+    df = get_deletions_df("1kgp_low_cov_hg37")
+    row = df[df["id"] == sv_id]
+    chr, start, stop = (
+        row["chr"].values[0],
+        row["start"].values[0],
+        row["stop"].values[0],
+    )
+    print(chr, start, stop)
+
+
 if __name__ == "__main__":
-    get_n_modes()
+    get_sv_chr("UW_VH_2379")

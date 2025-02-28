@@ -46,7 +46,9 @@ def get_reference_samples(
     return ref_samples
 
 
-def init_sv_stat_row(row: Dict, sample_set: Set[int]) -> Tuple[SVInfoGMM, Dict]:
+def init_sv_stat_row(
+    row: Dict, *, num_samples: Optional[int] = 0, num_reference: Optional[int] = 0
+) -> SVInfoGMM:
     sv_stat = SVInfoGMM(
         id=row["id"],
         chr=row["chr"],
@@ -57,32 +59,35 @@ def init_sv_stat_row(row: Dict, sample_set: Set[int]) -> Tuple[SVInfoGMM, Dict]:
         alt=row["alt"],
         qual=row["qual"],
         af=row["af"],
-        num_samples=0,
+        num_samples=num_samples,
         num_pruned=0,
-        num_reference=0,
+        num_reference=num_reference,
         svlen_post=0,
         num_modes=0,
         num_iterations=0,
         overlap_between_modes=False,
         modes=[],
     )
+
+    return sv_stat
+
+
+def get_raw_data(row, sample_set) -> Tuple[Dict[str, np.ndarray[float]], int]:
     start = giggle_format(str(row["chr"]), row["start"])
     end = giggle_format(str(row["chr"]), row["stop"])
-
-    squiggle_data = query_stix(start, end, False, filter_reference=False)
-
-    sv_stat.num_samples = len(squiggle_data)
-
-    reference_samples = get_reference_samples(
-        row,
-        sample_set,
-        squiggle_data,
+    squiggle_data = query_stix(
+        start,
+        end,
+        False,
+        filter_reference=False,
     )
-    sv_stat.num_reference = len(reference_samples)
+    num_samples = len(squiggle_data)
+
+    reference_samples = get_reference_samples(row, sample_set, squiggle_data)
     for ref in reference_samples:
         squiggle_data.pop(ref, None)
 
-    return sv_stat, squiggle_data
+    return squiggle_data, num_samples
 
 
 def write_sv_stats(
@@ -161,8 +166,8 @@ def create_sv_stats_file():
     return df
 
 
-def write_posterior_distributions(sv_stat, alphas, posteriors, file_dir):
-    with open(f"{file_dir}/{sv_stat.id}_posteriors.csv", mode="w", newline="") as file:
+def write_posterior_distributions(sv_id, alphas, posteriors, file_dir):
+    with open(f"{file_dir}/{sv_id}_posteriors.csv", mode="w", newline="") as file:
         fieldnames = [
             "trial",
             "alpha",

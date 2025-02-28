@@ -2,14 +2,9 @@ import pandas as pd
 import multiprocessing
 from process_data import *
 from gmm_types import *
-from write_sv_output import (
-    write_sv_stats,
-    init_sv_stat_row,
-    concat_multi_processed_sv_files,
-    write_posterior_distributions,
-)
+from write_sv_output import *
 from run_dirichlet import run_dirichlet
-from helper import get_deletions_df
+from helper import get_deletions_df, get_sample_ids
 from typing import Set
 
 
@@ -18,7 +13,9 @@ OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
 
 def run_dirichlet_wrapper(row: Dict, population_size: int, sample_set: Set[int]):
-    sv_stat, squiggle_data = init_sv_stat_row(row, sample_set)
+    sv_id = row["id"]
+    squiggle_data, num_samples = get_raw_data(row, sample_set)
+
     if len(squiggle_data) == 0:
         gmms, alphas, posterior_distributions = [(None, [])], [], []
     else:
@@ -35,21 +32,22 @@ def run_dirichlet_wrapper(row: Dict, population_size: int, sample_set: Set[int])
         )
 
     for i, (gmm, evidence_by_mode) in enumerate(gmms):
+        sv_stat = init_sv_stat_row(
+            row, num_samples=num_samples, num_reference=num_samples - len(squiggle_data)
+        )
         write_sv_stats(sv_stat, gmm, evidence_by_mode, population_size, FILE_DIR, i)
 
     if gmms[0][0] is not None:
-        write_posterior_distributions(
-            sv_stat, alphas, posterior_distributions, FILE_DIR
-        )
+        write_posterior_distributions(sv_id, alphas, posterior_distributions, FILE_DIR)
 
-    print(sv_stat.id)
+    print(sv_id)
 
 
 def run_svs_until_convergence():
     deletions_df = get_deletions_df()
 
-    population_size = deletions_df.shape[1] - 12
-    sample_ids = set(deletions_df.columns[11:-1])  # 2504 samples
+    sample_ids = set(get_sample_ids())
+    population_size = len(sample_ids)
 
     rows = []
     for _, row in deletions_df.iterrows():

@@ -7,7 +7,7 @@ gnomad_svs
 samples
 hs37d5.fa.gz
 1000genomes
-1kg_low_cov_hg37
+1kgp_low_cov_hg37
 1d_processed_svs
 processed_svs
 processed_svs_converge
