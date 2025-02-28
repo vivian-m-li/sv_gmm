@@ -99,7 +99,7 @@ def generate_synthetic_sv_data(
     # )
 
     insert_size_df = pd.read_csv(
-        "1000genomes/insert_sizes.csv", dtype={"mean_insert_size": int}
+        "1kgp/insert_sizes.csv", dtype={"mean_insert_size": int}
     )
 
     # For each sample, generate random evidence

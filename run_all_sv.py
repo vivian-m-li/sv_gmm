@@ -69,7 +69,7 @@ def run_all_sv(
             for _, row in deletions_df[deletions_df["chr"] == query_chr].iterrows():
                 rows.append(row)
         elif run_ambiguous_svs:
-            with open("1000genomes/svs_to_rerun.txt") as f:
+            with open("1kgp/svs_to_rerun.txt") as f:
                 for line in f:
                     sv_id = line.strip()
                     row = deletions_df[deletions_df["id"] == sv_id].iloc[0]

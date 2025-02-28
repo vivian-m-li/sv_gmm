@@ -11,19 +11,19 @@ PROCESSED_STIX_DIR = "processed_stix_output"
 PROCESSED_SVS_DIR = "processed_svs"
 
 
-def get_deletions_df(stem: str = "1000genomes"):
+def get_deletions_df(stem: str = "1kgp"):
     return pd.read_csv(f"{stem}/deletions_df.csv", low_memory=False)
 
 
-def get_sv_stats_df(stem: str = "1000genomes"):
+def get_sv_stats_df(stem: str = "1kgp"):
     return pd.read_csv(f"{stem}/sv_stats.csv")
 
 
-def get_sv_stats_converge_df(stem: str = "1000genomes"):
+def get_sv_stats_converge_df(stem: str = "1kgp"):
     return pd.read_csv(f"{stem}/sv_stats_converge.csv", low_memory=False)
 
 
-def get_sample_ids(file_root: str = "1000genomes"):
+def get_sample_ids(file_root: str = "1kgp"):
     sample_ids = set()
     with open(f"{file_root}/sample_ids.txt", "r") as f:
         for line in f:
@@ -63,7 +63,7 @@ def find_missing_processed_svs():
 
 
 def get_ambiguous_svs():
-    df = pd.read_csv("1000genomes/sv_stats_merged.csv")
+    df = pd.read_csv("1kgp/sv_stats_merged.csv")
     unique_svs = df["id"].unique()
     rerun_sv_ids = []
     for sv_id in unique_svs:
@@ -72,15 +72,13 @@ def get_ambiguous_svs():
         if len(num_modes) > 1:
             rerun_sv_ids.append(sv_id)
 
-    with open("1000genomes/svs_to_rerun.txt", "w") as f:
+    with open("1kgp/svs_to_rerun.txt", "w") as f:
         for sv_id in rerun_sv_ids:
             f.write(f"{sv_id}\n")
 
 
 def get_num_intersecting_genes():
-    df = pd.read_csv(
-        "1000genomes/intersect_num_overlap.csv", header=None, delimiter="\t"
-    )
+    df = pd.read_csv("1kgp/intersect_num_overlap.csv", header=None, delimiter="\t")
     num_intersections = df.iloc[:, 5]
     print(f"Total number of genes: {len(num_intersections)}")
 
@@ -101,9 +99,7 @@ def get_num_new_svs():
 
 def get_sample_sequencing_centers():
     # data obtained from https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/20130502.phase3.sequence.index
-    df = pd.read_csv(
-        "1000genomes/20130502.phase3.sequence.index", sep="\t", low_memory=False
-    )
+    df = pd.read_csv("1kgp/20130502.phase3.sequence.index", sep="\t", low_memory=False)
     df["CENTER_NAME"] = df["CENTER_NAME"].str.upper()
     df = df[["SAMPLE_NAME", "CENTER_NAME"]].drop_duplicates()
     df = df.groupby("SAMPLE_NAME")["CENTER_NAME"].apply(list).reset_index()
@@ -112,7 +108,7 @@ def get_sample_sequencing_centers():
 
 def get_insert_sizes(get_files: bool = False):
     if get_files:
-        samples_df = pd.read_csv("1000genomes/bam_bas_files.tsv", sep="\t")
+        samples_df = pd.read_csv("1kgp/bam_bas_files.tsv", sep="\t")
         pattern = r"data\/.*\/alignment\/.*\.mapped\.ILLUMINA\.bwa\..+\.low_coverage\.\d+\.bam\.bas"
         bas_files_df = samples_df[samples_df["BAS FILE"].str.fullmatch(pattern)]
         bas_files_df["sample_id"] = bas_files_df["BAS FILE"].str.extract(
@@ -122,7 +118,7 @@ def get_insert_sizes(get_files: bool = False):
         for _, row in bas_files_df.iterrows():
             bas_file = row["BAS FILE"]
             sample_id = row["sample_id"]
-            if f"{sample_id}.tsv" in os.listdir("1000genomes/mapped_files"):
+            if f"{sample_id}.tsv" in os.listdir("1kgp/mapped_files"):
                 continue
             subprocess.run(
                 ["bash", "get_mapped_files.sh"] + [sample_id, bas_file],
@@ -131,17 +127,17 @@ def get_insert_sizes(get_files: bool = False):
             )
 
     df = pd.DataFrame(columns=["sample_id", "mean_insert_size"])
-    mapped_files = os.listdir("1000genomes/mapped_files")
+    mapped_files = os.listdir("1kgp/mapped_files")
     for i, file in enumerate(mapped_files):
         sample_id = file.strip(".tsv")
         try:
-            file_df = pd.read_csv(f"1000genomes/mapped_files/{file}", sep="\t")
+            file_df = pd.read_csv(f"1kgp/mapped_files/{file}", sep="\t")
         except Exception:
             # alignment files don't exist for samples HG00361, HG00844, NA18555.tsv
             print(file)
         mean_insert_size = int(np.mean(file_df["mean_insert_size"]))
         df.loc[i] = [sample_id, mean_insert_size]
-    df.to_csv("1000genomes/insert_sizes.csv", index=False)
+    df.to_csv("1kgp/insert_sizes.csv", index=False)
 
 
 def get_mean_coverage():
@@ -171,12 +167,12 @@ def get_mean_coverage():
                 coverage,
             ]
 
-    coverage_df.to_csv("1000genomes/coverage.csv", index=False)
+    coverage_df.to_csv("1kgp/coverage.csv", index=False)
 
 
 def write_ancestry_dissimilarity():
     df = get_sv_stats_df()
-    ancestry_df = pd.read_csv("1000genomes/ancestry.tsv", delimiter="\t")
+    ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
     df = df[df["num_modes"] == 2]
 
     results_df = pd.DataFrame(
@@ -210,32 +206,32 @@ def write_ancestry_dissimilarity():
         ]
 
     results_df = results_df.sort_values(by="dissimilarity", ascending=False)
-    results_df.to_csv("1000genomes/ancestry_dissimilarity.csv")
+    results_df.to_csv("1kgp/ancestry_dissimilarity.csv")
 
 
 def extract_data_from_deletions_df():
     deletions_df = get_deletions_df()
 
     sample_ids = set(deletions_df.columns[11:-1])
-    with open("1000genomes/sample_ids.txt", "w") as f:
+    with open("1kgp/sample_ids.txt", "w") as f:
         for sample_id in sample_ids:
             f.write(f"{sample_id}\n")
 
     # split the deletions into separate files by chromosome
     # another option is to create a lookup for row index in deletions_df by chr, start, stop, sample_id and
-    os.mkdir("1000genomes/deletions_by_chr")
+    os.mkdir("1kgp/deletions_by_chr")
     for i in range(1, 23):
         chr_df = deletions_df[deletions_df["chr"] == f"{i}"]
-        chr_df.to_csv(f"1000genomes/deletions_by_chr/chr{i}.csv", index=False)
+        chr_df.to_csv(f"1kgp/deletions_by_chr/chr{i}.csv", index=False)
 
 
 def get_insert_size_diff():
     df = pd.read_csv(
-        "1000genomes/insert_sizes_scraped.csv",
+        "1kgp/insert_sizes_scraped.csv",
         dtype={"sample_id": str, "mean_insert_size": int},
     )
     df2 = pd.read_csv(
-        "1000genomes/insert_sizes.csv",
+        "1kgp/insert_sizes.csv",
         dtype={"sample_id": str, "mean_insert_size": float},
     )
 
@@ -249,7 +245,7 @@ def get_insert_size_diff():
     df["diff"] = abs(df["mean_insert_size"] - df["true_mean_insert_size"])
     mean_diff = df["diff"].mean()
     print(mean_diff)
-    df.to_csv("1000genomes/insert_size_compare.csv", index=False)
+    df.to_csv("1kgp/insert_size_compare.csv", index=False)
 
 
 def calculate_posteriors(alpha):
@@ -302,7 +298,7 @@ def get_n_modes():
         else:
             new_row.append("low")
         sv_df.loc[len(sv_df)] = new_row
-    sv_df.to_csv("1000genomes/svs_n_modes.csv", index=False)
+    sv_df.to_csv("1kgp/svs_n_modes.csv", index=False)
 
 
 def get_outliers(sv_rows):

@@ -384,7 +384,7 @@ def get_intercepts(
 
 def get_insert_size_lookup() -> Dict[str, int]:
     insert_size_df = pd.read_csv(
-        "1000genomes/insert_sizes.csv",
+        "1kgp/insert_sizes.csv",
         dtype={"sample_id": str, "mean_insert_size": float},
     )
     return {

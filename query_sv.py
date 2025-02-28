@@ -74,7 +74,7 @@ def get_reference_samples(
     chr: str,
     start: int,
     stop: int,
-    file_root: str = "1000genomes",
+    file_root: str = "1kgp",
 ) -> List[str]:
     df = pd.read_csv(f"{file_root}/deletions_by_chr/chr{chr}.csv")
     row = df[(df["start"] == start) & (df["stop"] == stop)]
@@ -119,21 +119,21 @@ def query_stix(
     filter_reference: bool = True,
     single_trial: bool = True,
     plot: bool = True,
-    sequence_data_type: str = "high_cov_hg38",  # or low_cov_hg37
+    reference_genome: str = "grch38",  # or grch37
 ):
     for directory in [FILE_DIR, PROCESSED_FILE_DIR, PLOT_DIR]:
         if not os.path.exists(directory):
             os.mkdir(directory)
 
-    file_root = "1000genomes"
-    if sequence_data_type == "low_cov_hg37":
-        file_root = "1kgp_low_cov_hg37"
+    file_root = "1kgp"
+    if reference_genome == "grch37":
+        file_root = "low_cov_grch37"
 
     file_name = f"{l}_{r}"
     output_file = f"{FILE_DIR}/{file_name}.txt"
     processed_output_file = f"{PROCESSED_FILE_DIR}/{file_name}.csv"
 
-    if sequence_data_type == "low_cov_hg37":
+    if reference_genome == "grch37":
         output_file = f"{file_root}/{output_file}"
         processed_output_file = f"{file_root}/{processed_output_file}"
 
@@ -142,7 +142,7 @@ def query_stix(
     else:
         if not os.path.isfile(output_file):
             # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
-            multi_files = sequence_data_type == "high_cov_hg38"
+            multi_files = reference_genome == "high_cov_hg38"
             query_stix_bash(l, r, FILE_DIR, file_name, multi_files)
         df = txt_to_df(output_file)
 

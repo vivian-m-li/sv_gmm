@@ -4,7 +4,7 @@ import multiprocessing
 from query_sv import *
 from process_data import *
 
-FILE_DIR = "1000genomes"
+FILE_DIR = "1kgp"
 
 
 def load_vcf_bed():
@@ -32,7 +32,7 @@ def load_vcf():
     data = []
     for record in vcf_in.fetch():
         info = dict(record.info)
-        if info['SVTYPE'] != 'DEL':
+        if info["SVTYPE"] != "DEL":
             continue
         row = [
             record.id,

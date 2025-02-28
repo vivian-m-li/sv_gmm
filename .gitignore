@@ -6,12 +6,10 @@ plots
 gnomad_svs
 samples
 hs37d5.fa.gz
-1000genomes
-1kgp_low_cov_hg37
-1d_processed_svs
+1kgp
+low_cov_grch37
 processed_svs
 processed_svs_converge
 synthetic_data
-temp
 *.ipynb
 profile

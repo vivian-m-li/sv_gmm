@@ -429,7 +429,7 @@ def plot_2d_coords(
     fig, ax_main = plt.subplots(figsize=(15, 8))
     scatter_cm = cm.get_cmap("tab20").colors + cm.get_cmap("tab20b").colors
     seq_center_df = get_sample_sequencing_centers()
-    insert_sizes_df = pd.read_csv("1000genomes/insert_sizes.csv")
+    insert_sizes_df = pd.read_csv("1kgp/insert_sizes.csv")
     color_lookup = {}
     for i, mode in enumerate(evidence_by_mode):
         x = []
@@ -591,7 +591,7 @@ def get_num_samples_gmm(df):
 
 def get_svs_intersecting_genes(df: pd.DataFrame):
     sv_gene_overlap_df = pd.read_csv(
-        "1000genomes/sv_intersect.csv", header=None, delimiter="\t"
+        "1kgp/sv_intersect.csv", header=None, delimiter="\t"
     )
     intersecting_svs = sv_gene_overlap_df.iloc[:, 3]
     return df[df["id"].isin(intersecting_svs)]
@@ -884,8 +884,8 @@ def populate_sample_info(
     L: int,
     R: int,
 ) -> None:
-    ancestry_df = pd.read_csv("1000genomes/ancestry.tsv", delimiter="\t")
-    deletions_df = pd.read_csv(f"1000genomes/deletions_by_chr/chr{chr}.csv")
+    ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
+    deletions_df = pd.read_csv(f"1kgp/deletions_by_chr/chr{chr}.csv")
     deletions_row = deletions_df[
         (deletions_df["start"] == L) & (deletions_df["stop"] == R)
     ].iloc[0]
@@ -909,7 +909,7 @@ Plots a bar chart of the total ancestry and superancestry counts from the 1000 G
 
 
 def analyze_ancestry() -> None:
-    df = pd.read_csv("1000genomes/ancestry.tsv", delimiter="\t")
+    df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
     population_data = Counter()
     superpopulation_data = Counter()
     population_lookup = {}
@@ -1154,7 +1154,7 @@ def plot_seq_center_distribution():
 def plot_insert_size_distribution(insert_sizes):
     df = get_sv_stats_df()
     df = df[df["num_modes"] == 2]
-    insert_sizes_df = pd.read_csv("1000genomes/insert_sizes.csv")
+    insert_sizes_df = pd.read_csv("1kgp/insert_sizes.csv")
     insert_sizes = defaultdict(list)
     for _, row in df.iterrows():
         modes = ast.literal_eval(row.modes)
@@ -1182,7 +1182,7 @@ def plot_insert_size_distribution(insert_sizes):
 
 def plot_insert_size_by_seq_center():
     insert_size_df = pd.read_csv(
-        "1000genomes/insert_sizes.csv",
+        "1kgp/insert_sizes.csv",
         dtype={"sample_id": str, "mean_insert_size": int},
     )
     seq_center_df = get_sample_sequencing_centers()
@@ -1209,7 +1209,7 @@ def plot_insert_size_by_seq_center():
 def get_outlier_coverage():
     outlier_coverage = []
     nonoutlier_coverage = []
-    df = pd.read_csv("1000genomes/coverage.csv")
+    df = pd.read_csv("1kgp/coverage.csv")
     outlier_df = df[df["num_samples"] == 1]
     for _, row in outlier_df.iterrows():
         modes = df[df["sv_id"] == row["sv_id"]]
@@ -1234,7 +1234,7 @@ def get_outlier_coverage():
 
 
 def bootstrap_runs_histogram():
-    sv_stats_df = pd.read_csv("1000genomes/sv_stats_merged.csv", low_memory=False)
+    sv_stats_df = pd.read_csv("1kgp/sv_stats_merged.csv", low_memory=False)
 
     resolved_df = sv_stats_df.groupby("id").filter(lambda x: len(x) <= 7)
     ambiguous_df = sv_stats_df.groupby("id").filter(lambda x: len(x) > 7)
