@@ -34,9 +34,10 @@ def load_vcf():
         info = dict(record.info)
         if info["SVTYPE"] != "DEL":
             continue
+        chrom = record.chrom.strip("chr")
         row = [
             record.id,
-            record.chrom,
+            chrom,
             record.start,
             record.stop,
             record.rlen,
