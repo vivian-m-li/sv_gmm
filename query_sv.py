@@ -98,7 +98,7 @@ def query_stix_bash(l: int, r: int, output_dir: str, file_name: str, multi_files
 
     if multi_files:
         with open(f"{output_dir}/{file_name}.txt", "w") as out_file:
-            for i in range(10):
+            for i in range(8):
                 with open(
                     f"{output_dir}/partial_outputs/{file_name}_{i}.txt", "r"
                 ) as partial_file:
@@ -142,7 +142,7 @@ def query_stix(
     else:
         if not os.path.isfile(output_file):
             # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
-            multi_files = reference_genome == "high_cov_hg38"
+            multi_files = reference_genome == "grch38"
             query_stix_bash(l, r, FILE_DIR, file_name, multi_files)
         df = txt_to_df(output_file)
 
@@ -238,7 +238,7 @@ def main():
         const=True,
     )
     parser.add_argument(
-        "-sdt", type=str, help="Sequencing data type", default="high_cov_hg38"
+        "-ref", type=str, help="Reference genome", default="grch38"
     )
 
     args = parser.parse_args()
@@ -246,9 +246,9 @@ def main():
     r = parse_input(args.r)
     p = args.p
     d = args.d
-    sequence_data_type = "high_cov_hg38" if args.sdt != "low_cov_hg37" else args.sdt
+    reference_genome = "grch38" if args.ref != "grch37" else args.ref
     query_stix(
-        l, r, True, single_trial=not d, plot=p, sequence_data_type=sequence_data_type
+        l, r, True, single_trial=not d, plot=p, reference_genome=reference_genome
     )
 
 
