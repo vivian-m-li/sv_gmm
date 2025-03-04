@@ -3,6 +3,7 @@ import pysam
 import multiprocessing
 from query_sv import *
 from process_data import *
+from helper import get_deletions_df
 
 FILE_DIR = "1kgp"
 
@@ -72,7 +73,7 @@ def get_num_samples(row_index: int, row, lookup: Dict[int, int]):
 
 def get_num_sv():
     filename = f"{FILE_DIR}/deletions_df.csv"
-    df = pd.read_csv(filename)
+    df = pd.read_csv(filename, low_memory=False)
     with multiprocessing.Manager() as manager:
         p = multiprocessing.Pool(multiprocessing.cpu_count())
         lookup = manager.dict()
