@@ -1,18 +1,20 @@
+import os
 import pandas as pd
 import pysam
 import multiprocessing
 from query_sv import *
 from process_data import *
-from helper import get_deletions_df
 
 FILE_DIR = "1kgp"
 
 
-def load_vcf_bed():
-    vcf_in = pysam.VariantFile(f"{FILE_DIR}/1kg_hg38_deletions.vcf")
+def vcf_to_bed():
+    vcf_in = pysam.VariantFile(f"{FILE_DIR}/1kg.subset.vcf.gz")
     with open(f"{FILE_DIR}/deletions.bed", "w") as f:
         for record in vcf_in.fetch():
-            f.write(f"{record.chrom}\t{record.start}\t{record.stop}\t{record.id}\n")
+            f.write(
+                f"{record.chrom.strip('chr')}\t{record.start}\t{record.stop}\t{record.id}\n"
+            )
 
 
 def load_vcf():
