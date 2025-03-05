@@ -1,10 +1,13 @@
 import sys
 import os
-import pandas as pd
 import multiprocessing
-from process_data import *
-from gmm_types import *
-from write_sv_output import *
+from process_data import run_viz_gmm
+from write_sv_output import (
+    get_raw_data,
+    init_sv_stat_row,
+    write_sv_stats,
+    concat_multi_processed_sv_files,
+)
 from helper import get_deletions_df
 from typing import Set, Optional, Dict, List, Tuple
 
@@ -15,9 +18,11 @@ OUTPUT_FILE_NAME = "sv_stats.csv"
 def run_all_sv_wrapper(
     row: Dict, population_size: int, sample_set: Set[int], iteration: int = 0
 ):
-    squiggle_data, num_samples = get_raw_data(row["chr"], row["start"], row["stop"])
+    squiggle_data, num_samples = get_raw_data(row, sample_set)
     sv_stat = init_sv_stat_row(
-        row, num_samples=num_samples, num_reference=num_samples - len(squiggle_data)
+        row,
+        num_samples=num_samples,
+        num_reference=num_samples - len(squiggle_data),
     )
 
     if len(squiggle_data) == 0:
@@ -33,7 +38,9 @@ def run_all_sv_wrapper(
             plot_bokeh=False,
         )
 
-    write_sv_stats(sv_stat, gmm, evidence_by_mode, population_size, FILE_DIR, iteration)
+    write_sv_stats(
+        sv_stat, gmm, evidence_by_mode, population_size, FILE_DIR, iteration
+    )
 
 
 def run_all_sv(
@@ -66,7 +73,9 @@ def run_all_sv(
             )
         rows = []
         if query_chr is not None:
-            for _, row in deletions_df[deletions_df["chr"] == query_chr].iterrows():
+            for _, row in deletions_df[
+                deletions_df["chr"] == query_chr
+            ].iterrows():
                 rows.append(row)
         elif run_ambiguous_svs:
             with open("1kgp/svs_to_rerun.txt") as f:
@@ -78,7 +87,7 @@ def run_all_sv(
             for _, row in deletions_df.iterrows():
                 rows.append(row)
 
-        with multiprocessing.Manager() as manager:
+        with multiprocessing.Manager():
             cpu_count = multiprocessing.cpu_count()
             p = multiprocessing.Pool(cpu_count)
             args = []

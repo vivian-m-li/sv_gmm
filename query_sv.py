@@ -9,7 +9,6 @@ from process_data import run_viz_gmm
 from run_dirichlet import run_dirichlet
 from helper import get_sample_ids
 from typing import List, Dict
-from profiler import profile, print_stats, dump_stats
 
 
 FILE_DIR = "stix_output"
@@ -30,7 +29,9 @@ def txt_to_df(filename: str):
         "type",
     ]
     df = pd.read_csv(filename, names=column_names, sep=r"\s+")
-    df["sample_id"] = df["sample_id"].str.extract(r"/([^/]+)\.bed\.gz", expand=False)
+    df["sample_id"] = df["sample_id"].str.extract(
+        r"/([^/]+)\.bed\.gz", expand=False
+    )
     return df
 
 
@@ -38,7 +39,7 @@ def giggle_format(chromosome: str, position: int):
     return f"{chromosome.lower()}:{position}-{position}"
 
 
-def reverse_giggle_format(l: str, r: str):
+def reverse_giggle_format(l: str, r: str):  # noqa741
     chr = l.split(":")[0]
     start = int(l.split("-")[1])
     stop = int(r.split("-")[1])
@@ -83,7 +84,9 @@ def get_reference_samples(
     return ref_samples
 
 
-def query_stix_bash(l: int, r: int, output_dir: str, file_name: str, multi_files: bool):
+def query_stix_bash(
+    l: int, r: int, output_dir: str, file_name: str, multi_files: bool
+):
     bash_file = "query_stix_multifile.sh" if multi_files else "query_stix.sh"
     if multi_files:
         output_file = f"{output_dir}/partial_outputs/{file_name}"
@@ -153,7 +156,9 @@ def query_stix(
             l_starts = group["l_start"].tolist()
             r_ends = group["r_end"].tolist()
             sample_id = group["sample_id"].iloc[0]
-            sv_evidence = [item for pair in zip(l_starts, r_ends) for item in pair]
+            sv_evidence = [
+                item for pair in zip(l_starts, r_ends) for item in pair
+            ]
 
             squiggle_data[sample_id] = np.array(sv_evidence)
             sv_evidence = [sample_id] + sv_evidence
@@ -172,7 +177,9 @@ def query_stix(
         squiggle_data.pop(key, None)
 
     if filter_reference:
-        ref_samples = get_reference_samples(squiggle_data, chr, start, stop, file_root)
+        ref_samples = get_reference_samples(
+            squiggle_data, chr, start, stop, file_root
+        )
         for ref in ref_samples:
             squiggle_data.pop(ref, None)
 
@@ -242,13 +249,18 @@ def main():
     )
 
     args = parser.parse_args()
-    l = parse_input(args.l)
+    l = parse_input(args.l)  # noqa741
     r = parse_input(args.r)
     p = args.p
     d = args.d
     reference_genome = "grch38" if args.ref != "grch37" else args.ref
     query_stix(
-        l, r, True, single_trial=not d, plot=p, reference_genome=reference_genome
+        l,
+        r,
+        True,
+        single_trial=not d,
+        plot=p,
+        reference_genome=reference_genome,
     )
 
 

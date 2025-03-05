@@ -6,8 +6,14 @@ import requests
 import multiprocessing
 import pandas as pd
 import matplotlib.pyplot as plt
-from query_sv import *
-from process_data import *
+from gmm_types import CHR_LENGTHS
+from query_sv import (
+    giggle_format,
+    query_stix,
+    load_squiggle_data,
+    PROCESSED_FILE_DIR,
+)
+from process_data import get_intercepts
 from typing import Dict
 
 # for human genome assembly GRCh37, https://www.ncbi.nlm.nih.gov/grc/human/data?asm=GRCh37
@@ -35,8 +41,12 @@ def query_gnomad(chr: str, start: int, stop: int):
 
     sv_data = response.json()["data"]["region"]["structural_variants"]
     fields = list(sv_data[0].keys())
-    dels = [sv for sv in sv_data if sv["type"] == "DEL" and len(sv["filters"]) == 0]
-    dels = sorted(dels, key=lambda x: x["af"], reverse=True)  # sort by allele frequency
+    dels = [
+        sv for sv in sv_data if sv["type"] == "DEL" and len(sv["filters"]) == 0
+    ]
+    dels = sorted(
+        dels, key=lambda x: x["af"], reverse=True
+    )  # sort by allele frequency
 
     filename = f"{FILE_DIR}/{chr}.csv"
     with open(filename, "w", newline="") as csvfile:
@@ -57,12 +67,16 @@ def query_gnomad_stix():
     for chr in CHR_LENGTHS.keys():
         start = time.time()
         df = pd.read_csv(f"{FILE_DIR}/{chr}.csv")
-        with multiprocessing.Manager() as manager:
+        with multiprocessing.Manager():
             p = multiprocessing.Pool(multiprocessing.cpu_count())
             args = []
             for _, row in df.iterrows():
                 args.append(
-                    (giggle_format(chr, row.pos), giggle_format(chr, row.end), False)
+                    (
+                        giggle_format(chr, row.pos),
+                        giggle_format(chr, row.end),
+                        False,
+                    )
                 )
 
             p.starmap(query_stix, args)
@@ -70,14 +84,16 @@ def query_gnomad_stix():
             p.join()
         end = time.time()
         print(
-            f"Time to query chromosome {chr}: {datetime.timedelta(seconds = end - start)}"
+            f"Time to query chromosome {chr}: {datetime.timedelta(seconds=end - start)}"
         )
 
 
 def get_num_samples(row_index: int, row, chr: str, lookup: Dict[int, int]):
     start = giggle_format(chr, row.pos)
     end = giggle_format(chr, row.end)
-    squiggle_data = load_squiggle_data(f"{PROCESSED_FILE_DIR}/{start}_{end}.csv")
+    squiggle_data = load_squiggle_data(
+        f"{PROCESSED_FILE_DIR}/{start}_{end}.csv"
+    )
     if len(squiggle_data) > 0:
         intercepts, _ = get_intercepts(
             squiggle_data, file_name=None, L=row.pos, R=row.end

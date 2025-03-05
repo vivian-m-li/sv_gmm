@@ -29,7 +29,7 @@ def query_random_svs(num_sample_range):
             f"Chr {chr}: {start}-{stop} ({num_samples} samples, allele frequency={af})"
         )
 
-        l = giggle_format(chr, start)
+        l = giggle_format(chr, start)  # noqa741
         r = giggle_format(chr, stop)
         query_stix(l, r)
 

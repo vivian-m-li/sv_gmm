@@ -1,13 +1,17 @@
-import warnings
 import numpy as np
+import pandas as pd
 import matplotlib.cm as cm
 from bokeh.plotting import figure, output_file, save
 from bokeh.models import HoverTool, ColumnDataSource, NumeralTickFormatter
 from typing import Optional, List, Tuple, Dict
 from em import run_gmm
 from em_1d import run_gmm as run_gmm_1d
-from viz import *
-from gmm_types import *
+from viz import (
+    populate_sample_info,
+    get_evidence_by_mode,
+    plot_2d_coords,
+)
+from gmm_types import Evidence, Sample
 
 
 def sv_viz(data: List[np.ndarray[float]], *, file_name: str):
@@ -25,7 +29,9 @@ def sv_viz(data: List[np.ndarray[float]], *, file_name: str):
             p.circle(x, i * 2, color=color, size=5)
             p.circle(y, i * 2, color=color, size=5)
             for read_length, r in zip(x, y):
-                p.line([read_length, r], [i * 2, i * 2], line_width=2, color=color)
+                p.line(
+                    [read_length, r], [i * 2, i * 2], line_width=2, color=color
+                )
 
     output_file(f"{file_name}_horizontal_sequences.html")
     save(p)
@@ -165,10 +171,22 @@ def filter_and_plot_sequences_bokeh(
         )
 
         # Background rectangle
-        p.quad(top=sig, bottom=-sig, left=0, right=max(ux) - min(ux), color="#F0F0F0")
+        p.quad(
+            top=sig,
+            bottom=-sig,
+            left=0,
+            right=max(ux) - min(ux),
+            color="#F0F0F0",
+        )
 
         # y=x line
-        p.line(ux - min(ux), ux - ux, line_dash="dashed", line_width=1, color="black")
+        p.line(
+            ux - min(ux),
+            ux - ux,
+            line_dash="dashed",
+            line_width=1,
+            color="black",
+        )
 
     mb = np.zeros(
         (len(y), 4)
@@ -195,7 +213,8 @@ def filter_and_plot_sequences_bokeh(
         z = z[(z != 0) & (~np.isnan(z))]
         z_filtered = z.copy()
         paired_ends = [
-            [z_filtered[i], z_filtered[i + 1]] for i in range(0, len(z_filtered), 2)
+            [z_filtered[i], z_filtered[i + 1]]
+            for i in range(0, len(z_filtered), 2)
         ]
 
         if len(z) > 0:
@@ -228,9 +247,15 @@ def filter_and_plot_sequences_bokeh(
 
                 if plot_bokeh:  # remove plotting to improve efficiency
                     if sdl >= 3:
-                        p.line(xp, yp, line_width=2, color=colors[i % len(colors)])
+                        p.line(
+                            xp, yp, line_width=2, color=colors[i % len(colors)]
+                        )
                         p.scatter(
-                            xp, yp, size=6, color=colors[i % len(colors)], alpha=0.6
+                            xp,
+                            yp,
+                            size=6,
+                            color=colors[i % len(colors)],
+                            alpha=0.6,
                         )
                         mb[i, 3] = 1
                     else:  # this sample does not have an SV
@@ -249,7 +274,9 @@ def filter_and_plot_sequences_bokeh(
 
                 if plot_bokeh:
                     p.line(z[0::2], z[1::2], line_width=2, color="#999999")
-                    p.scatter(z[0::2], z[1::2], size=6, color="#999999", alpha=0.6)
+                    p.scatter(
+                        z[0::2], z[1::2], size=6, color="#999999", alpha=0.6
+                    )
 
     if plot_bokeh and file_name is not None:
         p.grid.grid_line_alpha = 0.3
@@ -291,8 +318,18 @@ def plot_fitted_lines_bokeh(
 
         # Add a grey polygon for background
         p.patch(
-            [L - mean_insert_size - sig, L + sig, L + sig, L - mean_insert_size - sig],
-            [R - 2 * sig, R + mean_insert_size, R + mean_insert_size + 2 * sig, R],
+            [
+                L - mean_insert_size - sig,
+                L + sig,
+                L + sig,
+                L - mean_insert_size - sig,
+            ],
+            [
+                R - 2 * sig,
+                R + mean_insert_size,
+                R + mean_insert_size + 2 * sig,
+                R,
+            ],
             color="grey",
             line_color="grey",
         )
@@ -311,7 +348,12 @@ def plot_fitted_lines_bokeh(
             start_points.append((start_x, start_y))
 
             if plot_bokeh:
-                p.line([start_x, L], [start_y, L + row[2]], line_width=2, color="red")
+                p.line(
+                    [start_x, L],
+                    [start_y, L + row[2]],
+                    line_width=2,
+                    color="red",
+                )
                 p.scatter([start_x], [start_y], size=2, color="red", alpha=0.6)
 
             evidence.start_y = start_y
@@ -376,7 +418,9 @@ def get_intercepts(
     for bs, evidence in zip(intercepts, sv_evidence):
         if len(bs) > 0:
             # scale the intercept and maxL values
-            points.append((bs[1] - R, evidence.mean_l - L))  # np.array(bs)[1]=start_y
+            points.append(
+                (bs[1] - R, evidence.mean_l - L)
+            )  # np.array(bs)[1]=start_y
     points = np.array(points)
 
     return points, sv_evidence
@@ -452,7 +496,9 @@ def run_viz_gmm(
         populate_sample_info(
             sv_evidence, chr, L, R
         )  # mutates sv_evidence with ancestry data and homo/heterozygous for each sample
-    evidence_by_mode = get_evidence_by_mode(gmm, sv_evidence, L, R, gmm_model=gmm_model)
+    evidence_by_mode = get_evidence_by_mode(
+        gmm, sv_evidence, L, R, gmm_model=gmm_model
+    )
     if plot:
         # plot_evidence_by_mode(evidence_by_mode)
         plot_2d_coords(

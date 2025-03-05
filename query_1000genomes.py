@@ -3,8 +3,9 @@ import os
 import pandas as pd
 import pysam
 import multiprocessing
-from query_sv import *
-from process_data import *
+from typing import Dict
+from query_sv import giggle_format, query_stix
+from process_data import get_intercepts, get_insert_size_lookup
 
 FILE_DIR = "1kgp"
 
@@ -15,7 +16,12 @@ def prune_genes_bed():
     ) as outfile:
         for line in infile:
             fields = line.strip().split("\t")
-            chrom, start, stop, annotations = fields[0], fields[1], fields[2], fields[6]
+            chrom, start, stop, annotations = (
+                fields[0],
+                fields[1],
+                fields[2],
+                fields[6],
+            )
             match = re.search(r'gene_name "([^"]+)"', annotations)
             gene_name = match.group(1)
             outfile.write(f"{chrom}\t{start}\t{stop}\t{gene_name}\n")

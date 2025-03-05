@@ -18,10 +18,19 @@ from matplotlib.ticker import FixedLocator, StrMethodFormatter
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from collections import Counter, defaultdict
 from typing import List
-from em import run_gmm, run_em
+from em import run_em
 from em_1d import run_em as run_em1d, get_scatter_data
 from helper import get_sample_sequencing_centers, get_sv_stats_df
-from gmm_types import *
+from gmm_types import (
+    GMM,
+    Evidence,
+    SVStat,
+    Sample,
+    ANCESTRY_COLORS,
+    COLORS,
+    GMM_AXES,
+    GMM_MODELS,
+)
 
 REFERENCE_FILE = "hs37d5.fa.gz"
 SAMPLES_DIR = "samples"
@@ -36,7 +45,12 @@ def add_noise(value, scale=0.07):
 
 
 def get_evidence_by_mode(
-    gmm: GMM, sv_evidence: List[Evidence], L: int, R: int, *, gmm_model: str = "2d"
+    gmm: GMM,
+    sv_evidence: List[Evidence],
+    L: int,
+    R: int,
+    *,
+    gmm_model: str = "2d",
 ) -> List[List[Evidence]]:
     sv_evidence = np.array(sv_evidence)
     x_by_mode = []
@@ -76,7 +90,9 @@ def get_evidence_by_mode(
 
 
 def get_mean_std(label: str, values: List[float]):
-    return f"{label}={math.floor(np.mean(values))} +/- {round(np.std(values), 2)}"
+    return (
+        f"{label}={math.floor(np.mean(values))} +/- {round(np.std(values), 2)}"
+    )
 
 
 def print_sv_stats(sv_stats: List[List[SVStat]]):
@@ -97,13 +113,18 @@ def get_svlen(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
         stats = []
         for evidence in mode:
             lengths = [
-                max(paired_end) - min(paired_end) for paired_end in evidence.paired_ends
+                max(paired_end) - min(paired_end)
+                for paired_end in evidence.paired_ends
             ]
             stats.append(
                 SVStat(
                     length=np.mean(lengths) - evidence.mean_insert_size,
-                    start=max([paired_end[0] for paired_end in evidence.paired_ends]),
-                    end=min([paired_end[1] for paired_end in evidence.paired_ends]),
+                    start=max(
+                        [paired_end[0] for paired_end in evidence.paired_ends]
+                    ),
+                    end=min(
+                        [paired_end[1] for paired_end in evidence.paired_ends]
+                    ),
                 )
             )
         all_stats.append(stats)
@@ -123,7 +144,6 @@ def add_color_noise(hex_color: str):
 
 
 def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
-    sv_stats = get_svlen(evidence_by_mode)
     num_modes = len(evidence_by_mode)
     mode_indices = list(range(num_modes))
     mode_indices_reversed = mode_indices[::-1]
@@ -218,8 +238,12 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
             min_y = min(y, min_y)
 
             # plot only the max L coordinate and min R coordinate (closest values to the actual SV, which is not sequenced)
-            mean_l = np.mean([paired_end[0] for paired_end in evidence.paired_ends])
-            mean_r = np.mean([paired_end[1] for paired_end in evidence.paired_ends])
+            mean_l = np.mean(
+                [paired_end[0] for paired_end in evidence.paired_ends]
+            )
+            mean_r = np.mean(
+                [paired_end[1] for paired_end in evidence.paired_ends]
+            )
             bax.plot(
                 [mean_l, mean_r],
                 [y, y],
@@ -270,7 +294,9 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
         ax.yaxis.set_ticklabels([])
         ax.tick_params(axis="y", length=0)
         ax.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
-        ax.yaxis.set_major_locator(FixedLocator([mode + 1 for mode in mode_indices]))
+        ax.yaxis.set_major_locator(
+            FixedLocator([mode + 1 for mode in mode_indices])
+        )
     bax.locator_params(axis="x", nbins=4)
 
     # Add the legend
@@ -303,7 +329,9 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
     plt.show()
 
 
-def plot_sequence(evidence_by_mode: List[List[Evidence]], ref_sequence: Seq.Seq):
+def plot_sequence(
+    evidence_by_mode: List[List[Evidence]], ref_sequence: Seq.Seq
+):
     sv_stats = get_svlen(evidence_by_mode)
     mode_indices = list(range(len(evidence_by_mode)))
     mode_indices_reversed = mode_indices[::-1]
@@ -311,8 +339,12 @@ def plot_sequence(evidence_by_mode: List[List[Evidence]], ref_sequence: Seq.Seq)
         lefts = []
         rights = []
         for evidence in mode:
-            lefts.append(max([paired_end[0] for paired_end in evidence.paired_ends]))
-            rights.append(min([paired_end[1] for paired_end in evidence.paired_ends]))
+            lefts.append(
+                max([paired_end[0] for paired_end in evidence.paired_ends])
+            )
+            rights.append(
+                min([paired_end[1] for paired_end in evidence.paired_ends])
+            )
         all_paired_ends = lefts + rights
         max_left = max(lefts)
         min_right = min(rights)
@@ -398,7 +430,7 @@ def plot_sv_lengths(evidence_by_mode: List[List[Evidence]]):
 
 
 def plot_sv_coords(evidence_by_mode: List[List[Evidence]]):
-    fig = plt.figure(figsize=(15, 8))
+    plt.figure(figsize=(15, 8))
     for i, mode in enumerate(evidence_by_mode):
         coords = [evidence.mean_l for evidence in mode]
         gmm_iters, _ = run_em1d(coords, 1)
@@ -406,7 +438,9 @@ def plot_sv_coords(evidence_by_mode: List[List[Evidence]]):
         ux, hx = get_scatter_data(coords)
         plt.plot(
             ux,
-            4 * (len(coords) * gmm.p[0]) * norm.pdf(ux, gmm.mu[0], np.sqrt(gmm.vr[0])),
+            4
+            * (len(coords) * gmm.p[0])
+            * norm.pdf(ux, gmm.mu[0], np.sqrt(gmm.vr[0])),
             linestyle="-",
             color=COLORS[i],
         )
@@ -456,9 +490,9 @@ def plot_2d_coords(
 
             try:
                 seq_centers = ", ".join(
-                    seq_center_df[seq_center_df["SAMPLE_NAME"] == evidence.sample.id][
-                        "CENTER_NAME"
-                    ].values[0]
+                    seq_center_df[
+                        seq_center_df["SAMPLE_NAME"] == evidence.sample.id
+                    ]["CENTER_NAME"].values[0]
                 )
             except IndexError:
                 seq_centers = "Unknown"  # to handle synthetic data
@@ -515,8 +549,6 @@ def plot_2d_coords(
                     alpha=0.6,
                 )
 
-        mse_x = np.mean(sem_ax1)
-        mse_y = np.mean(sem_ax2)
         ax_main.text(
             gmm.mu[0][0],
             gmm.mu[0][1],
@@ -544,7 +576,9 @@ def plot_2d_coords(
 
         # plot the 1D gaussian distributions
         ax_xhist = ax_main.inset_axes([0, 1, 1, 0.2], sharex=ax_main)
-        ax_xhist.hist(x[:, 0], bins=20, color=COLORS[i], alpha=0.6, density=True)
+        ax_xhist.hist(
+            x[:, 0], bins=20, color=COLORS[i], alpha=0.6, density=True
+        )
         mean_x, std_x = np.mean(x[:, 0]), np.std(x[:, 0])
         x_vals = np.linspace(mean_x - 3 * std_x, mean_x + 3 * std_x, 100)
         ax_xhist.plot(x_vals, norm.pdf(x_vals, mean_x, std_x), color=COLORS[i])
@@ -648,7 +682,7 @@ def plot_processed_sv_stats(filter_intersecting_genes: bool = False):
         ax_bar.text(
             0.15,
             y0 + height / 2,
-            f"{i+1} Mode{'' if i == 0 else 's'}",
+            f"{i + 1} Mode{'' if i == 0 else 's'}",
             ha="center",
             va="center",
             fontsize=8,
@@ -781,14 +815,16 @@ def plot_sample_size_per_mode(filter_intersecting_genes: bool = False):
     nonzero = df[df["num_samples"] > 0]
     mode_data = [nonzero] + [df[df["num_modes"] == i + 1] for i in range(3)]
 
-    sample_sizes = [x["num_samples_gmm"].apply(lambda y: sum(y)) for x in mode_data]
+    sample_sizes = [
+        x["num_samples_gmm"].apply(lambda y: sum(y)) for x in mode_data
+    ]
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
     ax.boxplot(sample_sizes, positions=[1, 2, 3, 4], widths=0.6)
     ax.set_xticks([1, 2, 3, 4])
     labels = [
-        f"{label} (n={len(sample_sizes[i])})\n{len(sample_sizes[i])/len(sample_sizes[0])*100:.2f}%"
+        f"{label} (n={len(sample_sizes[i])})\n{len(sample_sizes[i]) / len(sample_sizes[0]) * 100:.2f}%"
         for i, label in enumerate(["All SVs", "1 Mode", "2 Modes", "3 Modes"])
     ]
     ax.set_xticklabels(labels)
@@ -892,7 +928,9 @@ def populate_sample_info(
     for evidence in sv_evidence:
         sample_id = evidence.sample.id
         ancestry_row = ancestry_df[ancestry_df["Sample name"] == sample_id]
-        superpopulation = ancestry_row["Superpopulation code"].values[0].split(",")[0]
+        superpopulation = (
+            ancestry_row["Superpopulation code"].values[0].split(",")[0]
+        )
         allele = deletions_row[sample_id]
         evidence.sample = Sample(
             id=sample_id,
@@ -1008,11 +1046,14 @@ def plot_d_accuracy_by_n(n_samples: int):
             model_df = case_df[case_df["gmm_model"] == model]
             for _, row in model_df.iterrows():
                 dist = row["d"]
-                correct = 1 if row["num_modes"] == row["expected_num_modes"] else 0
+                correct = (
+                    1 if row["num_modes"] == row["expected_num_modes"] else 0
+                )
                 accuracy_by_dist[dist].append(correct)
             distances = sorted(accuracy_by_dist.keys())
             accuracies = [
-                sum(accuracy_by_dist[d]) / len(accuracy_by_dist[d]) for d in distances
+                sum(accuracy_by_dist[d]) / len(accuracy_by_dist[d])
+                for d in distances
             ]
             ax.plot(distances, accuracies, label=model, color=COLORS[i])
         ax.set_title(f"Case {case}")
@@ -1027,7 +1068,11 @@ def plot_d_accuracy_by_n(n_samples: int):
 
 
 def plot_d_accuracy_by_case(case: str):
-    files = [f for f in os.listdir("synthetic_data") if re.match(r"results\d+\.csv", f)]
+    files = [
+        f
+        for f in os.listdir("synthetic_data")
+        if re.match(r"results\d+\.csv", f)
+    ]
     n_samples = sorted(
         [int(re.search(r"results(\d+)\.csv", f).group(1)) for f in files]
     )
@@ -1054,18 +1099,25 @@ def plot_d_accuracy_by_case(case: str):
             model_df = df[df["gmm_model"] == model]
             for _, row in model_df.iterrows():
                 dist = row["d"]
-                correct = 1 if row["num_modes"] == row["expected_num_modes"] else 0
+                correct = (
+                    1 if row["num_modes"] == row["expected_num_modes"] else 0
+                )
                 accuracy_by_dist[dist].append(correct)
             distances = sorted(accuracy_by_dist.keys())
             accuracies = np.array(
-                [sum(accuracy_by_dist[d]) / len(accuracy_by_dist[d]) for d in distances]
+                [
+                    sum(accuracy_by_dist[d]) / len(accuracy_by_dist[d])
+                    for d in distances
+                ]
             )
             (indices,) = np.where(accuracies >= 0.8)
             # TODO: why is the 2d model failing at distance = 270?
             if len(indices) > 0:
                 d_acc_vals[model].append(distances[indices[0]])
             else:
-                d_acc_vals[model].append(np.nan)  # TODO: set np.inf or just don't plot
+                d_acc_vals[model].append(
+                    np.nan
+                )  # TODO: set np.inf or just don't plot
 
             if n in vals_to_plot:
                 all_d_acc_vals[model].append([distances, accuracies])
@@ -1083,7 +1135,9 @@ def plot_d_accuracy_by_case(case: str):
         ax_large.set_ylim(-10, 1100 if case in ["D", "E"] else 500)
         ax_large.legend(loc="upper right")
         ax_large.set_xlabel("N", fontsize=14)
-        ax_large.set_ylabel("Distance at 80% Accuracy", fontsize=14, labelpad=15)
+        ax_large.set_ylabel(
+            "Distance at 80% Accuracy", fontsize=14, labelpad=15
+        )
         for j, ax in enumerate(axs_small):
             distances, accuracies = all_d_acc_vals[model][j]
             ax.plot(distances, accuracies, label=model, color=color)
@@ -1108,9 +1162,9 @@ def plot_seq_center_distribution():
         modes = sorted(modes, key=lambda x: x["start"])
         for i, mode in enumerate(ast.literal_eval(row.modes)):
             for sample_id in mode["sample_ids"]:
-                seq_centers = seq_center_df[seq_center_df["SAMPLE_NAME"] == sample_id][
-                    "CENTER_NAME"
-                ].values[0]
+                seq_centers = seq_center_df[
+                    seq_center_df["SAMPLE_NAME"] == sample_id
+                ]["CENTER_NAME"].values[0]
                 for seq_center in seq_centers:
                     all_seq_centers.add(seq_center)
                     seq_centers_by_mode[i][seq_center] += 1
@@ -1120,32 +1174,40 @@ def plot_seq_center_distribution():
     seq_center_cm = cm.get_cmap("Set2").colors
     for i in seq_centers_by_mode.keys():
         seq_center_counts = seq_centers_by_mode[i]
-        values = [seq_center_counts[seq_center] for seq_center in all_seq_centers]
+        values = [
+            seq_center_counts[seq_center] for seq_center in all_seq_centers
+        ]
         axs[i].pie(
             values,
             labels=all_seq_centers,
             colors=seq_center_cm[: len(all_seq_centers)],
             autopct="%1.1f%%",
         )
-        axs[i].set_title(f"Mode {i+1}")
+        axs[i].set_title(f"Mode {i + 1}")
     plt.show()
 
     plt.figure()
     totals = {
         seq_center: sum(
-            [seq_centers_by_mode[i][seq_center] for i in seq_centers_by_mode.keys()]
+            [
+                seq_centers_by_mode[i][seq_center]
+                for i in seq_centers_by_mode.keys()
+            ]
         )
         for seq_center in all_seq_centers
     }
     pcts = {}
     for mode, counter in seq_centers_by_mode.items():
         pcts[mode] = [
-            counter[seq_center] / totals[seq_center] for seq_center in all_seq_centers
+            counter[seq_center] / totals[seq_center]
+            for seq_center in all_seq_centers
         ]
 
     bottom = np.zeros(len(all_seq_centers))
     for mode, pct in pcts.items():
-        plt.bar(all_seq_centers, pct, 0.5, label=f"Mode {mode + 1}", bottom=bottom)
+        plt.bar(
+            all_seq_centers, pct, 0.5, label=f"Mode {mode + 1}", bottom=bottom
+        )
         bottom += pct
     plt.legend(loc="upper right")
     plt.show()
@@ -1174,7 +1236,7 @@ def plot_insert_size_distribution(insert_sizes):
     plt.figure()
     num_modes = len(insert_sizes)
     values = [insert_sizes[i] for i in range(num_modes)]
-    plt.boxplot(values, labels=[f"Mode {i+1}" for i in range(num_modes)])
+    plt.boxplot(values, labels=[f"Mode {i + 1}" for i in range(num_modes)])
     plt.ylabel("Mean Insert Size")
     plt.title("Mean Insert Sizes by Mode")
     plt.show()
@@ -1188,7 +1250,10 @@ def plot_insert_size_by_seq_center():
     seq_center_df = get_sample_sequencing_centers()
 
     df = pd.merge(
-        seq_center_df, insert_size_df, left_on="SAMPLE_NAME", right_on="sample_id"
+        seq_center_df,
+        insert_size_df,
+        left_on="SAMPLE_NAME",
+        right_on="sample_id",
     )
     df.drop(columns=["SAMPLE_NAME"], inplace=True)
     df.rename(columns={"CENTER_NAME": "center_name"}, inplace=True)
@@ -1239,7 +1304,7 @@ def bootstrap_runs_histogram():
     resolved_df = sv_stats_df.groupby("id").filter(lambda x: len(x) <= 7)
     ambiguous_df = sv_stats_df.groupby("id").filter(lambda x: len(x) > 7)
 
-    fig = plt.figure()
+    plt.figure()
     x_labels = ["1 Mode", "2 Modes", "3 Modes"]
     bottom = np.zeros(3)
 

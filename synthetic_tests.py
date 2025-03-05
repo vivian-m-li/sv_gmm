@@ -13,7 +13,9 @@ from typing import Optional, List, Tuple
 
 def confusion_mat():
     for model in GMM_MODELS:
-        df = pd.read_csv(f"synthetic_data/results_{model}.csv", low_memory=False)
+        df = pd.read_csv(
+            f"synthetic_data/results_{model}.csv", low_memory=False
+        )
         actual = df["expected_num_modes"]
         predicted = df["num_modes"]
         confusion_matrix = metrics.confusion_matrix(actual, predicted)
@@ -31,7 +33,9 @@ def run_gmm(case, d, svs, weights, n_samples, results):
         gmm, evidence_by_mode = generate_synthetic_sv_data(
             1, svs, n_samples=n_samples, p=weights, gmm_model=gmm_model
         )
-        results.append([case, d, gmm_model, svs, n_samples, gmm, evidence_by_mode])
+        results.append(
+            [case, d, gmm_model, svs, n_samples, gmm, evidence_by_mode]
+        )
 
 
 def get_len_L(evidence_by_mode):
@@ -41,8 +45,12 @@ def get_len_L(evidence_by_mode):
         lens = []
         starts = []
         for evidence in mode:
-            mean_l = np.mean([paired_end[0] for paired_end in evidence.paired_ends])
-            mean_r = np.mean([paired_end[1] for paired_end in evidence.paired_ends])
+            mean_l = np.mean(
+                [paired_end[0] for paired_end in evidence.paired_ends]
+            )
+            mean_r = np.mean(
+                [paired_end[1] for paired_end in evidence.paired_ends]
+            )
             lens.append(mean_r - mean_l - 450)  # 450 is the length of the read
             starts.append(mean_l)
         lengths.append(int(np.mean(lens)))
@@ -51,7 +59,10 @@ def get_len_L(evidence_by_mode):
 
 
 def write_csv(
-    all_results, *, write_new_file: bool = False, fixed_n_samples: Optional[int] = None
+    all_results,
+    *,
+    write_new_file: bool = False,
+    fixed_n_samples: Optional[int] = None,
 ):
     file = f"synthetic_data/results{'' if fixed_n_samples is None else fixed_n_samples}.csv"
     with open(
@@ -77,7 +88,15 @@ def write_csv(
         else:
             csv_writer = csv.DictWriter(out)
 
-        for case, d, gmm_model, svs, n_samples, gmm, evidence_by_mode in all_results:
+        for (
+            case,
+            d,
+            gmm_model,
+            svs,
+            n_samples,
+            gmm,
+            evidence_by_mode,
+        ) in all_results:
             # there is an error where all generated points are getting filtered out in process_data
             # skip those rows in that case
             if gmm is None:
@@ -104,7 +123,7 @@ def is_valid_svs(svs):
     valid_sv = True
     for i, sv1 in enumerate(svs):
         sv1_size = sv1[1] - sv1[0]
-        for sv2 in svs[i + 1 :]:
+        for sv2 in svs[(i + 1) :]:
             sv2_size = sv2[1] - sv2[0]
             valid_sv = valid_sv and (
                 np.abs(sv2_size - sv1_size) >= 100
@@ -127,7 +146,7 @@ def get_coordinates(sv1, sv2, d):
 
 
 def generate_data(case: str) -> List[Tuple[int, int]]:
-    SVLEN = 2553  #  median SV length
+    SVLEN = 2553  # median SV length
     SV1_L = 100000
     SV1_R = SV1_L + SVLEN
     SV1 = (SV1_L, SV1_R)
@@ -147,7 +166,9 @@ def generate_data(case: str) -> List[Tuple[int, int]]:
     match case:
         case "A":
             for d in range(0, 502, 2):
-                data.append([case, d, [SV1, (int(100000 + d / 2), int(SV1_R - d / 2))]])
+                data.append(
+                    [case, d, [SV1, (int(100000 + d / 2), int(SV1_R - d / 2))]]
+                )
         case "B":
             for d in range(0, 502, 2):
                 sv2_start = SV1_L - d
@@ -194,7 +215,9 @@ def d_accuracy_test(n_samples: int, test_case: Optional[str] = None):
         p.join()
 
         # results: [(case, d, gmm_model, svs, n_samples, gmm, evidence_by_mode), ...]
-        write_csv(results, write_new_file=test_case is None, fixed_n_samples=n_samples)
+        write_csv(
+            results, write_new_file=test_case is None, fixed_n_samples=n_samples
+        )
 
 
 # DEPRECATED
@@ -222,7 +245,9 @@ def run_gmm_synthetic_data():
         sv_start = 100000
         for n in n_samples:
             for sv_size in [200, 500, 1000]:
-                args.append(("1A", [(sv_start, sv_start + sv_size)], [1.0], n, results))
+                args.append(
+                    ("1A", [(sv_start, sv_start + sv_size)], [1.0], n, results)
+                )
 
         # constants for each of the 2-mode cases
         sv1 = (100000, 100500)
@@ -273,7 +298,9 @@ def run_gmm_synthetic_data():
             for sv2_diff in list(range(0, 250, 50)):
                 sv2_start = sv1[0] - sv2_diff
                 sv2 = (sv2_start, sv2_start + sv2_size)
-                if sv2_start + sv2_size < sv1[1] or not is_valid_svs([sv1, sv2]):
+                if sv2_start + sv2_size < sv1[1] or not is_valid_svs(
+                    [sv1, sv2]
+                ):
                     continue
                 for sv3_size in list(range(300, 650, 50)):
                     for sv3_diff in list(range(-150, 150, 50)):

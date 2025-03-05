@@ -2,9 +2,9 @@ import os
 import ast
 import subprocess
 import pandas as pd
+import numpy as np
 import csv
 from scipy.spatial.distance import braycurtis
-from gmm_types import *
 from collections import defaultdict, Counter
 
 PROCESSED_STIX_DIR = "processed_stix_output"
@@ -78,7 +78,9 @@ def get_ambiguous_svs():
 
 
 def get_num_intersecting_genes():
-    df = pd.read_csv("1kgp/intersect_num_overlap.csv", header=None, delimiter="\t")
+    df = pd.read_csv(
+        "1kgp/intersect_num_overlap.csv", header=None, delimiter="\t"
+    )
     num_intersections = df.iloc[:, 5]
     print(f"Total number of genes: {len(num_intersections)}")
 
@@ -99,7 +101,9 @@ def get_num_new_svs():
 
 def get_sample_sequencing_centers():
     # data obtained from https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/20130502.phase3.sequence.index
-    df = pd.read_csv("1kgp/20130502.phase3.sequence.index", sep="\t", low_memory=False)
+    df = pd.read_csv(
+        "1kgp/20130502.phase3.sequence.index", sep="\t", low_memory=False
+    )
     df["CENTER_NAME"] = df["CENTER_NAME"].str.upper()
     df = df[["SAMPLE_NAME", "CENTER_NAME"]].drop_duplicates()
     df = df.groupby("SAMPLE_NAME")["CENTER_NAME"].apply(list).reset_index()
@@ -186,14 +190,20 @@ def write_ancestry_dissimilarity():
         )  # currently a str type, parse into a list
         for mode in modes:
             sample_ids = mode["sample_ids"]
-            ancestry_comp = {anc: 0 for anc in ["SAS", "EAS", "EUR", "AMR", "AFR"]}
+            ancestry_comp = {
+                anc: 0 for anc in ["SAS", "EAS", "EUR", "AMR", "AFR"]
+            }
             for sample_id in sample_ids:
-                ancestry_row = ancestry_df[ancestry_df["Sample name"] == sample_id]
+                ancestry_row = ancestry_df[
+                    ancestry_df["Sample name"] == sample_id
+                ]
                 superpopulation = (
                     ancestry_row["Superpopulation code"].values[0].split(",")[0]
                 )
                 ancestry_comp[superpopulation] += 1
-            ancestry_comp = {k: v / len(sample_ids) for k, v in ancestry_comp.items()}
+            ancestry_comp = {
+                k: v / len(sample_ids) for k, v in ancestry_comp.items()
+            }
             ancestry.append([v for v in ancestry_comp.values()])
 
         dissimilarity = braycurtis(ancestry[0], ancestry[1])

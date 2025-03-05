@@ -1,12 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-import seaborn as sns
-import pandas as pd
 from scipy.stats import dirichlet
 from process_data import run_viz_gmm
-from helper import *
-from gmm_types import *
+from helper import calculate_posteriors, calculate_ci, get_sv_stats_converge_df
+from gmm_types import COLORS, GMM, Evidence
 from typing import List, Tuple
 
 MAX_N = 100
@@ -23,11 +21,14 @@ def animate_dirichlet(posterior_distributions):
 
     ax.set_ylabel("Probability")
     lines = [
-        ax.plot([], [], label=f"{i+1} mode{'s' if i > 0 else ''}", color=COLORS[i])[0]
+        ax.plot(
+            [], [], label=f"{i + 1} mode{'s' if i > 0 else ''}", color=COLORS[i]
+        )[0]
         for i in range(3)
     ]
     error_bands = [
-        ax.fill_between([], [], [], color=COLORS[i], alpha=0.2) for i in range(3)
+        ax.fill_between([], [], [], color=COLORS[i], alpha=0.2)
+        for i in range(3)
     ]
     ax.legend()
 
@@ -43,7 +44,9 @@ def animate_dirichlet(posterior_distributions):
             line.set_data(x, y)
         for i, band in enumerate(error_bands):
             y = [h[0][i] for h in posterior_distributions[: frame + 1]]
-            yerr = [np.sqrt(h[1][i]) for h in posterior_distributions[: frame + 1]]
+            yerr = [
+                np.sqrt(h[1][i]) for h in posterior_distributions[: frame + 1]
+            ]
             band.remove()
             error_bands[i] = ax.fill_between(
                 x,
@@ -54,7 +57,7 @@ def animate_dirichlet(posterior_distributions):
             )
         return lines + error_bands
 
-    ani = animation.FuncAnimation(
+    animation.FuncAnimation(
         fig,
         update,
         frames=len(posterior_distributions),
@@ -98,7 +101,12 @@ def animate_dirichlet_heatmap(alphas):
         # Label the edges of the triangle
         ax.text(1, -0.05, "1 mode", ha="center", va="center", fontsize=12)
         ax.text(
-            0.5, np.sqrt(3) / 2 + 0.05, "2 modes", ha="center", va="center", fontsize=12
+            0.5,
+            np.sqrt(3) / 2 + 0.05,
+            "2 modes",
+            ha="center",
+            va="center",
+            fontsize=12,
         )
         ax.text(0, -0.05, "3 modes", ha="center", va="center", fontsize=12)
 
@@ -111,7 +119,7 @@ def animate_dirichlet_heatmap(alphas):
             fontsize=12,
         )
 
-    ani = animation.FuncAnimation(fig, update, frames=len(alphas))
+    animation.FuncAnimation(fig, update, frames=len(alphas))
     plt.show()
 
 
@@ -132,7 +140,9 @@ def run_trial(squiggle_data, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
     return gmm, evidence_by_mode
 
 
-def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]:
+def run_dirichlet(
+    squiggle_data, **kwargs
+) -> Tuple[List[GMM], List[np.ndarray]]:
     display_output = kwargs.get("plot", False)
 
     alpha = np.array([1, 1, 1])  # initialize alpha values
@@ -171,7 +181,9 @@ def run_dirichlet(squiggle_data, **kwargs) -> Tuple[List[GMM], List[np.ndarray]]
         # Check our stopping condition
         if ci[0] >= 0.6:
             if display_output:
-                print(f"Stopping after {n} iterations, {np.argmax(p) + 1} modes")
+                print(
+                    f"Stopping after {n} iterations, {np.argmax(p) + 1} modes"
+                )
             break
 
     if display_output:

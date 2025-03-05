@@ -1,8 +1,8 @@
 import numpy as np
 from scipy.stats import multivariate_normal
 from sklearn.cluster import KMeans
-from gmm_types import *
-from typing import Tuple, List, Dict, Union, Optional
+from gmm_types import GMM2D, EstimatedGMM2D
+from typing import Tuple, List, Optional
 
 RESPONSIBILITY_THRESHOLD = 1e-10
 INCLUDE_HINGE_LOSS = True  # set this to false when testing with synthetic data
@@ -94,7 +94,9 @@ def init_em(
         )
         for i in range(num_modes)
     ]  # initial covariances, sets a default covariance if only one point in a cluster
-    p = [count_lookup[i] / len(x) for i in range(num_modes)]  # initial p_k proportions
+    p = [
+        count_lookup[i] / len(x) for i in range(num_modes)
+    ]  # initial p_k proportions
     logL = []  # logL values
     n = len(x)  # sample size
 
@@ -116,7 +118,8 @@ def calc_responsibility(
     for i in range(len(x)):
         # For each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
         gz[i, :] = [
-            p[k] * multivariate_normal.pdf(x[i], mu[k], cov[k]) for k in range(len(mu))
+            p[k] * multivariate_normal.pdf(x[i], mu[k], cov[k])
+            for k in range(len(mu))
         ]
         gz[i, :] /= np.sum(gz[i, :])
     return gz
@@ -135,12 +138,17 @@ def em(
     gz = calc_responsibility(x, n, mu, cov, p)
 
     # Ensure that each point contributes to the responsibility matrix above some threshold
-    gz[(gz < RESPONSIBILITY_THRESHOLD) | np.isnan(gz)] = RESPONSIBILITY_THRESHOLD
+    gz[(gz < RESPONSIBILITY_THRESHOLD) | np.isnan(gz)] = (
+        RESPONSIBILITY_THRESHOLD
+    )
 
     # Maximization step: estimate gaussian parameters
     # Given the probability that each point belongs to particular gaussian, calculate the mean, variance, and weight of the gaussian
     nk = np.sum(gz, axis=0)
-    mu = [(1.0 / nk[j]) * np.sum(gz[:, j, None] * x, axis=0) for j in range(num_modes)]
+    mu = [
+        (1.0 / nk[j]) * np.sum(gz[:, j, None] * x, axis=0)
+        for j in range(num_modes)
+    ]
     cov = [
         (1.0 / nk[j]) * np.dot((gz[:, j, None] * (x - mu[j])).T, (x - mu[j]))
         for j in range(num_modes)
@@ -216,7 +224,6 @@ def run_gmm(
     If x contains 10 or fewer data points, then 1 structural variant is estimated. If x has more than 10 data points, then the EM algorithm is then run for a 1, 2, or 3 mode GMM, and the resulting AIC scores are calculated and compared across the estimated GMMs. The GMM with the lowest AIC score is returned as the optimal fit to the data. The GMM's mu value represents the length and L coordinate of each structural variant estimated.
     """
     x = np.array(x, dtype=float)
-    n = len(x)
     if len(x) == 0:
         raise Exception("No data points provided.")
     if len(x) == 1:
@@ -249,7 +256,9 @@ def run_gmm(
         iterations = []
         for num_modes in range(1, 4):
             params, num_iterations = run_em(x, num_modes, plot)
-            aic = calc_aic(params[-1].logL, num_modes, params[-1].mu, params[-1].cov)
+            aic = calc_aic(
+                params[-1].logL, num_modes, params[-1].mu, params[-1].cov
+            )
             all_params.append(params)
             iterations.append(num_iterations)
             aic_vals.append(aic)

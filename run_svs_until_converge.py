@@ -1,18 +1,25 @@
-import pandas as pd
 import multiprocessing
-from process_data import *
-from gmm_types import *
-from write_sv_output import *
+from write_sv_output import (
+    get_raw_data,
+    init_sv_stat_row,
+    write_sv_stats,
+    write_posterior_distributions,
+    concat_multi_processed_sv_files,
+)
 from run_dirichlet import run_dirichlet
 from helper import get_deletions_df, get_sample_ids
-from typing import Set
+from typing import Set, Dict
 
 
 FILE_DIR = "processed_svs_converge"
 OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
 
-def run_dirichlet_wrapper(row: Dict, population_size: int, sample_set: Set[int]):
+def run_dirichlet_wrapper(
+    row: Dict,
+    population_size: int,
+    sample_set: Set[int],
+):
     sv_id = row["id"]
     squiggle_data, num_samples = get_raw_data(row, sample_set)
 
@@ -33,12 +40,18 @@ def run_dirichlet_wrapper(row: Dict, population_size: int, sample_set: Set[int])
 
     for i, (gmm, evidence_by_mode) in enumerate(gmms):
         sv_stat = init_sv_stat_row(
-            row, num_samples=num_samples, num_reference=num_samples - len(squiggle_data)
+            row,
+            num_samples=num_samples,
+            num_reference=num_samples - len(squiggle_data),
         )
-        write_sv_stats(sv_stat, gmm, evidence_by_mode, population_size, FILE_DIR, i)
+        write_sv_stats(
+            sv_stat, gmm, evidence_by_mode, population_size, FILE_DIR, i
+        )
 
     if gmms[0][0] is not None:
-        write_posterior_distributions(sv_id, alphas, posterior_distributions, FILE_DIR)
+        write_posterior_distributions(
+            sv_id, alphas, posterior_distributions, FILE_DIR
+        )
 
     print(sv_id)
 
@@ -53,7 +66,7 @@ def run_svs_until_convergence():
     for _, row in deletions_df.iterrows():
         rows.append(row)
 
-    with multiprocessing.Manager() as manager:
+    with multiprocessing.Manager():
         cpu_count = multiprocessing.cpu_count()
         p = multiprocessing.Pool(cpu_count)
         args = []

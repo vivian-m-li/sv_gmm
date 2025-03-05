@@ -1,10 +1,12 @@
+import os
 import csv
 import pandas as pd
+import numpy as np
 from dataclasses import fields, asdict
 from query_sv import query_stix, giggle_format
-from process_data import *
-from gmm_types import *
-from typing import Set
+from write_sv_output import get_svlen
+from gmm_types import SVInfoGMM, GMM, Evidence, ModeStat
+from typing import Set, Dict, List, Optional, Tuple
 
 
 def concat_processed_sv_files(file_dir: str, output_file_name: str):
@@ -32,22 +34,31 @@ def concat_multi_processed_sv_files(file_dir: str, output_file_name: str):
 
 
 def write_sv_file(sv: SVInfoGMM, file_dir: str, iteration: int):
-    with open(f"{file_dir}/{sv.id}_iteration={iteration}.csv", mode="w") as file:
+    with open(
+        f"{file_dir}/{sv.id}_iteration={iteration}.csv", mode="w"
+    ) as file:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
         csv_writer = csv.DictWriter(file, fieldnames=fieldnames)
         csv_writer.writerow(asdict(sv))
 
 
 def get_reference_samples(
-    row: pd.Series, sample_set: Set[int], squiggle_data: Dict[str, np.ndarray[float]]
+    row: pd.Series,
+    sample_set: Set[int],
+    squiggle_data: Dict[str, np.ndarray[float]],
 ) -> List[str]:
-    samples = [sample_id for sample_id in sample_set if sample_id in squiggle_data]
+    samples = [
+        sample_id for sample_id in sample_set if sample_id in squiggle_data
+    ]
     ref_samples = [col for col in samples if row[col] == "(0, 0)"]
     return ref_samples
 
 
 def init_sv_stat_row(
-    row: Dict, *, num_samples: Optional[int] = 0, num_reference: Optional[int] = 0
+    row: Dict,
+    *,
+    num_samples: Optional[int] = 0,
+    num_reference: Optional[int] = 0,
 ) -> SVInfoGMM:
     sv_stat = SVInfoGMM(
         id=row["id"],
@@ -107,13 +118,17 @@ def write_sv_stats(
     sv_stat.num_iterations = gmm.num_iterations
 
     all_svlen = get_svlen(evidence_by_mode)
-    sv_stat.svlen_post = int(np.mean([sv.length for lst in all_svlen for sv in lst]))
+    sv_stat.svlen_post = int(
+        np.mean([sv.length for lst in all_svlen for sv in lst])
+    )
 
     mode_coords = []
     for i, mode in enumerate(evidence_by_mode):
         sample_ids = [e.sample.id for e in mode]
         num_samples = len(sample_ids)
-        num_homozygous = len([e.sample for e in mode if e.sample.allele == "(1, 1)"])
+        num_homozygous = len(
+            [e.sample for e in mode if e.sample.allele == "(1, 1)"]
+        )
         num_heterozygous = num_samples - num_homozygous
         af = ((num_homozygous * 2) + num_heterozygous) / population_size * 2
 
@@ -123,8 +138,12 @@ def write_sv_stats(
         min_start = float("inf")
         max_end = float("-inf")
         for evidence in mode:
-            mean_l = np.mean([paired_end[0] for paired_end in evidence.paired_ends])
-            mean_r = np.mean([paired_end[1] for paired_end in evidence.paired_ends])
+            mean_l = np.mean(
+                [paired_end[0] for paired_end in evidence.paired_ends]
+            )
+            mean_r = np.mean(
+                [paired_end[1] for paired_end in evidence.paired_ends]
+            )
             lengths.append(mean_r - mean_l - evidence.mean_insert_size)
             starts.append(mean_l)
             ends.append(mean_r)
@@ -167,7 +186,9 @@ def create_sv_stats_file():
 
 
 def write_posterior_distributions(sv_id, alphas, posteriors, file_dir):
-    with open(f"{file_dir}/{sv_id}_posteriors.csv", mode="w", newline="") as file:
+    with open(
+        f"{file_dir}/{sv_id}_posteriors.csv", mode="w", newline=""
+    ) as file:
         fieldnames = [
             "trial",
             "alpha",
