@@ -348,7 +348,7 @@ def get_intercepts(
     L: int,
     R: int,
     insert_size_lookup: Dict[str, int],
-    plot_bokeh: bool,
+    plot_bokeh: bool = False,
 ) -> Tuple[np.ndarray[Tuple[float, int]], List[Evidence]]:
     mb, sv_evidence_unfiltered = filter_and_plot_sequences_bokeh(
         squiggle_data,

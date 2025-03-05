@@ -80,11 +80,13 @@ def get_num_samples(row_index: int, row, lookup: Dict[int, int]):
     end = giggle_format(str(row.chr), row.stop)
     squiggle_data = query_stix(start, end, False, plot=False)
     if len(squiggle_data) > 0:
+        insert_size_lookup = get_insert_size_lookup()
         intercepts, _ = get_intercepts(
             squiggle_data,
             file_name=None,
             L=row.start,
             R=row.stop,
+            insert_size_lookup=insert_size_lookup,
         )
         lookup[row_index] = len(intercepts)
 
@@ -115,5 +117,4 @@ def main():
 
 
 if __name__ == "__main__":
-    prune_genes_bed()	    
-    # main()
+    main()
