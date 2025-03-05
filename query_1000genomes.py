@@ -1,3 +1,4 @@
+import re
 import os
 import pandas as pd
 import pysam
@@ -6,6 +7,18 @@ from query_sv import *
 from process_data import *
 
 FILE_DIR = "1kgp"
+
+
+def prune_genes_bed():
+    with open(f"{FILE_DIR}/grch38.genes.bed", "r") as infile, open(
+        f"{FILE_DIR}/genes.bed", "w"
+    ) as outfile:
+        for line in infile:
+            fields = line.strip().split("\t")
+            chrom, start, stop, annotations = fields[0], fields[1], fields[2], fields[6]
+            match = re.search(r'gene_name "([^"]+)"', annotations)
+            gene_name = match.group(1)
+            outfile.write(f"{chrom}\t{start}\t{stop}\t{gene_name}\n")
 
 
 def vcf_to_bed():
@@ -102,4 +115,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    prune_genes_bed()	    
+    # main()
