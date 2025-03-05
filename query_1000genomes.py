@@ -12,6 +12,9 @@ def vcf_to_bed():
     vcf_in = pysam.VariantFile(f"{FILE_DIR}/1kg.subset.vcf.gz")
     with open(f"{FILE_DIR}/deletions.bed", "w") as f:
         for record in vcf_in.fetch():
+            info = dict(record.info)
+            if info["SVTYPE"] != "DEL":
+                continue
             f.write(
                 f"{record.chrom.strip('chr')}\t{record.start}\t{record.stop}\t{record.id}\n"
             )

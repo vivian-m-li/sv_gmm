@@ -6,7 +6,7 @@ from process_data import *
 from gmm_types import *
 from write_sv_output import *
 from helper import get_deletions_df
-from typing import Set
+from typing import Set, Optional, Dict, List, Tuple
 
 FILE_DIR = "processed_svs"
 OUTPUT_FILE_NAME = "sv_stats.csv"
