@@ -4,6 +4,7 @@ import matplotlib.animation as animation
 from scipy.stats import dirichlet
 from process_data import run_viz_gmm
 from helper import calculate_posteriors, calculate_ci, get_sv_stats_converge_df
+from viz import plot_2d_coords
 from gmm_types import COLORS, GMM, Evidence
 from typing import List, Tuple
 
@@ -57,7 +58,7 @@ def animate_dirichlet(posterior_distributions):
             )
         return lines + error_bands
 
-    animation.FuncAnimation(
+    _ = animation.FuncAnimation(
         fig,
         update,
         frames=len(posterior_distributions),
@@ -119,7 +120,7 @@ def animate_dirichlet_heatmap(alphas):
             fontsize=12,
         )
 
-    animation.FuncAnimation(fig, update, frames=len(alphas))
+    _ = animation.FuncAnimation(fig, update, frames=len(alphas))
     plt.show()
 
 
@@ -187,8 +188,18 @@ def run_dirichlet(
             break
 
     if display_output:
-        # animate_dirichlet_heatmap(alphas)
-        animate_dirichlet(posterior_distributions)
+        # show the last L-len plot
+        plot_2d_coords(
+            gmms[-1][1],
+            axis1="L",
+            axis2="Length",
+            add_error_bars=False,
+            color_by="sequencing_center",
+            size_by="insert_size",
+        )
+
+        animate_dirichlet_heatmap(alphas)
+        # animate_dirichlet(posterior_distributions)
 
     return gmms, alphas, posterior_distributions
 

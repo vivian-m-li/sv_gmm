@@ -329,8 +329,57 @@ def get_outliers(sv_rows):
     return confident_outliers
 
 
+def get_consensus_svs():
+    df = get_sv_stats_converge_df()
+    sv_ids = df["id"].unique()
+    consensus_df = pd.DataFrame(
+        columns=[
+            "id",
+            "sv_id",
+            "chr",
+            "start",
+            "start_sd",
+            "end",
+            "end_sd",
+            "length",
+            "length_sd",
+            "num_samples",
+            "num_samples_std",
+        ]
+    )
+    for sv_id in sv_ids:
+        sv_rows = df[df["id"] == sv_id]
+        chr = sv_rows["chr"].values[0]
+        modes_count = Counter(sv_rows["num_modes"])
+        num_modes = max(modes_count, key=modes_count.get)
+        sv_rows = sv_rows[sv_rows["num_modes"] == num_modes]
+        all_mode_stats = [[] for _ in range(num_modes)]
+        for _, row in sv_rows.iterrows():
+            modes = ast.literal_eval(row["modes"])
+            modes = sorted(modes, key=lambda x: x["start"])
+            for i, mode in enumerate(modes):
+                all_mode_stats[i].append(
+                    {
+                        "length": mode["length"],
+                        "start": mode["start"],
+                        "end": mode["end"],
+                        "num_samples": mode["num_samples"],
+                    }
+                )
+
+        # write mean and sd start/stop/length for each mode
+        for i, mode in enumerate(all_mode_stats):
+            row = [f"{sv_id}_{i + 1}", sv_id, chr]
+            for key in ["start", "end", "length", "num_samples"]:
+                values = [mode_stat[key] for mode_stat in mode]
+                row.append(int(np.mean(values)))
+                row.append(np.std(values))
+            consensus_df.loc[len(consensus_df)] = row
+    consensus_df.to_csv("1kgp/consensus_svs.csv", index=False)
+
+
 def get_sv_chr(sv_id: str):
-    df = get_deletions_df("1kgp_low_cov_hg37")
+    df = get_deletions_df()
     row = df[df["id"] == sv_id]
     chr, start, stop = (
         row["chr"].values[0],
@@ -341,4 +390,4 @@ def get_sv_chr(sv_id: str):
 
 
 if __name__ == "__main__":
-    get_sv_chr("UW_VH_2379")
+    get_sv_chr("HGSV_120216")
