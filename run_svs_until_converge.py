@@ -1,3 +1,6 @@
+
+import pandas as pd
+import re
 import multiprocessing
 from write_sv_output import (
     get_raw_data,
@@ -58,13 +61,21 @@ def run_dirichlet_wrapper(
 
 def run_svs_until_convergence():
     deletions_df = get_deletions_df()
+    queried_svs = set()
+    with open("1kgp/subset.txt", "r") as f:
+        for line in f:
+            pattern = r"([\w]+):(\d+)-\d+_[\w]+:(\d+)-\d+.csv"
+            match = re.search(pattern, line)
+            chr, start, stop = match.groups()
+            queried_svs.add((f"{chr}", int(start), int(stop)))
 
     sample_ids = set(get_sample_ids())
     population_size = len(sample_ids)
 
     rows = []
     for _, row in deletions_df.iterrows():
-        rows.append(row)
+        if (row["chr"], row["start"], row["stop"]) in queried_svs: # test on subset of svs
+            rows.append(row)
 
     with multiprocessing.Manager():
         cpu_count = multiprocessing.cpu_count()
