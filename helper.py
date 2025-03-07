@@ -380,10 +380,10 @@ def get_consensus_svs():
 
 def df_to_bed(in_file: str, out_file: str):
     df = pd.read_csv(in_file)
-    with open(f"{out_file}.bed", "w") as outfile:
+    with open(out_file, "w") as outfile:
         for _, row in df.iterrows():
             outfile.write(
-                f"{row["chr"]}\t{row["start"]}\t{row["end"]}\t{row["sv_id"]}\t{row["id"]}\n"
+                f"{row['chr']}\t{row['start']}\t{row['end']}\t{row['sv_id']}\t{row['id']}\n"
             )
 
 
@@ -400,7 +400,7 @@ def get_new_gene_intersections():
         ["bash", "bed_intersect.sh"]
         + [  # noqa503
             "1kgp/consensus_svs.bed",
-            "1kgp/grch38.genes.bed",
+            "1kgp/genes.bed",
             "1kgp/consensus_gene_intersections.bed",
         ],
         capture_output=True,
@@ -412,7 +412,7 @@ def get_new_gene_intersections():
     with open("1kgp/consensus_gene_intersections.bed", "r") as f:
         for line in f:
             row = line.strip().split("\t")
-            sv_id, sv_split_id, gene_id = row[3], row[8]
+            sv_id, sv_split_id, gene_id = row[3], row[4], row[8]
             split_intersections.add((sv_id, gene_id))
             sv_split_lookup[(sv_id, gene_id)] = sv_split_id
 
