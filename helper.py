@@ -378,6 +378,51 @@ def get_consensus_svs():
     consensus_df.to_csv("1kgp/consensus_svs.csv", index=False)
 
 
+def df_to_bed(in_file: str, out_file: str):
+    df = pd.read_csv(in_file)
+    with open(f"{out_file}.bed", "w") as outfile:
+        for _, row in df.iterrows():
+            outfile.write(
+                f"{row["chr"]}\t{row["start"]}\t{row["end"]}\t{row["sv_id"]}\t{row["id"]}\n"
+            )
+
+
+def get_new_gene_intersections():
+    og_intersections = set()  # (sv_id, gene_id)
+    with open("1kgp/original_gene_intersections.bed", "r") as f:
+        for line in f:
+            row = line.strip().split("\t")
+            sv_id, gene_id = row[3], row[7]
+            og_intersections.add((sv_id, gene_id))
+
+    df_to_bed("1kgp/consensus_svs.csv", "1kgp/consensus_svs.bed")
+    subprocess.run(
+        ["bash", "bed_intersect.sh"]
+        + [  # noqa503
+            "1kgp/consensus_svs.bed",
+            "1kgp/grch38.genes.bed",
+            "1kgp/consensus_gene_intersections.bed",
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    split_intersections = set()
+    sv_split_lookup = {}
+    with open("1kgp/consensus_gene_intersections.bed", "r") as f:
+        for line in f:
+            row = line.strip().split("\t")
+            sv_id, sv_split_id, gene_id = row[3], row[8]
+            split_intersections.add((sv_id, gene_id))
+            sv_split_lookup[(sv_id, gene_id)] = sv_split_id
+
+    new_intersections = split_intersections - og_intersections
+    with open("1kgp/new_gene_intersections.bed", "w") as f:
+        for sv_id, gene_id in new_intersections:
+            sv_split_id = sv_split_lookup[(sv_id, gene_id)]
+            f.write(f"{sv_split_id}\t{gene_id}\n")
+
+
 def get_sv_chr(sv_id: str):
     df = get_deletions_df()
     row = df[df["id"] == sv_id]
