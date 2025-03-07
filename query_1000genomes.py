@@ -4,8 +4,11 @@ import pandas as pd
 import pysam
 import multiprocessing
 from typing import Dict
-from query_sv import giggle_format, query_stix
-from process_data import get_intercepts, get_insert_size_lookup
+from query_sv import giggle_format, query_stix, PROCESSED_FILE_DIR
+from process_data import (
+    get_intercepts,
+    get_insert_size_lookup,
+)
 
 FILE_DIR = "1kgp"
 
@@ -100,11 +103,26 @@ def get_num_samples(row_index: int, row, lookup: Dict[int, int]):
 def get_num_sv():
     filename = f"{FILE_DIR}/deletions_df.csv"
     df = pd.read_csv(filename, low_memory=False)
+
+    # only get the first or second half of the df to split into multiple jobs
+    df = df.iloc[: len(df) // 2]
+
+    processed_files = os.listdir(PROCESSED_FILE_DIR)
+    processed_svs = []
+    pattern = r"([\w]+):(\d+)-\d+_[\w]+:(\d+)-\d+.csv"
+
+    for file in processed_files:
+        match = re.search(pattern, file)
+        chr, start, stop = match.groups()
+        processed_svs.append((chr, int(start), int(stop)))
+
     with multiprocessing.Manager() as manager:
         p = multiprocessing.Pool(multiprocessing.cpu_count())
         lookup = manager.dict()
         args = []
         for i, row in df.iterrows():
+            if (str(row.chr), row.start, row.stop) in processed_svs:
+                continue
             args.append((i, row, lookup))
 
         p.starmap(get_num_samples, args)
