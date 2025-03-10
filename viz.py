@@ -20,7 +20,7 @@ from collections import Counter, defaultdict
 from typing import List
 from em import run_em
 from em_1d import run_em as run_em1d, get_scatter_data
-from helper import get_sample_sequencing_centers, get_sv_stats_df
+from helper import get_sample_sequencing_centers, get_sv_stats_df, get_svlen
 from gmm_types import (
     GMM,
     Evidence,
@@ -105,30 +105,6 @@ def print_sv_stats(sv_stats: List[List[SVStat]]):
             f"Mode {i + 1}\n{get_mean_std('Length', lengths)}\nMin, Max=[{math.floor(min(lengths))}, {math.floor(max(lengths))}]\n{get_mean_std('Start', starts)}\n{get_mean_std('End', ends)}\n"
         )
     return stats
-
-
-def get_svlen(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
-    all_stats = []
-    for mode in evidence_by_mode:
-        stats = []
-        for evidence in mode:
-            lengths = [
-                max(paired_end) - min(paired_end)
-                for paired_end in evidence.paired_ends
-            ]
-            stats.append(
-                SVStat(
-                    length=np.mean(lengths) - evidence.mean_insert_size,
-                    start=max(
-                        [paired_end[0] for paired_end in evidence.paired_ends]
-                    ),
-                    end=min(
-                        [paired_end[1] for paired_end in evidence.paired_ends]
-                    ),
-                )
-            )
-        all_stats.append(stats)
-    return all_stats
 
 
 def add_color_noise(hex_color: str):

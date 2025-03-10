@@ -6,6 +6,8 @@ import numpy as np
 import csv
 from scipy.spatial.distance import braycurtis
 from collections import defaultdict, Counter
+from gmm_types import Evidence, SVStat
+from typing import List
 
 PROCESSED_STIX_DIR = "processed_stix_output"
 PROCESSED_SVS_DIR = "processed_svs"
@@ -29,6 +31,30 @@ def get_sample_ids(file_root: str = "1kgp"):
         for line in f:
             sample_ids.add(line.strip())
     return sample_ids
+
+
+def get_svlen(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
+    all_stats = []
+    for mode in evidence_by_mode:
+        stats = []
+        for evidence in mode:
+            lengths = [
+                max(paired_end) - min(paired_end)
+                for paired_end in evidence.paired_ends
+            ]
+            stats.append(
+                SVStat(
+                    length=np.mean(lengths) - evidence.mean_insert_size,
+                    start=max(
+                        [paired_end[0] for paired_end in evidence.paired_ends]
+                    ),
+                    end=min(
+                        [paired_end[1] for paired_end in evidence.paired_ends]
+                    ),
+                )
+            )
+        all_stats.append(stats)
+    return all_stats
 
 
 def find_missing_sample_ids():

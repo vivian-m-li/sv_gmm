@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from dataclasses import fields, asdict
 from query_sv import query_stix, giggle_format
-from write_sv_output import get_svlen
+from helper import get_svlen
 from gmm_types import SVInfoGMM, GMM, Evidence, ModeStat
 from typing import Set, Dict, List, Optional, Tuple
 

@@ -1,4 +1,5 @@
-
+import os
+import shutil
 import pandas as pd
 import re
 import multiprocessing
@@ -15,6 +16,7 @@ from typing import Set, Dict
 
 
 FILE_DIR = "processed_svs_converge"
+SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
 OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
 
@@ -48,12 +50,12 @@ def run_dirichlet_wrapper(
             num_reference=num_samples - len(squiggle_data),
         )
         write_sv_stats(
-            sv_stat, gmm, evidence_by_mode, population_size, FILE_DIR, i
+            sv_stat, gmm, evidence_by_mode, population_size, SCRATCH_FILE_DIR, i
         )
 
     if gmms[0][0] is not None:
         write_posterior_distributions(
-            sv_id, alphas, posterior_distributions, FILE_DIR
+            sv_id, alphas, posterior_distributions, SCRATCH_FILE_DIR
         )
 
     print(sv_id)
@@ -62,6 +64,8 @@ def run_dirichlet_wrapper(
 def run_svs_until_convergence():
     deletions_df = get_deletions_df()
     queried_svs = set()
+
+    # for now: only analyze the processed files so we don't have to run stix query
     with open("1kgp/subset.txt", "r") as f:
         for line in f:
             pattern = r"([\w]+):(\d+)-\d+_[\w]+:(\d+)-\d+.csv"
@@ -87,7 +91,11 @@ def run_svs_until_convergence():
         p.close()
         p.join()
 
-    concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME)
+    concat_multi_processed_sv_files(SCRATCH_FILE_DIR, OUTPUT_FILE_NAME)
+
+    # move files from scratch to home dir
+    for file in os.listdir(SCRATCH_FILE_DIR):
+        shutil.move(os.path.join(SCRATCH_FILE_DIR, file), os.path.join(FILE_DIR, file))
 
 
 if __name__ == "__main__":

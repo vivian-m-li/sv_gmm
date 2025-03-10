@@ -101,7 +101,7 @@ def get_num_samples(row_index: int, row, lookup: Dict[int, int]):
         lookup[row_index] = len(intercepts)
 
 
-@break_after(minutes=1, seconds=1)
+@break_after(hours=71, minutes=55) # break before the job is cancelled
 def get_num_sv():
     filename = f"{FILE_DIR}/deletions_df.csv"
     df = pd.read_csv(filename, low_memory=False)

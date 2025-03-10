@@ -1,5 +1,6 @@
 import sys
 import os
+import shutil
 import multiprocessing
 from process_data import run_viz_gmm
 from write_sv_output import (
@@ -12,6 +13,7 @@ from helper import get_deletions_df
 from typing import Set, Optional, Dict, List, Tuple
 
 FILE_DIR = "processed_svs"
+SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
 OUTPUT_FILE_NAME = "sv_stats.csv"
 
 
@@ -39,7 +41,7 @@ def run_all_sv_wrapper(
         )
 
     write_sv_stats(
-        sv_stat, gmm, evidence_by_mode, population_size, FILE_DIR, iteration
+        sv_stat, gmm, evidence_by_mode, population_size, SCRATCH_FILE_DIR, iteration
     )
 
 
@@ -100,7 +102,11 @@ def run_all_sv(
             p.close()
             p.join()
 
-    concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME)
+    concat_multi_processed_sv_files(SCRATCH_FILE_DIR, OUTPUT_FILE_NAME)
+
+    # move files from scratch to home dir
+    for file in os.listdir(SCRATCH_FILE_DIR):
+        shutil.move(os.path.join(SCRATCH_FILE_DIR, file), os.path.join(FILE_DIR, file))
 
 
 if __name__ == "__main__":
