@@ -9,6 +9,7 @@ from process_data import (
     get_intercepts,
     get_insert_size_lookup,
 )
+from timeout import break_after
 
 FILE_DIR = "1kgp"
 
@@ -100,12 +101,10 @@ def get_num_samples(row_index: int, row, lookup: Dict[int, int]):
         lookup[row_index] = len(intercepts)
 
 
+@break_after(minutes=1, seconds=1)
 def get_num_sv():
     filename = f"{FILE_DIR}/deletions_df.csv"
     df = pd.read_csv(filename, low_memory=False)
-
-    # only get the first or second half of the df to split into multiple jobs
-    df = df.iloc[: len(df) // 2]
 
     processed_files = os.listdir(PROCESSED_FILE_DIR)
     processed_svs = []
@@ -129,6 +128,7 @@ def get_num_sv():
         p.close()
         p.join()
 
+        # this only gets updated if all SVs are processed before timeout
         for row_index, num_samples in lookup.items():
             df.loc[row_index, "num_samples"] = num_samples
     df.to_csv(filename, index=False)
