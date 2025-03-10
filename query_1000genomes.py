@@ -87,7 +87,7 @@ def load_vcf():
 def get_num_samples(row_index: int, row, lookup: Dict[int, int]):
     start = giggle_format(str(row.chr), row.start)
     end = giggle_format(str(row.chr), row.stop)
-    squiggle_data = query_stix(start, end, False, plot=False)
+    squiggle_data = query_stix(start, end, False, plot=False, scratch=True)
     if len(squiggle_data) > 0:
         insert_size_lookup = get_insert_size_lookup()
         intercepts, _ = get_intercepts(

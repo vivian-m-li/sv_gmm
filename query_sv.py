@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 import subprocess
 import argparse
 import csv
@@ -10,7 +11,7 @@ from run_dirichlet import run_dirichlet
 from helper import get_sample_ids
 from typing import List, Dict
 
-
+SCRATCH_DIR = "/scratch/Users/vili4418"
 FILE_DIR = "stix_output"
 PROCESSED_FILE_DIR = "processed_stix_output"
 PLOT_DIR = "plots"
@@ -85,7 +86,7 @@ def get_reference_samples(
 
 
 def query_stix_bash(
-    l: int, r: int, output_dir: str, file_name: str, multi_files: bool
+    l: int, r: int, output_dir: str, file_name: str, multi_files: bool, scratch: bool
 ):
     bash_file = "query_stix_multifile.sh" if multi_files else "query_stix.sh"
     if multi_files:
@@ -94,7 +95,7 @@ def query_stix_bash(
         output_file = f"{output_dir}/{file_name}"
 
     subprocess.run(
-        ["bash", bash_file] + [l, r, output_file],
+        ["bash", bash_file] + [l, r, output_file, str(not scratch)],
         capture_output=True,
         text=True,
     )
@@ -113,6 +114,29 @@ def query_stix_bash(
                     f"{output_dir}/partial_outputs/{file_name}_{i}.txt"
                 )  # remove partial file
 
+def write_processed_output(output_file: str, processed_output_file: str):
+    df = txt_to_df(output_file)
+
+    grouped = df.groupby("file_id")
+    squiggle_data = {}
+    processed_stix_output = []
+    for _, group in grouped:
+        l_starts = group["l_start"].tolist()
+        r_ends = group["r_end"].tolist()
+        sample_id = group["sample_id"].iloc[0]
+        sv_evidence = [
+            item for pair in zip(l_starts, r_ends) for item in pair
+        ]
+
+        squiggle_data[sample_id] = np.array(sv_evidence)
+        sv_evidence = [sample_id] + sv_evidence
+        processed_stix_output.append(sv_evidence)
+
+    with open(processed_output_file, "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerows(processed_stix_output)
+    
+    return squiggle_data
 
 def query_stix(
     l: str,
@@ -123,8 +147,18 @@ def query_stix(
     single_trial: bool = True,
     plot: bool = True,
     reference_genome: str = "grch38",  # or grch37
+    scratch: bool = False,
 ):
-    for directory in [FILE_DIR, PROCESSED_FILE_DIR, PLOT_DIR]:
+    # read/write files in scratch if flagged
+    if scratch:
+        output_file_dir = f"{SCRATCH_DIR}/{FILE_DIR}"
+        processed_file_dir = f"{SCRATCH_DIR}/{PROCESSED_FILE_DIR}"
+    else:
+        output_file_dir = FILE_DIR
+        processed_file_dir = PROCESSED_FILE_DIR
+    plot_dir = PLOT_DIR
+
+    for directory in [output_file_dir, processed_file_dir, plot_dir]:
         if not os.path.exists(directory):
             os.mkdir(directory)
 
@@ -132,41 +166,32 @@ def query_stix(
     if reference_genome == "grch37":
         file_root = "low_cov_grch37"
 
+    # set up the correct file paths in case scratch is True
     file_name = f"{l}_{r}"
-    output_file = f"{FILE_DIR}/{file_name}.txt"
-    processed_output_file = f"{PROCESSED_FILE_DIR}/{file_name}.csv"
+    output_file = f"{output_file_dir}/{file_name}.txt"
+    processed_output_file = f"{processed_file_dir}/{file_name}.csv"
+    home_output_file = f"{FILE_DIR}/{file_name}.txt"
+    home_processed_output_file = f"{PROCESSED_FILE_DIR}/{file_name}.csv"
 
-    if reference_genome == "grch37":
+    if reference_genome == "grch37" and not scratch:
         output_file = f"{file_root}/{output_file}"
         processed_output_file = f"{file_root}/{processed_output_file}"
 
-    if os.path.isfile(processed_output_file):
-        squiggle_data = load_squiggle_data(processed_output_file)
+    # check if this sv has already been queried for and processed in the home directory
+    if os.path.isfile(home_processed_output_file):
+        squiggle_data = load_squiggle_data(home_processed_output_file)
     else:
-        if not os.path.isfile(output_file):
-            # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
+        # check if this sv has already been queried for in the home directory
+        if not os.path.isfile(home_output_file):
             multi_files = reference_genome == "grch38"
-            query_stix_bash(l, r, FILE_DIR, file_name, multi_files)
-        df = txt_to_df(output_file)
+            # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
+            query_stix_bash(l, r, output_file_dir, file_name, multi_files, scratch)
+        squiggle_data = write_processed_output(output_file, processed_output_file)
 
-        grouped = df.groupby("file_id")
-        squiggle_data = {}
-        processed_stix_output = []
-        for _, group in grouped:
-            l_starts = group["l_start"].tolist()
-            r_ends = group["r_end"].tolist()
-            sample_id = group["sample_id"].iloc[0]
-            sv_evidence = [
-                item for pair in zip(l_starts, r_ends) for item in pair
-            ]
-
-            squiggle_data[sample_id] = np.array(sv_evidence)
-            sv_evidence = [sample_id] + sv_evidence
-            processed_stix_output.append(sv_evidence)
-
-        with open(processed_output_file, "w", newline="") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerows(processed_stix_output)
+        if scratch:
+            # move files from scratch to home directory
+            shutil.move(output_file, home_output_file)
+            shutil.move(processed_output_file, home_processed_output_file)
 
     chr, start, stop = reverse_giggle_format(l, r)
 
