@@ -1,4 +1,5 @@
 import os
+import re
 import ast
 import subprocess
 import pandas as pd
@@ -447,6 +448,27 @@ def get_new_gene_intersections():
         for sv_id, gene_id in new_intersections:
             sv_split_id = sv_split_lookup[(sv_id, gene_id)]
             f.write(f"{sv_split_id}\t{gene_id}\n")
+
+
+def get_unprocessed_svs():
+    df = get_deletions_df()
+    svs = set(
+        [
+            (row["chr"].lower(), str(row["start"]), str(row["stop"]))
+            for _, row in df.iterrows()
+        ]
+    )
+
+    processed_files = os.listdir("processed_stix_output")
+    pattern = r"([\w]+):(\d+)-\d+_[\w]+:(\d+)-\d+.csv"
+    processed_svs = set(
+        [re.search(pattern, file).groups() for file in processed_files]
+    )
+
+    unprocessed_svs = svs - processed_svs
+    with open("1kgp/unprocessed_svs.txt", "w") as f:
+        for chr, start, stop in unprocessed_svs:
+            f.write(f"{chr.upper()},{start},{stop}\n")
 
 
 def get_sv_chr(sv_id: str):
