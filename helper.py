@@ -349,7 +349,7 @@ def get_outliers(sv_rows):
 
     confident_outliers = []
     for outlier, count in outlier_counts.items():
-        if count / n > 0.9:
+        if count / n > 0.1:
             confident_outliers.append(outlier)
 
     return confident_outliers

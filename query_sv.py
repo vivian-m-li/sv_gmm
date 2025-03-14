@@ -86,7 +86,12 @@ def get_reference_samples(
 
 
 def query_stix_bash(
-    l: int, r: int, output_dir: str, file_name: str, multi_files: bool, scratch: bool
+    l: int,
+    r: int,
+    output_dir: str,
+    file_name: str,
+    multi_files: bool,
+    scratch: bool,
 ):
     bash_file = "query_stix_multifile.sh" if multi_files else "query_stix.sh"
     if multi_files:
@@ -114,6 +119,7 @@ def query_stix_bash(
                     f"{output_dir}/partial_outputs/{file_name}_{i}.txt"
                 )  # remove partial file
 
+
 def write_processed_output(output_file: str, processed_output_file: str):
     df = txt_to_df(output_file)
 
@@ -124,9 +130,7 @@ def write_processed_output(output_file: str, processed_output_file: str):
         l_starts = group["l_start"].tolist()
         r_ends = group["r_end"].tolist()
         sample_id = group["sample_id"].iloc[0]
-        sv_evidence = [
-            item for pair in zip(l_starts, r_ends) for item in pair
-        ]
+        sv_evidence = [item for pair in zip(l_starts, r_ends) for item in pair]
 
         squiggle_data[sample_id] = np.array(sv_evidence)
         sv_evidence = [sample_id] + sv_evidence
@@ -135,8 +139,9 @@ def write_processed_output(output_file: str, processed_output_file: str):
     with open(processed_output_file, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerows(processed_stix_output)
-    
+
     return squiggle_data
+
 
 def query_stix(
     l: str,
@@ -185,8 +190,12 @@ def query_stix(
         if not os.path.isfile(home_output_file):
             multi_files = reference_genome == "grch38"
             # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
-            query_stix_bash(l, r, output_file_dir, file_name, multi_files, scratch)
-        squiggle_data = write_processed_output(output_file, processed_output_file)
+            query_stix_bash(
+                l, r, output_file_dir, file_name, multi_files, scratch
+            )
+        squiggle_data = write_processed_output(
+            output_file, processed_output_file
+        )
 
         if scratch:
             # move files from scratch to home directory

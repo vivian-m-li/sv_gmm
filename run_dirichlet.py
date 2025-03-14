@@ -187,6 +187,10 @@ def run_dirichlet(
                 )
             break
 
+    chr, L, R = kwargs["chr"], kwargs["L"], kwargs["R"]
+    num_modes = np.argmax(counts) + 1
+    print(f"{chr}:{L}-{R} - num modes: {num_modes}")
+
     if display_output:
         # show the last L-len plot
         plot_2d_coords(
@@ -198,7 +202,7 @@ def run_dirichlet(
             size_by="insert_size",
         )
 
-        animate_dirichlet_heatmap(alphas)
+        # animate_dirichlet_heatmap(alphas)
         # animate_dirichlet(posterior_distributions)
 
     return gmms, alphas, posterior_distributions

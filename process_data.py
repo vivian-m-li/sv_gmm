@@ -435,6 +435,9 @@ def get_insert_size_lookup() -> Dict[str, int]:
         sample_id: int(mean_insert_size)
         for sample_id, mean_insert_size in insert_size_df.values
     }
+    # return {
+    #     sample_id: 450 for sample_id, mean_insert_size in insert_size_df.values
+    # }
 
 
 def run_viz_gmm(
@@ -506,8 +509,8 @@ def run_viz_gmm(
             axis1="L",
             axis2="Length",
             add_error_bars=False,
-            color_by="sequencing_center",
             size_by="insert_size",
+            color_by="mode",
         )
         # plot_2d_coords(
         #     evidence_by_mode,
