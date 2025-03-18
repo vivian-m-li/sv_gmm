@@ -13,6 +13,7 @@ from write_sv_output import (
 from run_dirichlet import run_dirichlet
 from helper import get_deletions_df, get_sample_ids
 from typing import Set, Dict
+from timeout import break_after
 
 
 FILE_DIR = "processed_svs_converge"
@@ -60,43 +61,32 @@ def run_dirichlet_wrapper(
 
     print(sv_id)
 
-
+@break_after(hours=23, minutes=50)
 def run_svs_until_convergence():
     deletions_df = get_deletions_df()
-    queried_svs = set()
-
-    # for now: only analyze the processed files so we don't have to run stix query
-    with open("1kgp/subset.txt", "r") as f:
-        for line in f:
-            pattern = r"([\w]+):(\d+)-\d+_[\w]+:(\d+)-\d+.csv"
-            match = re.search(pattern, line)
-            chr, start, stop = match.groups()
-            queried_svs.add((f"{chr}", int(start), int(stop)))
-
     sample_ids = set(get_sample_ids())
     population_size = len(sample_ids)
-
-    rows = []
-    for _, row in deletions_df.iterrows():
-        if (row["chr"], row["start"], row["stop"]) in queried_svs: # test on subset of svs
-            rows.append(row)
 
     with multiprocessing.Manager():
         cpu_count = multiprocessing.cpu_count()
         p = multiprocessing.Pool(cpu_count)
         args = []
-        for row in rows:
+        for _, row in deletions_df.iterrows():
             args.append((row.to_dict(), population_size, sample_ids))
         p.starmap(run_dirichlet_wrapper, args)
         p.close()
         p.join()
 
-    concat_multi_processed_sv_files(SCRATCH_FILE_DIR, OUTPUT_FILE_NAME)
 
-    # move files from scratch to home dir
+def run_svs():
+    run_svs_until_convergence()
+
+    # move files from scratch to home dir (even after timeout)
     for file in os.listdir(SCRATCH_FILE_DIR):
         shutil.move(os.path.join(SCRATCH_FILE_DIR, file), os.path.join(FILE_DIR, file))
 
+    concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME)
+
 
 if __name__ == "__main__":
-    run_svs_until_convergence()
+    run_svs()

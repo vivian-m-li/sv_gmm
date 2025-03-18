@@ -154,6 +154,12 @@ def query_stix(
     reference_genome: str = "grch38",  # or grch37
     scratch: bool = False,
 ):
+    chr, start, stop = reverse_giggle_format(l, r)
+
+    # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
+    if chr in ["X", "Y"]:
+        return {}
+
     # read/write files in scratch if flagged
     if scratch:
         output_file_dir = f"{SCRATCH_DIR}/{FILE_DIR}"
@@ -189,7 +195,6 @@ def query_stix(
         # check if this sv has already been queried for in the home directory
         if not os.path.isfile(home_output_file):
             multi_files = reference_genome == "grch38"
-            # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
             query_stix_bash(
                 l, r, output_file_dir, file_name, multi_files, scratch
             )
@@ -201,8 +206,6 @@ def query_stix(
             # move files from scratch to home directory
             shutil.move(output_file, home_output_file)
             shutil.move(processed_output_file, home_processed_output_file)
-
-    chr, start, stop = reverse_giggle_format(l, r)
 
     # remove samples queried by stix but missing in the 1000genomes columns
     sample_ids = get_sample_ids(file_root)
