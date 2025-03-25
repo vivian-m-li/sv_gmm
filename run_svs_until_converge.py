@@ -1,7 +1,6 @@
+import time
 import os
 import shutil
-import pandas as pd
-import re
 import multiprocessing
 from write_sv_output import (
     get_raw_data,
@@ -61,17 +60,27 @@ def run_dirichlet_wrapper(
 
     print(sv_id)
 
-@break_after(hours=23, minutes=50)
-def run_svs_until_convergence():
+
+@break_after(hours=5, minutes=50)
+def run_svs_until_convergence(run_subset: bool = False):
     deletions_df = get_deletions_df()
     sample_ids = set(get_sample_ids())
     population_size = len(sample_ids)
+
+    svs_to_run = set()
+    with open("1kgp/med_low_confidence_svs.txt", "r") as f:
+        for line in f:
+            sv_id = line.strip("\n")
+            svs_to_run.add(sv_id)
 
     with multiprocessing.Manager():
         cpu_count = multiprocessing.cpu_count()
         p = multiprocessing.Pool(cpu_count)
         args = []
         for _, row in deletions_df.iterrows():
+            if run_subset:
+                if row["id"] not in svs_to_run:
+                    continue
             args.append((row.to_dict(), population_size, sample_ids))
         p.starmap(run_dirichlet_wrapper, args)
         p.close()
@@ -79,13 +88,18 @@ def run_svs_until_convergence():
 
 
 def run_svs():
+    start = time.time()
     run_svs_until_convergence()
 
     # move files from scratch to home dir (even after timeout)
     for file in os.listdir(SCRATCH_FILE_DIR):
-        shutil.move(os.path.join(SCRATCH_FILE_DIR, file), os.path.join(FILE_DIR, file))
+        shutil.move(
+            os.path.join(SCRATCH_FILE_DIR, file), os.path.join(FILE_DIR, file)
+        )
 
     concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME)
+    end = time.time()
+    print(f"Completed in {start - end}")
 
 
 if __name__ == "__main__":

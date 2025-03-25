@@ -106,7 +106,7 @@ def get_ambiguous_svs():
 
 def get_num_intersecting_genes():
     df = pd.read_csv(
-        "1kgp/intersect_num_overlap.csv", header=None, delimiter="\t"
+        "low_cov_grch37/intersect_num_overlap.csv", header=None, delimiter="\t"
     )
     num_intersections = df.iloc[:, 5]
     print(f"Total number of genes: {len(num_intersections)}")
@@ -338,7 +338,7 @@ def get_n_modes():
     sv_df.to_csv("1kgp/svs_n_modes.csv", index=False)
 
 
-def get_outliers(sv_rows):
+def get_sv_outliers(sv_rows):
     n = len(sv_rows)
     outlier_counts = defaultdict(lambda: 0)
     for i, row in sv_rows.iterrows():
@@ -350,10 +350,25 @@ def get_outliers(sv_rows):
 
     confident_outliers = []
     for outlier, count in outlier_counts.items():
-        if count / n > 0.1:
+        if (
+            count / n > 0.9
+        ):  # this threshold is important for determining when we can confidently say something is an outlier
             confident_outliers.append(outlier)
 
     return confident_outliers
+
+
+def get_outliers():
+    # get all SVs where num_modes > 1 and check outliers
+    n_modes_df = pd.read_csv("1kgp/svs_n_modes.csv")
+    n_modes_df = n_modes_df[n_modes_df["num_modes"] > 1]
+    df = get_sv_stats_converge_df()
+    with open("1kgp/outliers.txt", "w") as f:
+        for _, row in n_modes_df.iterrows():
+            sv_rows = df[df["id"] == row["sv_id"]]
+            outliers = get_sv_outliers(sv_rows)
+            if len(outliers) > 0:
+                f.write(f"{row['sv_id']} {','.join(outliers)}\n")
 
 
 def get_consensus_svs():
@@ -471,6 +486,17 @@ def get_unprocessed_svs():
             f.write(f"{chr.upper()},{start},{stop}\n")
 
 
+def get_med_low_confidence_svs():
+    df = get_sv_stats_converge_df()
+    grouped = df.groupby("id")
+    # get how many times we saw each id in df
+    counts = grouped.size()
+    counts.sort_values(ascending=False, inplace=True)
+    with open("1kgp/med_low_confidence_svs.txt", "w") as f:
+        for sv_id in counts[counts > 8].index:
+            f.write(f"{sv_id}\n")
+
+
 def get_sv_chr(sv_id: str):
     df = get_deletions_df()
     row = df[df["id"] == sv_id]
@@ -483,4 +509,5 @@ def get_sv_chr(sv_id: str):
 
 
 if __name__ == "__main__":
-    get_sv_chr("HGSV_120216")
+    # get_sv_chr("HGSV_58245")
+    get_outliers()
