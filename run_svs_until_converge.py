@@ -61,7 +61,7 @@ def run_dirichlet_wrapper(
     print(sv_id)
 
 
-@break_after(hours=5, minutes=50)
+@break_after(minutes=55)
 def run_svs_until_convergence(run_subset: bool = False):
     deletions_df = get_deletions_df()
     sample_ids = set(get_sample_ids())
@@ -89,7 +89,7 @@ def run_svs_until_convergence(run_subset: bool = False):
 
 def run_svs():
     start = time.time()
-    run_svs_until_convergence()
+    run_svs_until_convergence(run_subset=True)
 
     # move files from scratch to home dir (even after timeout)
     for file in os.listdir(SCRATCH_FILE_DIR):

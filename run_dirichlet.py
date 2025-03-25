@@ -144,6 +144,8 @@ def run_trial(squiggle_data, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
 def run_dirichlet(
     squiggle_data, **kwargs
 ) -> Tuple[List[GMM], List[np.ndarray]]:
+    chr, L, R = kwargs["chr"], kwargs["L"], kwargs["R"]
+
     display_output = kwargs.get("plot", False)
 
     alpha = np.array([1, 1, 1])  # initialize alpha values
@@ -159,6 +161,7 @@ def run_dirichlet(
         gmm, evidence_by_mode = run_trial(squiggle_data, **kwargs)
         if gmm is None:  # all samples are filtered out
             gmms.append((None, []))
+            print(f"{chr}:{L}-{R} - stopping due to gmm = None")
             break
 
         gmms.append((gmm, evidence_by_mode))
@@ -185,11 +188,8 @@ def run_dirichlet(
                 print(
                     f"Stopping after {n} iterations, {np.argmax(p) + 1} modes"
                 )
+            print(f"{chr}:{L}-{R} - stopping after {n} iterations, ci={ci}") 
             break
-
-    chr, L, R = kwargs["chr"], kwargs["L"], kwargs["R"]
-    num_modes = np.argmax(counts) + 1
-    print(f"{chr}:{L}-{R} - num modes: {num_modes}")
 
     if display_output:
         # show the last L-len plot
