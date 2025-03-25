@@ -13,6 +13,8 @@ from typing import List
 PROCESSED_STIX_DIR = "processed_stix_output"
 PROCESSED_SVS_DIR = "processed_svs"
 
+"""Get commonly used dataframes"""
+
 
 def get_deletions_df(stem: str = "1kgp"):
     return pd.read_csv(f"{stem}/deletions_df.csv", low_memory=False)
@@ -27,6 +29,7 @@ def get_sv_stats_converge_df(stem: str = "1kgp"):
 
 
 def get_sample_ids(file_root: str = "1kgp"):
+    """Read and return the sample ids from a file"""
     sample_ids = set()
     with open(f"{file_root}/sample_ids.txt", "r") as f:
         for line in f:
@@ -35,21 +38,22 @@ def get_sample_ids(file_root: str = "1kgp"):
 
 
 def get_svlen(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
+    """Calculate the mean length/start/stop for each mode of an SV"""
     all_stats = []
     for mode in evidence_by_mode:
         stats = []
         for evidence in mode:
             lengths = [
-                max(paired_end) - min(paired_end)
+                np.mean(paired_end) - np.mean(paired_end)
                 for paired_end in evidence.paired_ends
             ]
             stats.append(
                 SVStat(
                     length=np.mean(lengths) - evidence.mean_insert_size,
-                    start=max(
+                    start=np.mean(
                         [paired_end[0] for paired_end in evidence.paired_ends]
                     ),
-                    end=min(
+                    end=np.mean(
                         [paired_end[1] for paired_end in evidence.paired_ends]
                     ),
                 )
@@ -58,7 +62,18 @@ def get_svlen(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
     return all_stats
 
 
+def df_to_bed(in_file: str, out_file: str):
+    """Convert a csv to a bed file to be used with bedtools"""
+    df = pd.read_csv(in_file)
+    with open(out_file, "w") as outfile:
+        for _, row in df.iterrows():
+            outfile.write(
+                f"{row['chr']}\t{row['start']}\t{row['end']}\t{row['sv_id']}\t{row['id']}\n"
+            )
+
+
 def find_missing_sample_ids():
+    """Get sample ids that are in the STIX databse but are not in the original deletions VCF file"""
     sample_ids = set()
     for file in os.listdir(PROCESSED_STIX_DIR):
         with open(f"{PROCESSED_STIX_DIR}/{file}") as f:
@@ -67,41 +82,20 @@ def find_missing_sample_ids():
                 if sample_id[0].isalpha():
                     sample_ids.add(sample_id)
 
-    # print(len(sample_ids))  # 2535
     deletions_df = get_deletions_df()
     missing = sample_ids - set(deletions_df.columns[11:-1])
-
-    # print(len(missing))  # 31
-    # print(missing)
-    # {'HG00702', 'NA20898', 'HG00124', 'NA20336', 'NA19675', 'HG03715', 'HG02024', 'NA19311', 'NA19685', 'HG02363', 'NA20871', 'NA20322', 'HG00501', 'nan', 'NA19240', 'HG01983', 'NA19985', 'HG02381', 'HG02388', 'NA20341', 'HG02377', 'NA20526', 'HG00635', 'NA19313', 'HG02387', 'NA19660', 'HG00733', 'NA20893', 'HG03948', 'HG02372', 'HG02046', 'NA20344'}
 
     return missing
 
 
 def find_missing_processed_svs():
+    """Get SVs that are in the original deletions VCF that have not yet been run through the pipeline"""
     processed_sv_ids = set(
         [file.strip(".csv") for file in os.listdir(PROCESSED_SVS_DIR)]
     )
     deletions_df = get_deletions_df()
     missing = set(deletions_df["id"]) - processed_sv_ids
-    print(len(missing))
-    print(missing)
     return missing
-
-
-def get_ambiguous_svs():
-    df = pd.read_csv("1kgp/sv_stats_merged.csv")
-    unique_svs = df["id"].unique()
-    rerun_sv_ids = []
-    for sv_id in unique_svs:
-        sv_df = df[df["id"] == sv_id]
-        num_modes = sv_df["num_modes"].unique()
-        if len(num_modes) > 1:
-            rerun_sv_ids.append(sv_id)
-
-    with open("1kgp/svs_to_rerun.txt", "w") as f:
-        for sv_id in rerun_sv_ids:
-            f.write(f"{sv_id}\n")
 
 
 def get_num_intersecting_genes():
@@ -135,6 +129,25 @@ def get_sample_sequencing_centers():
     df = df[["SAMPLE_NAME", "CENTER_NAME"]].drop_duplicates()
     df = df.groupby("SAMPLE_NAME")["CENTER_NAME"].apply(list).reset_index()
     return df
+
+
+def extract_data_from_deletions_df():
+    deletions_df = get_deletions_df()
+
+    sample_ids = set(deletions_df.columns[11:-1])
+    with open("1kgp/sample_ids.txt", "w") as f:
+        for sample_id in sample_ids:
+            f.write(f"{sample_id}\n")
+
+    # split the deletions into separate files by chromosome
+    # another option is to create a lookup for row index in deletions_df by chr, start, stop, sample_id and
+    os.mkdir("1kgp/deletions_by_chr")
+    for i in range(1, 23):
+        chr_df = deletions_df[deletions_df["chr"] == f"{i}"]
+        chr_df.to_csv(f"1kgp/deletions_by_chr/chr{i}.csv", index=False)
+
+
+"""Handle varying insert sizes"""
 
 
 def get_insert_sizes(get_files: bool = False):
@@ -201,6 +214,105 @@ def get_mean_coverage():
     coverage_df.to_csv("1kgp/coverage.csv", index=False)
 
 
+def get_insert_size_diff():
+    df = pd.read_csv(
+        "1kgp/insert_sizes_scraped.csv",
+        dtype={"sample_id": str, "mean_insert_size": int},
+    )
+    df2 = pd.read_csv(
+        "1kgp/insert_sizes.csv",
+        dtype={"sample_id": str, "mean_insert_size": float},
+    )
+
+    df2 = df2.rename(columns={"mean_insert_size": "true_mean_insert_size"})
+    # join df2 to df
+    df = df.merge(
+        df2,
+        on="sample_id",
+        how="inner",
+    )
+    df["diff"] = abs(df["mean_insert_size"] - df["true_mean_insert_size"])
+    mean_diff = df["diff"].mean()
+    print(mean_diff)
+    df.to_csv("1kgp/insert_size_compare.csv", index=False)
+
+
+"""Dirichlet helpers"""
+
+
+def calculate_posteriors(alpha):
+    p = alpha / np.sum(alpha)
+    sum_alpha_post = np.sum(alpha)
+    var = (alpha * (sum_alpha_post - alpha)) / (
+        sum_alpha_post**2 * (sum_alpha_post + 1)
+    )
+    return p, var
+
+
+def calculate_ci(p, var, n):
+    # Calculate the difference in means between the two most probable modes
+    posterior_mu_sorted_indices = np.argsort(p)
+    posterior_mu_sorted = p[posterior_mu_sorted_indices]
+    diff_in_means = posterior_mu_sorted[-1] - posterior_mu_sorted[-2]
+
+    # Calculate the confidence interval for our difference in means
+    diff_var = (var[posterior_mu_sorted_indices[-1]]) / n + (
+        var[[posterior_mu_sorted_indices[-2]]]
+    ) / n
+    confidence = 1.96 * np.sqrt(diff_var)
+    ci = [diff_in_means - confidence, diff_in_means + confidence]
+
+    return ci
+
+
+def calculate_posteriors_from_trials(outcomes):
+    counts = Counter(outcomes)
+    alpha = np.array([1, 1, 1]) + np.array([counts[1], counts[2], counts[3]])
+    return calculate_posteriors(alpha)
+
+
+"""
+Handle errors that may arise when running the pipeline on all SVs
+"""
+
+
+def get_unprocessed_svs():
+    df = get_deletions_df()
+    svs = set(
+        [
+            (row["chr"].lower(), str(row["start"]), str(row["stop"]))
+            for _, row in df.iterrows()
+        ]
+    )
+
+    processed_files = os.listdir("processed_stix_output")
+    pattern = r"([\w]+):(\d+)-\d+_[\w]+:(\d+)-\d+.csv"
+    processed_svs = set(
+        [re.search(pattern, file).groups() for file in processed_files]
+    )
+
+    unprocessed_svs = svs - processed_svs
+    with open("1kgp/unprocessed_svs.txt", "w") as f:
+        for chr, start, stop in unprocessed_svs:
+            f.write(f"{chr.upper()},{start},{stop}\n")
+
+
+def get_med_low_confidence_svs():
+    df = get_sv_stats_converge_df()
+    grouped = df.groupby("id")
+    # get how many times we saw each id in df
+    counts = grouped.size()
+    counts.sort_values(ascending=False, inplace=True)
+    with open("1kgp/med_low_confidence_svs.txt", "w") as f:
+        for sv_id in counts[counts > 8].index:
+            f.write(f"{sv_id}\n")
+
+
+"""
+Analyze SVs that have been run
+"""
+
+
 def write_ancestry_dissimilarity():
     df = get_sv_stats_df()
     ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
@@ -246,85 +358,19 @@ def write_ancestry_dissimilarity():
     results_df.to_csv("1kgp/ancestry_dissimilarity.csv")
 
 
-def extract_data_from_deletions_df():
-    deletions_df = get_deletions_df()
-
-    sample_ids = set(deletions_df.columns[11:-1])
-    with open("1kgp/sample_ids.txt", "w") as f:
-        for sample_id in sample_ids:
-            f.write(f"{sample_id}\n")
-
-    # split the deletions into separate files by chromosome
-    # another option is to create a lookup for row index in deletions_df by chr, start, stop, sample_id and
-    os.mkdir("1kgp/deletions_by_chr")
-    for i in range(1, 23):
-        chr_df = deletions_df[deletions_df["chr"] == f"{i}"]
-        chr_df.to_csv(f"1kgp/deletions_by_chr/chr{i}.csv", index=False)
-
-
-def get_insert_size_diff():
-    df = pd.read_csv(
-        "1kgp/insert_sizes_scraped.csv",
-        dtype={"sample_id": str, "mean_insert_size": int},
-    )
-    df2 = pd.read_csv(
-        "1kgp/insert_sizes.csv",
-        dtype={"sample_id": str, "mean_insert_size": float},
-    )
-
-    df2 = df2.rename(columns={"mean_insert_size": "true_mean_insert_size"})
-    # join df2 to df
-    df = df.merge(
-        df2,
-        on="sample_id",
-        how="inner",
-    )
-    df["diff"] = abs(df["mean_insert_size"] - df["true_mean_insert_size"])
-    mean_diff = df["diff"].mean()
-    print(mean_diff)
-    df.to_csv("1kgp/insert_size_compare.csv", index=False)
-
-
-def calculate_posteriors(alpha):
-    p = alpha / np.sum(alpha)
-    sum_alpha_post = np.sum(alpha)
-    var = (alpha * (sum_alpha_post - alpha)) / (
-        sum_alpha_post**2 * (sum_alpha_post + 1)
-    )
-    return p, var
-
-
-def calculate_ci(p, var, n):
-    # Calculate the difference in means between the two most probable modes
-    posterior_mu_sorted_indices = np.argsort(p)
-    posterior_mu_sorted = p[posterior_mu_sorted_indices]
-    diff_in_means = posterior_mu_sorted[-1] - posterior_mu_sorted[-2]
-
-    # Calculate the confidence interval for our difference in means
-    diff_var = (var[posterior_mu_sorted_indices[-1]]) / n + (
-        var[[posterior_mu_sorted_indices[-2]]]
-    ) / n
-    confidence = 1.96 * np.sqrt(diff_var)
-    ci = [diff_in_means - confidence, diff_in_means + confidence]
-
-    return ci
-
-
-def calculate_posteriors_from_trials(outcomes):
-    counts = Counter(outcomes)
-    alpha = np.array([1, 1, 1]) + np.array([counts[1], counts[2], counts[3]])
-    return calculate_posteriors(alpha)
-
-
 def get_n_modes():
-    sv_df = pd.DataFrame(columns=["sv_id", "num_modes", "confidence"])
+    sv_df = pd.DataFrame(
+        columns=["sv_id", "num_modes", "confidence", "num_modes_2"]
+    )
     df = get_sv_stats_converge_df()
     svs = df["id"].unique()
     for sv_id in svs:
         outcomes = df[df["id"] == sv_id]["num_modes"].values
         counter = Counter(outcomes)
-        num_modes = max(counter, key=counter.get)
-        num_modes = 1 if num_modes == 0 else num_modes
+        most_common = counter.most_common(2)
+        num_modes = max(1, most_common[0][0])
+        num_modes_2 = int(most_common[1][0]) if len(counter) > 1 else np.NaN
+
         p, var = calculate_posteriors_from_trials(outcomes)
         ci = calculate_ci(p, var, len(outcomes))
         new_row = [sv_id, num_modes]
@@ -334,6 +380,8 @@ def get_n_modes():
             new_row.append("medium")
         else:
             new_row.append("low")
+        new_row.append(num_modes_2)
+
         sv_df.loc[len(sv_df)] = new_row
     sv_df.to_csv("1kgp/svs_n_modes.csv", index=False)
 
@@ -420,15 +468,6 @@ def get_consensus_svs():
     consensus_df.to_csv("1kgp/consensus_svs.csv", index=False)
 
 
-def df_to_bed(in_file: str, out_file: str):
-    df = pd.read_csv(in_file)
-    with open(out_file, "w") as outfile:
-        for _, row in df.iterrows():
-            outfile.write(
-                f"{row['chr']}\t{row['start']}\t{row['end']}\t{row['sv_id']}\t{row['id']}\n"
-            )
-
-
 def get_new_gene_intersections():
     og_intersections = set()  # (sv_id, gene_id)
     with open("1kgp/original_gene_intersections.bed", "r") as f:
@@ -465,36 +504,40 @@ def get_new_gene_intersections():
             f.write(f"{sv_split_id}\t{gene_id}\n")
 
 
-def get_unprocessed_svs():
-    df = get_deletions_df()
-    svs = set(
-        [
-            (row["chr"].lower(), str(row["start"]), str(row["stop"]))
-            for _, row in df.iterrows()
-        ]
+def outlier_gene_intersections():
+    svs_with_new_genes = set()
+    with open("1kgp/new_gene_intersections.bed", "r") as f:
+        for line in f:
+            sv_id = line.strip().split()[0]
+            sv_id = "_".join(sv_id.split("_")[0:2])
+            svs_with_new_genes.add(sv_id)
+
+    svs_with_outliers = set()
+    with open("1kgp/outliers.txt", "r") as f:
+        for line in f:
+            sv_id = line.strip().split()[0]
+            svs_with_outliers.add(sv_id)
+
+    print(svs_with_outliers.intersection(svs_with_new_genes))
+
+
+def high_confidence_gene_intersections():
+    svs_with_new_genes = set()
+    with open("1kgp/new_gene_intersections.bed", "r") as f:
+        for line in f:
+            sv_id = line.strip().split()[0]
+            sv_id = "_".join(sv_id.split("_")[0:2])
+            svs_with_new_genes.add(sv_id)
+
+    df = pd.read_csv("1kgp/svs_n_modes.csv")
+    high_confidence_svs = set(
+        df[(df["confidence"] == "high") & (df["num_modes"] >= 1)]["sv_id"]
     )
-
-    processed_files = os.listdir("processed_stix_output")
-    pattern = r"([\w]+):(\d+)-\d+_[\w]+:(\d+)-\d+.csv"
-    processed_svs = set(
-        [re.search(pattern, file).groups() for file in processed_files]
+    print("n high confidence SVs:", len(high_confidence_svs))
+    print(
+        "n high confidence SVs with new gene intersections:",
+        len(high_confidence_svs.intersection(svs_with_new_genes)),
     )
-
-    unprocessed_svs = svs - processed_svs
-    with open("1kgp/unprocessed_svs.txt", "w") as f:
-        for chr, start, stop in unprocessed_svs:
-            f.write(f"{chr.upper()},{start},{stop}\n")
-
-
-def get_med_low_confidence_svs():
-    df = get_sv_stats_converge_df()
-    grouped = df.groupby("id")
-    # get how many times we saw each id in df
-    counts = grouped.size()
-    counts.sort_values(ascending=False, inplace=True)
-    with open("1kgp/med_low_confidence_svs.txt", "w") as f:
-        for sv_id in counts[counts > 8].index:
-            f.write(f"{sv_id}\n")
 
 
 def get_sv_chr(sv_id: str):
@@ -510,4 +553,4 @@ def get_sv_chr(sv_id: str):
 
 if __name__ == "__main__":
     # get_sv_chr("HGSV_58245")
-    get_outliers()
+    get_n_modes()
