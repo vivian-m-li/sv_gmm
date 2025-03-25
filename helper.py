@@ -498,6 +498,42 @@ def get_new_gene_intersections():
             f.write(f"{sv_split_id}\t{gene_id}\n")
 
 
+def outlier_gene_intersections():
+    svs_with_new_genes = set()
+    with open("1kgp/new_gene_intersections.bed", "r") as f:
+        for line in f:
+            sv_id = line.strip().split()[0]
+            sv_id = "_".join(sv_id.split("_")[0:2])
+            svs_with_new_genes.add(sv_id)
+
+    svs_with_outliers = set()
+    with open("1kgp/outliers.txt", "r") as f:
+        for line in f:
+            sv_id = line.strip().split()[0]
+            svs_with_outliers.add(sv_id)
+
+    print(svs_with_outliers.intersection(svs_with_new_genes))
+
+
+def high_confidence_gene_intersections():
+    svs_with_new_genes = set()
+    with open("1kgp/new_gene_intersections.bed", "r") as f:
+        for line in f:
+            sv_id = line.strip().split()[0]
+            sv_id = "_".join(sv_id.split("_")[0:2])
+            svs_with_new_genes.add(sv_id)
+
+    df = pd.read_csv("1kgp/svs_n_modes.csv")
+    high_confidence_svs = set(
+        df[(df["confidence"] == "high") & (df["num_modes"] >= 1)]["sv_id"]
+    )
+    print("n high confidence SVs:", len(high_confidence_svs))
+    print(
+        "n high confidence SVs with new gene intersections:",
+        len(high_confidence_svs.intersection(svs_with_new_genes)),
+    )
+
+
 def get_sv_chr(sv_id: str):
     df = get_deletions_df()
     row = df[df["id"] == sv_id]
@@ -511,4 +547,4 @@ def get_sv_chr(sv_id: str):
 
 if __name__ == "__main__":
     # get_sv_chr("HGSV_58245")
-    get_outliers()
+    high_confidence_gene_intersections()
