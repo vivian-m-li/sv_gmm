@@ -359,14 +359,18 @@ def write_ancestry_dissimilarity():
 
 
 def get_n_modes():
-    sv_df = pd.DataFrame(columns=["sv_id", "num_modes", "confidence"])
+    sv_df = pd.DataFrame(
+        columns=["sv_id", "num_modes", "confidence", "num_modes_2"]
+    )
     df = get_sv_stats_converge_df()
     svs = df["id"].unique()
     for sv_id in svs:
         outcomes = df[df["id"] == sv_id]["num_modes"].values
         counter = Counter(outcomes)
-        num_modes = max(counter, key=counter.get)
-        num_modes = 1 if num_modes == 0 else num_modes
+        most_common = counter.most_common(2)
+        num_modes = max(1, most_common[0][0])
+        num_modes_2 = int(most_common[1][0]) if len(counter) > 1 else np.NaN
+
         p, var = calculate_posteriors_from_trials(outcomes)
         ci = calculate_ci(p, var, len(outcomes))
         new_row = [sv_id, num_modes]
@@ -376,6 +380,8 @@ def get_n_modes():
             new_row.append("medium")
         else:
             new_row.append("low")
+        new_row.append(num_modes_2)
+
         sv_df.loc[len(sv_df)] = new_row
     sv_df.to_csv("1kgp/svs_n_modes.csv", index=False)
 
@@ -547,4 +553,4 @@ def get_sv_chr(sv_id: str):
 
 if __name__ == "__main__":
     # get_sv_chr("HGSV_58245")
-    high_confidence_gene_intersections()
+    get_n_modes()
