@@ -127,8 +127,8 @@ def is_valid_svs(svs):
             sv2_size = sv2[1] - sv2[0]
             valid_sv = valid_sv and (
                 np.abs(sv2_size - sv1_size) >= 100
-                or np.abs(sv2[0] - sv1[0]) > 50
-                or np.abs(sv2[1] - sv1[1]) > 50
+                or np.abs(sv2[0] - sv1[0]) > 50  # noqa: 503
+                or np.abs(sv2[1] - sv1[1]) > 50  # noqa: 503
             )
     return valid_sv
 
@@ -220,104 +220,7 @@ def d_accuracy_test(n_samples: int, test_case: Optional[str] = None):
         )
 
 
-# DEPRECATED
-def run_gmm_synthetic_data():
-    n_samples = [
-        30,
-        50,
-        70,
-        100,
-        200,
-        500,
-        1000,
-    ]
-
-    with multiprocessing.Manager() as manager:
-        cpu_count = multiprocessing.cpu_count()
-        p = multiprocessing.Pool(cpu_count)
-        results = manager.dict()
-        for gmm_model in GMM_MODELS:
-            results[gmm_model] = manager.list()
-
-        args = []
-
-        # case 1A: one SV
-        sv_start = 100000
-        for n in n_samples:
-            for sv_size in [200, 500, 1000]:
-                args.append(
-                    ("1A", [(sv_start, sv_start + sv_size)], [1.0], n, results)
-                )
-
-        # constants for each of the 2-mode cases
-        sv1 = (100000, 100500)
-        ps = [(0.25, 0.75), (0.5, 0.5), (0.75, 0.25)]
-
-        # case 2A: 1 smaller SV inside a bigger SV
-        # vary: big SV size, big SV L
-        for sv2_size in list(range(600, 1050, 50)):
-            for diff in list(range(0, 250, 50)):
-                sv2_start = sv1[0] - diff
-                svs = [sv1, (sv2_start, sv2_start + sv2_size)]
-                if sv2_start + sv2_size < sv1[1] or not is_valid_svs(svs):
-                    continue
-                for weights in ps:
-                    for n in n_samples:
-                        args.append(("2A", svs, weights, n, results))
-
-        # case 2B: overlapping SVs
-        # vary: SV 2 size, SV 2 L
-        for sv2_size in list(range(300, 900, 100)):
-            for diff in list(range(50, 500, 50)):
-                sv2_start = sv1[0] + diff
-                svs = [sv1, (sv2_start, sv2_start + sv2_size)]
-                if sv2_start + sv2_size < sv1[1] or not is_valid_svs(svs):
-                    continue
-                for weights in ps:
-                    for n in n_samples:
-                        args.append(("2B", svs, weights, n, results))
-
-        # case 2C: non overlapping SVs
-        # vary: SV 2 size, SV 2 L (SV 2 start - SV 1 end)
-        for sv2_size in list(range(300, 900, 100)):
-            for diff in list(range(0, 300, 50)):
-                sv2_start = sv1[1] + diff
-                svs = [sv1, (sv2_start, sv2_start + sv2_size)]
-                for weights in ps:
-                    for n in n_samples:
-                        args.append(("2C", svs, weights, n, results))
-
-        ps = [
-            (0.15, 0.15, 0.7),
-            (0.15, 0.7, 0.15),
-            (0.7, 0.15, 0.15),
-            (0.33, 0.34, 0.33),
-        ]
-        # case 3A: combining case 2A, 2B, and 2C
-        for sv2_size in list(range(600, 1050, 50)):
-            for sv2_diff in list(range(0, 250, 50)):
-                sv2_start = sv1[0] - sv2_diff
-                sv2 = (sv2_start, sv2_start + sv2_size)
-                if sv2_start + sv2_size < sv1[1] or not is_valid_svs(
-                    [sv1, sv2]
-                ):
-                    continue
-                for sv3_size in list(range(300, 650, 50)):
-                    for sv3_diff in list(range(-150, 150, 50)):
-                        sv3_start = sv2[1] + sv3_diff
-                        svs = [sv1, sv2, (sv3_start, sv3_start + sv3_size)]
-                        for weights in ps:
-                            for n in n_samples:
-                                args.append(("3A", svs, weights, n, results))
-
-        p.starmap(run_gmm, args)
-        p.close()
-        p.join()
-
-        write_csv(results)
-
-
 if __name__ == "__main__":
-    # N_SAMPLES = [47, 181, 500]  # the median and mean number of samples
+    # N_SAMPLES = [72, 118, 500]  # the median and mean number of samples
     n_samples = int(sys.argv[1])
     d_accuracy_test(n_samples=n_samples)
