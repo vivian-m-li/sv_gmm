@@ -97,8 +97,6 @@ def write_csv(
             gmm,
             evidence_by_mode,
         ) in all_results:
-            # there is an error where all generated points are getting filtered out in process_data
-            # skip those rows in that case
             if gmm is None:
                 continue
 
@@ -221,6 +219,6 @@ def d_accuracy_test(n_samples: int, test_case: Optional[str] = None):
 
 
 if __name__ == "__main__":
-    # N_SAMPLES = [72, 118, 500]  # the median and mean number of samples
+    # N_SAMPLES = [72, 118]  # the median and mean number of samples
     n_samples = int(sys.argv[1])
     d_accuracy_test(n_samples=n_samples)

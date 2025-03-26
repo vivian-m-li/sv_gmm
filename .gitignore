@@ -10,6 +10,6 @@ hs37d5.fa.gz
 low_cov_grch37
 processed_svs
 processed_svs_converge
-synthetic_data
+synthetic_data*
 *.ipynb
 profile
