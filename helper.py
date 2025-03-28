@@ -390,15 +390,21 @@ def write_ancestry_dissimilarity():
 
         dissimilarity = braycurtis(ancestry[0], ancestry[1])
         results_df.loc[i] = [
-            int(row["chr"]),
-            int(row["start"]),
-            int(row["stop"]),
-            int(row["num_samples"]),
-            float(dissimilarity),
+            row["chr"],
+            row["start"],
+            row["stop"],
+            row["num_samples"],
+            dissimilarity,
         ]
 
+    # explicitly cast columns to correct types - everything was converting to float because of dissimilarity
+    results_df["chr"] = results_df["chr"].astype(int)
+    results_df["start"] = results_df["start"].astype(int)
+    results_df["stop"] = results_df["stop"].astype(int)
+    results_df["num_samples"] = results_df["num_samples"].astype(int)
+
     results_df = results_df.sort_values(by="dissimilarity", ascending=False)
-    results_df.to_csv("1kgp/ancestry_dissimilarity.csv")
+    results_df.to_csv("1kgp/ancestry_dissimilarity.csv", index=False)
 
 
 def get_n_modes():
