@@ -144,7 +144,13 @@ def write_sv_stats(
             mean_r = np.mean(
                 [paired_end[1] for paired_end in evidence.paired_ends]
             )
-            lengths.append(mean_r - mean_l - evidence.mean_insert_size)
+            mean_length = np.mean(
+                [
+                    paired_end[1] - paired_end[0] - evidence.mean_insert_size
+                    for paired_end in evidence.paired_ends
+                ]
+            )
+            lengths.append(mean_length)
             starts.append(mean_l)
             ends.append(mean_r)
             min_start = min(min_start, mean_l)

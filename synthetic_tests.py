@@ -7,7 +7,7 @@ import pandas as pd
 import math
 from sklearn import metrics
 from generate_data import generate_synthetic_sv_data
-from gmm_types import GMM_MODELS
+from gmm_types import GMM_MODELS, Evidence
 from typing import Optional, List, Tuple
 
 
@@ -38,7 +38,7 @@ def run_gmm(case, d, svs, weights, n_samples, results):
         )
 
 
-def get_len_L(evidence_by_mode):
+def get_len_L(evidence_by_mode: List[List[Evidence]]):
     lengths = []
     Ls = []
     for mode in evidence_by_mode:
@@ -48,10 +48,13 @@ def get_len_L(evidence_by_mode):
             mean_l = np.mean(
                 [paired_end[0] for paired_end in evidence.paired_ends]
             )
-            mean_r = np.mean(
-                [paired_end[1] for paired_end in evidence.paired_ends]
+            all_lens = np.mean(
+                [
+                    paired_end[1] - paired_end[0] - evidence.mean_insert_size
+                    for paired_end in evidence.paired_ends
+                ]
             )
-            lens.append(mean_r - mean_l - 450)  # 450 is the length of the read
+            lens.append(np.mean(all_lens))
             starts.append(mean_l)
         lengths.append(int(np.mean(lens)))
         Ls.append(int(np.mean(starts)))
@@ -64,7 +67,7 @@ def write_csv(
     write_new_file: bool = False,
     fixed_n_samples: Optional[int] = None,
 ):
-    file = f"synthetic_data/results{'' if fixed_n_samples is None else fixed_n_samples}.csv"
+    file = f"synthetic_data/results{'' if fixed_n_samples is None else 'n=' + fixed_n_samples}.csv"
     with open(
         file,
         mode="w" if write_new_file else "a",
@@ -205,6 +208,7 @@ def d_accuracy_test(n_samples: int, test_case: Optional[str] = None):
         args = []
         for case, d, svs in data:
             weights = [1.0 / len(svs)] * len(svs)
+            # run each case 100 times and average at the end
             for _ in range(100):
                 args.append((case, d, svs, weights, n_samples, results))
 

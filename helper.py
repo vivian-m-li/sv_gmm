@@ -359,7 +359,7 @@ def write_sv_stats_collapsed():
 def write_ancestry_dissimilarity():
     df = get_sv_stats_collapsed_df()
     ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
-    df = df[df["num_modes"] == 2]
+    df = df[df["num_modes"] > 1]
 
     results_df = pd.DataFrame(
         columns=["chr", "start", "stop", "num_samples", "dissimilarity"]
@@ -372,7 +372,7 @@ def write_ancestry_dissimilarity():
         )  # currently a str type, parse into a list
         for mode in modes:
             sample_ids = mode["sample_ids"]
-            ancestry_comp = {
+            ancestry_counter = {
                 anc: 0 for anc in ["SAS", "EAS", "EUR", "AMR", "AFR"]
             }
             for sample_id in sample_ids:
@@ -382,19 +382,24 @@ def write_ancestry_dissimilarity():
                 superpopulation = (
                     ancestry_row["Superpopulation code"].values[0].split(",")[0]
                 )
-                ancestry_comp[superpopulation] += 1
-            ancestry_comp = {
-                k: v / len(sample_ids) for k, v in ancestry_comp.items()
+                ancestry_counter[superpopulation] += 1
+            ancestry_counter = {
+                k: v / len(sample_ids) for k, v in ancestry_counter.items()
             }
-            ancestry.append([v for v in ancestry_comp.values()])
+            ancestry.append([v for v in ancestry_counter.values()])
 
-        dissimilarity = braycurtis(ancestry[0], ancestry[1])
+        dissimilarities = []
+        for i in range(row["num_modes"] - 1):
+            for j in range(i + 1, row["num_modes"]):
+                dissimilarity = braycurtis(ancestry[i], ancestry[j])
+                dissimilarities.append(dissimilarity)
+
         results_df.loc[i] = [
             row["chr"],
             row["start"],
             row["stop"],
             row["num_samples"],
-            dissimilarity,
+            np.mean(dissimilarities),
         ]
 
     # explicitly cast columns to correct types - everything was converting to float because of dissimilarity
@@ -411,8 +416,11 @@ def get_n_modes():
     sv_df = pd.DataFrame(
         columns=["sv_id", "num_modes", "confidence", "num_modes_2"]
     )
+
+    deletions_df = get_deletions_df()
+    deletions_df = deletions_df[deletions_df["num_samples"] > 0]
+    svs = deletions_df["id"].unique()
     df = get_sv_stats_converge_df()
-    svs = df["id"].unique()
     for sv_id in svs:
         outcomes = df[df["id"] == sv_id]["num_modes"].values
         counter = Counter(outcomes)
