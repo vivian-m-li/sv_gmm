@@ -7,7 +7,8 @@ import numpy as np
 import csv
 from scipy.spatial.distance import braycurtis
 from collections import defaultdict, Counter
-from gmm_types import Evidence, SVStat
+from gmm_types import Evidence, SVStat, SVInfoGMM
+from dataclasses import fields
 from typing import List
 
 PROCESSED_STIX_DIR = "processed_stix_output"
@@ -26,6 +27,10 @@ def get_sv_stats_df(stem: str = "1kgp"):
 
 def get_sv_stats_converge_df(stem: str = "1kgp"):
     return pd.read_csv(f"{stem}/sv_stats_converge.csv", low_memory=False)
+
+
+def get_sv_stats_collapsed_df(stem: str = "1kgp"):
+    return pd.read_csv(f"{stem}/sv_stats_collapsed.csv")
 
 
 def get_sample_ids(file_root: str = "1kgp"):
@@ -313,8 +318,46 @@ Analyze SVs that have been run
 """
 
 
+def write_sv_stats_collapsed():
+    df = get_sv_stats_converge_df()
+    svs_n_modes = pd.read_csv("1kgp/svs_n_modes.csv")
+    svs_n_modes.rename(
+        columns={"num_modes": "consensus_num_modes"}, inplace=True
+    )
+    df = df.merge(svs_n_modes, left_on="id", right_on="sv_id")
+    sv_ids = df["id"].unique()
+    with open("1kgp/sv_stats_collapsed.csv", mode="w", newline="") as out:
+        fieldnames = [field.name for field in fields(SVInfoGMM)]
+        csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
+        csv_writer.writeheader()
+        for sv_id in sv_ids:
+            rows = df[df["id"] == sv_id]
+            if len(rows) < 1 or rows["confidence"].values[0] == "low":
+                continue
+            consensus_num_modes = rows["consensus_num_modes"].values[0]
+            rows = rows[rows["num_modes"] == consensus_num_modes]
+            samples = Counter()
+            samples_by_row = {}
+            for i, row in rows.iterrows():
+                modes = sorted(
+                    ast.literal_eval(row["modes"]), key=lambda x: x["start"]
+                )
+                sample_ids = [
+                    ",".join(sorted(mode["sample_ids"])) for mode in modes
+                ]
+                samples_joined = ";".join(sample_ids)
+                samples.update([samples_joined])
+                samples_by_row[samples_joined] = i
+            most_common = samples.most_common(1)[0][0]
+            row = rows.loc[samples_by_row[most_common]].copy()
+            row = row.drop(
+                ["consensus_num_modes", "num_modes_2", "sv_id", "confidence"]
+            )
+            csv_writer.writerow(row.to_dict())
+
+
 def write_ancestry_dissimilarity():
-    df = get_sv_stats_df()
+    df = get_sv_stats_collapsed_df()
     ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
     df = df[df["num_modes"] == 2]
 
@@ -347,18 +390,12 @@ def write_ancestry_dissimilarity():
 
         dissimilarity = braycurtis(ancestry[0], ancestry[1])
         results_df.loc[i] = [
-            row["chr"],
-            row["start"],
-            row["stop"],
-            row["num_samples"],
-            dissimilarity,
+            int(row["chr"]),
+            int(row["start"]),
+            int(row["stop"]),
+            int(row["num_samples"]),
+            float(dissimilarity),
         ]
-
-    results_df = results_df.sort_values(by="dissimilarity", ascending=False)
-    results_df.to_csv("1kgp/ancestry_dissimilarity.csv")
-
-
-def get_n_modes():
     sv_df = pd.DataFrame(
         columns=["sv_id", "num_modes", "confidence", "num_modes_2"]
     )
@@ -553,4 +590,4 @@ def get_sv_chr(sv_id: str):
 
 if __name__ == "__main__":
     # get_sv_chr("HGSV_58245")
-    get_n_modes()
+    write_ancestry_dissimilarity()
