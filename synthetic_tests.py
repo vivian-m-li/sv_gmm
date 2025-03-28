@@ -9,6 +9,7 @@ from sklearn import metrics
 from generate_data import generate_synthetic_sv_data
 from gmm_types import GMM_MODELS, Evidence
 from typing import Optional, List, Tuple
+from timeout import break_after
 
 
 def confusion_mat():
@@ -192,6 +193,7 @@ def generate_data(case: str) -> List[Tuple[int, int]]:
     return data
 
 
+@break_after(hours=29, minutes=55)
 def d_accuracy_test(n_samples: int, test_case: Optional[str] = None):
     # generate synthetic data
     if test_case is None:
