@@ -10,6 +10,7 @@ from viz import (
     populate_sample_info,
     get_evidence_by_mode,
     plot_2d_coords,
+    plot_evidence_by_mode,
 )
 from gmm_types import Evidence, Sample
 
@@ -503,7 +504,7 @@ def run_viz_gmm(
         gmm, sv_evidence, L, R, gmm_model=gmm_model
     )
     if plot:
-        # plot_evidence_by_mode(evidence_by_mode)
+        plot_evidence_by_mode(evidence_by_mode)
         plot_2d_coords(
             evidence_by_mode,
             axis1="L",

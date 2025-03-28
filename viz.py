@@ -20,9 +20,14 @@ from collections import Counter, defaultdict
 from typing import List
 from em import run_em
 from em_1d import run_em as run_em1d, get_scatter_data
-from helper import get_sample_sequencing_centers, get_sv_stats_df, get_svlen
+from helper import (
+    get_sample_sequencing_centers,
+    get_sv_stats_df,
+    get_sv_stats_collapsed_df,
+    get_svlen,
+)
 from gmm_types import (
-    GMM,
+    EstimatedGMM,
     Evidence,
     SVStat,
     Sample,
@@ -45,7 +50,7 @@ def add_noise(value, scale=0.07):
 
 
 def get_evidence_by_mode(
-    gmm: GMM,
+    gmm: EstimatedGMM,
     sv_evidence: List[Evidence],
     L: int,
     R: int,
@@ -53,20 +58,22 @@ def get_evidence_by_mode(
     gmm_model: str = "2d",
 ) -> List[List[Evidence]]:
     sv_evidence = np.array(sv_evidence)
-    x_by_mode = []
+    data = []
     for mode in gmm.x_by_mode:
-        data = []
+        data_by_mode = []
         for x in mode:
             if gmm_model == "1d_len":
-                data.append((x + R))  # length
+                data_by_mode.append((x + R))  # length
             elif gmm_model == "1d_L":
-                data.append((x + L))  # L-coordinate
+                data_by_mode.append((x + L))  # L-coordinate
             else:
-                data.append((x[0] + R, x[1] + L))  # (length, L-coordinate)
-        x_by_mode.append(data)
-    evidence_by_mode = [[] for _ in range(len(x_by_mode))]
+                data_by_mode.append(
+                    (x[0] + R, x[1] + L)
+                )  # (length, L-coordinate)
+        data.append(data_by_mode)
+    evidence_by_mode = [[] for _ in range(len(data))]
     for evidence in sv_evidence:
-        for i, mode in enumerate(x_by_mode):
+        for i, mode in enumerate(data):
             try:
                 if gmm_model == "1d_len":
                     mode_data = evidence.start_y  # length
@@ -86,6 +93,13 @@ def get_evidence_by_mode(
                 print(evidence)
                 print(mode)
                 raise ValueError
+    lengths_by_mode = [
+        np.mean([evidence.start_y for evidence in mode])
+        for mode in evidence_by_mode
+    ]
+    evidence_by_mode = [
+        x for _, x in sorted(zip(lengths_by_mode, evidence_by_mode))
+    ]
     return evidence_by_mode
 
 
@@ -297,6 +311,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
     mode_percentages = [count / total_population for count in counts]
     pie_ax.pie(
         mode_percentages,
+        labels=[f"{count}" for count in counts],
         autopct="%1.1f%%",
         colors=COLORS[: len(mode_indices)],
         startangle=90,
@@ -969,7 +984,7 @@ Plots the allele frequencies for the SVs before and after being split by SVepera
 
 
 def plot_afs():
-    sv_df = get_sv_stats_df()
+    sv_df = get_sv_stats_collapsed_df()
     sv_df = sv_df[sv_df["num_samples"] > 0]
     fig, axs = plt.subplots(1, 3, figsize=(18, 6))
     for num_modes in range(3):

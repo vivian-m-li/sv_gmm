@@ -106,13 +106,13 @@ def generate_synthetic_sv_data(
     evidence = defaultdict(list)
     insert_size_lookup = {}
     for sample, mode in zip(samples, modes):
-        num_evidence = random.randint(2, 10)
+        num_evidence = random.randint(2, 30)
         mode_start, mode_end = svs[mode]
         insert_size = insert_size_df.sample()["mean_insert_size"].values[0]
         insert_size_lookup[sample] = insert_size
 
         for _ in range(num_evidence):
-            read_length = min(600, max(50, int(random.gauss(insert_size, 25))))
+            read_length = min(550, max(350, int(random.gauss(insert_size, 25))))
             split = random.randint(1, read_length - 1)
             # split = random.randint(
             #     int(read_length / 2) - 100, int(read_length / 2) + 100
@@ -122,8 +122,8 @@ def generate_synthetic_sv_data(
             evidence[sample].extend([evidence_start, evidence_stop])
 
     # Pass synthetic data through SV analysis pipeline
-    L = min([start for start, _ in svs])
-    R = max([stop for _, stop in svs])
+    L = np.mean([start for start, _ in svs])
+    R = np.mean([stop for _, stop in svs])
     evidence = {key: np.array(value) for key, value in evidence.items()}
 
     if plot_reads:
