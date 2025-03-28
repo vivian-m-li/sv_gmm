@@ -48,14 +48,14 @@ def get_len_L(evidence_by_mode: List[List[Evidence]]):
             mean_l = np.mean(
                 [paired_end[0] for paired_end in evidence.paired_ends]
             )
-            all_lens = np.mean(
+            mean_length = np.mean(
                 [
                     paired_end[1] - paired_end[0] - evidence.mean_insert_size
                     for paired_end in evidence.paired_ends
                 ]
             )
-            lens.append(np.mean(all_lens))
             starts.append(mean_l)
+            lens.append(mean_length)
         lengths.append(int(np.mean(lens)))
         Ls.append(int(np.mean(starts)))
     return lengths, Ls
