@@ -157,7 +157,7 @@ def query_stix(
     chr, start, stop = reverse_giggle_format(l, r)
 
     # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
-    if chr in ["X", "Y"]:
+    if chr.lower() in ["x", "y"]:
         return {}
 
     # read/write files in scratch if flagged
