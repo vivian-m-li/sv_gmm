@@ -396,6 +396,12 @@ def write_ancestry_dissimilarity():
             int(row["num_samples"]),
             float(dissimilarity),
         ]
+
+    results_df = results_df.sort_values(by="dissimilarity", ascending=False)
+    results_df.to_csv("1kgp/ancestry_dissimilarity.csv")
+
+
+def get_n_modes():
     sv_df = pd.DataFrame(
         columns=["sv_id", "num_modes", "confidence", "num_modes_2"]
     )
