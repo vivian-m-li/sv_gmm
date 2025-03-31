@@ -1086,31 +1086,33 @@ def plot_d_accuracy_by_case(case: str):
         df = df[df["case"] == case]
 
         for model in GMM_MODELS:
-            accuracy_by_dist = defaultdict(list)
             model_df = df[df["gmm_model"] == model]
-            for _, row in model_df.iterrows():
-                dist = row["d"]
-                correct = (
-                    1 if row["num_modes"] == row["expected_num_modes"] else 0
-                )
-                accuracy_by_dist[dist].append(correct)
-            distances = sorted(accuracy_by_dist.keys())
-            accuracies = np.array(
-                [
-                    sum(accuracy_by_dist[d]) / len(accuracy_by_dist[d])
-                    for d in distances
+            accuracies = []
+
+            # distance values match the ones in synthetic_tests.py
+            if case in ["A", "B", "C"]:
+                distances = list(range(0, 502, 2))
+            else:
+                distances = list(range(0, 1110, 10))
+            for dist in distances:
+                dist_df = model_df[model_df["d"] == dist]
+                correct = dist_df[
+                    dist_df["num_modes"] == dist_df["expected_num_modes"]
                 ]
-            )
-            (indices,) = np.where(accuracies >= 0.8)
-            # TODO: why is the 2d model failing at distance = 270?
+                accuracies.append(
+                    0.0 if len(dist_df) == 0 else len(correct) / len(dist_df)
+                )
+
+            (indices,) = np.where(np.array(accuracies) >= 0.8)
             if len(indices) > 0:
                 d_acc_vals[model].append(distances[indices[0]])
             else:
-                d_acc_vals[model].append(
-                    np.nan
-                )  # TODO: set np.inf or just don't plot
+                d_acc_vals[model].append(np.nan)
 
             if n in vals_to_plot:
+                # prune from distances/accuracies lists where accuracies = 0
+                distances = [d for d, a in zip(distances, accuracies) if a != 0]
+                accuracies = [a for a in accuracies if a != 0]
                 all_d_acc_vals[model].append([distances, accuracies])
 
     fig = plt.figure(figsize=(12, 8))

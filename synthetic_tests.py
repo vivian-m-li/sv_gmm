@@ -167,18 +167,19 @@ def generate_data(case: str) -> List[Tuple[int, int]]:
     data = []
     match case:
         case "A":
-            for d in range(0, 502, 2):
-                data.append(
-                    [case, d, [SV1, (int(100000 + d / 2), int(SV1_R - d / 2))]]
-                )
+            for d in range(0, 505, 5):
+                # sv1 is larger, sv2 is smaller within sv1
+                data.append([case, d, [SV1, (int(SV1_L + d), int(SV1_R - d))]])
         case "B":
-            for d in range(0, 502, 2):
-                sv2_start = SV1_L - d
-                data.append([case, d, [(sv2_start, sv2_start + SVLEN), SV1]])
+            for d in range(0, 505, 5):
+                # sv 1 and 2 are the same length. sv1 starts first and sv2 starts at the start of sv1 + d
+                sv2_start = SV1_L + d
+                data.append([case, d, [SV1, (sv2_start, sv2_start + SVLEN)]])
         case "C":
-            sv2_end = SV1_R + 500 + SVLEN
-            for d in range(0, 502, 2):
-                data.append([case, d, [SV1, (SV1_R + d, sv2_end)]])
+            for d in range(0, 505, 5):
+                # sv 1 and 2 are the same length. sv1 starts first and sv2 starts at the end of sv1 + d
+                sv2_start = SV1_R + d
+                data.append([case, d, [SV1, (sv2_start, sv2_start + SVLEN)]])
         case "D":
             for d in range(0, 1110, 10):
                 sv3 = get_coordinates(SV1, SV3, d)
@@ -193,7 +194,7 @@ def generate_data(case: str) -> List[Tuple[int, int]]:
     return data
 
 
-@break_after(hours=29, minutes=55)
+@break_after(hours=35, minutes=55)
 def d_accuracy_test(n_samples: int, test_case: Optional[str] = None):
     # generate synthetic data
     if test_case is None:
@@ -209,7 +210,7 @@ def d_accuracy_test(n_samples: int, test_case: Optional[str] = None):
         results = manager.list()
         args = []
         for case, d, svs in data:
-            weights = [1.0 / len(svs)] * len(svs)
+            weights = [1.0 / len(svs) for _ in range(len(svs))]
             # run each case 100 times and average at the end
             for _ in range(100):
                 args.append((case, d, svs, weights, n_samples, results))
