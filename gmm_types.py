@@ -30,6 +30,35 @@ CHR_LENGTHS = {
     # "Y": 59373566,
 }
 COLORS = ["#459395", "#EB7C69", "#FDA638"]
+SUPERPOPULATIONS = ["AFR", "AMR", "EUR", "EAS", "SAS"]
+SUBPOPULATIONS = [  # sorted by superpopulation
+    "LWK",
+    "YRI",
+    "ESN",
+    "ASW",
+    "ACB",
+    "MSL",
+    "GWD",
+    "PUR",
+    "MXL",
+    "CLM",
+    "PEL",
+    "CDX",
+    "KHV",
+    "CHS",
+    "CHB",
+    "JPT",
+    "CEU",
+    "TSI",
+    "IBS",
+    "FIN",
+    "GBR",
+    "ITU",
+    "GIH",
+    "STU",
+    "BEB",
+    "PJL",
+]
 ANCESTRY_COLORS = {
     "AFR": "#45597e",
     "AMR": "#1d6295",

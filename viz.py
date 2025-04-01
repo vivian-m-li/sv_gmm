@@ -35,6 +35,8 @@ from gmm_types import (
     COLORS,
     GMM_AXES,
     GMM_MODELS,
+    SUPERPOPULATIONS,
+    SUBPOPULATIONS,
 )
 
 REFERENCE_FILE = "hs37d5.fa.gz"
@@ -975,6 +977,104 @@ def analyze_ancestry() -> None:
     ax2.set_ylabel("Count", fontsize=12)
 
     plt.tight_layout()
+    plt.show()
+
+
+def compare_sv_ancestry(by: str = "superpopulation"):
+    ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
+    dissimilarity_df = pd.read_csv("1kgp/ancestry_dissimilarity.csv")
+    # dissimilarity_df = dissimilarity_df[
+    #     dissimilarity_df["dissimilarity"] >= 0.5
+    # ]
+    sv_df = get_sv_stats_collapsed_df()
+    sv_df = sv_df[sv_df["num_modes"] > 1]
+
+    populations = (
+        SUPERPOPULATIONS if by == "superpopulation" else SUBPOPULATIONS
+    )
+
+    comparisons = [np.zeros(len(populations)) for _ in range(len(populations))]
+    all_comparisons = [
+        np.zeros(len(populations)) for _ in range(len(populations))
+    ]
+    for _, row in sv_df.iterrows():
+        skip_row = dissimilarity_df[
+            (dissimilarity_df["chr"] == row["chr"])
+            & (dissimilarity_df["start"] == row["start"])
+            & (dissimilarity_df["stop"] == row["stop"])
+        ].empty
+        if skip_row:
+            continue
+
+        modes = ast.literal_eval(row["modes"])
+        sp_by_mode = []
+        for mode in modes:
+            sample_ids = mode["sample_ids"]
+            pops = set()
+            for sample_id in sample_ids:
+                ancestry_row = ancestry_df[
+                    ancestry_df["Sample name"] == sample_id
+                ]
+                pop_key = (
+                    "Superpopulation code"
+                    if by == "superpopulation"
+                    else "Population code"
+                )
+                population = ancestry_row[pop_key].values[0].split(",")[0]
+                pops.add(population)
+            sp_by_mode.append(pops)
+
+        for i, p1 in enumerate(populations):
+            all_sp = [sp for mode in sp_by_mode for sp in mode]
+            if p1 not in all_sp:
+                continue
+            for j_idx, p2 in enumerate(populations[i + 1 :]):
+                j = i + j_idx + 1
+                if p2 not in all_sp:
+                    continue
+                all_comparisons[i][j] += 1
+                all_comparisons[j][i] += 1
+                for mode in sp_by_mode:
+                    if p1 in mode and p2 in mode:
+                        comparisons[i][j] += 1
+                        comparisons[j][i] += 1
+                        break
+
+    for i in range(len(populations)):
+        for j in range(len(populations)):
+            if i == j:
+                comparisons[i][j] = 1
+            elif all_comparisons[i][j] == 0:
+                comparisons[i][j] = 0
+            else:
+                comparisons[i][j] /= all_comparisons[i][j]
+
+    population_lookup = {}
+    for i, row in ancestry_df.iterrows():
+        population_lookup[row["Population code"]] = row["Superpopulation code"]
+
+    fig, ax = plt.subplots(figsize=(12, 12))
+    im = ax.imshow(comparisons, cmap="Blues", interpolation="nearest")
+    ax.set_xticks(range(len(populations)))
+    ax.set_yticks(range(len(populations)))
+    ax.set_xticklabels(populations)
+    ax.set_yticklabels(populations)
+    if by == "population":
+        superpop_seen = set()
+        for i, label in enumerate(populations):
+            superpop = population_lookup[label]
+            if superpop not in superpop_seen:
+                ax.text(
+                    i,
+                    -1,
+                    superpop,
+                    ha="center",
+                    va="center",
+                    fontsize=12,
+                    color=ANCESTRY_COLORS[superpop],
+                )
+                superpop_seen.add(superpop)
+    plt.colorbar(im)
     plt.show()
 
 

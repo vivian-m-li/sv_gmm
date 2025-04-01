@@ -7,7 +7,7 @@ import numpy as np
 import csv
 from scipy.spatial.distance import braycurtis
 from collections import defaultdict, Counter
-from gmm_types import Evidence, SVStat, SVInfoGMM
+from gmm_types import Evidence, SVStat, SVInfoGMM, SUPERPOPULATIONS
 from dataclasses import fields
 from typing import List
 
@@ -366,15 +366,10 @@ def write_ancestry_dissimilarity():
     )
     for i, row in df.iterrows():
         ancestry = []
-        row["num_samples"]
-        modes = ast.literal_eval(
-            row["modes"]
-        )  # currently a str type, parse into a list
+        modes = ast.literal_eval(row["modes"])
         for mode in modes:
             sample_ids = mode["sample_ids"]
-            ancestry_counter = {
-                anc: 0 for anc in ["SAS", "EAS", "EUR", "AMR", "AFR"]
-            }
+            ancestry_counter = {anc: 0 for anc in SUPERPOPULATIONS}
             for sample_id in sample_ids:
                 ancestry_row = ancestry_df[
                     ancestry_df["Sample name"] == sample_id
@@ -394,7 +389,7 @@ def write_ancestry_dissimilarity():
                 dissimilarity = braycurtis(ancestry[i], ancestry[j])
                 dissimilarities.append(dissimilarity)
 
-        results_df.loc[i] = [
+        results_df.loc[len(results_df)] = [
             row["chr"],
             row["start"],
             row["stop"],
