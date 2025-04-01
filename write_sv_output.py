@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from dataclasses import fields, asdict
 from query_sv import query_stix, giggle_format
-from helper import get_svlen
+from helper import get_svlen, calc_af
 from gmm_types import SVInfoGMM, GMM, Evidence, ModeStat
 from typing import Set, Dict, List, Optional, Tuple
 
@@ -130,7 +130,7 @@ def write_sv_stats(
             [e.sample for e in mode if e.sample.allele == "(1, 1)"]
         )
         num_heterozygous = num_samples - num_homozygous
-        af = ((num_homozygous * 2) + num_heterozygous) / population_size * 2
+        af = calc_af(num_homozygous, num_heterozygous, population_size)
 
         lengths = []
         starts = []

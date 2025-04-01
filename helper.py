@@ -67,6 +67,10 @@ def get_svlen(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
     return all_stats
 
 
+def calc_af(n_homozygous, n_heterozygous, population_size):
+    return ((n_homozygous * 2) + n_heterozygous) / (population_size * 2)
+
+
 def df_to_bed(in_file: str, out_file: str):
     """Convert a csv to a bed file to be used with bedtools"""
     df = pd.read_csv(in_file)
@@ -358,8 +362,17 @@ def write_sv_stats_collapsed():
 
 def write_ancestry_dissimilarity():
     df = get_sv_stats_collapsed_df()
+    confidence = pd.read_csv("1kgp/svs_n_modes.csv")
+    confidence.rename(
+        columns={"num_modes": "consensus_num_modes"}, inplace=True
+    )
+    df = df.merge(
+        confidence,
+        left_on="id",
+        right_on="sv_id",
+    )
+    df = df[(df["confidence"] != "low") & (df["consensus_num_modes"] > 1)]
     ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
-    df = df[df["num_modes"] > 1]
 
     results_df = pd.DataFrame(
         columns=["chr", "start", "stop", "num_samples", "dissimilarity"]

@@ -24,7 +24,9 @@ from helper import (
     get_sample_sequencing_centers,
     get_sv_stats_df,
     get_sv_stats_collapsed_df,
+    get_deletions_df,
     get_svlen,
+    calc_af,
 )
 from gmm_types import (
     EstimatedGMM,
@@ -633,7 +635,7 @@ Plots the rectangle shapes showing the distribution of all SVs and how they're s
 
 
 def plot_processed_sv_stats(filter_intersecting_genes: bool = False):
-    df = get_sv_stats_df()
+    df = get_sv_stats_collapsed_df()
     df = df[df["num_samples"] > 0]
 
     if filter_intersecting_genes:
@@ -803,7 +805,7 @@ For each # of modes, plots a boxplot of the sample size for each SV
 
 
 def plot_sample_size_per_mode(filter_intersecting_genes: bool = False):
-    df = get_sv_stats_df()
+    df = get_sv_stats_collapsed_df()
     if filter_intersecting_genes:
         df = get_svs_intersecting_genes(df)
 
@@ -1087,6 +1089,8 @@ Plots the allele frequencies for the SVs before and after being split by SVepera
 
 
 def plot_afs():
+    deletions_df = get_deletions_df()
+    population_size = deletions_df.shape[1] - 12
     sv_df = get_sv_stats_collapsed_df()
     sv_df = sv_df[sv_df["num_samples"] > 0]
     fig, axs = plt.subplots(1, 3, figsize=(18, 6))
@@ -1095,11 +1099,24 @@ def plot_afs():
         y = []  # new AFs
         df = sv_df[sv_df["num_modes"] == num_modes + 1]
         for _, row in df.iterrows():
+            deletions_row = deletions_df[deletions_df["id"] == row["id"]]
             original_af = float(ast.literal_eval(row["af"])[0])
             modes = ast.literal_eval(row["modes"])
-            for i in range(num_modes + 1):
+            for mode in modes:
                 x.append(original_af)
-                y.append(modes[i]["af"])
+                sample_ids = mode["sample_ids"]
+                num_samples = len(sample_ids)
+                n_homozygous = len(
+                    [
+                        sample_id
+                        for sample_id in sample_ids
+                        if deletions_row[sample_id].values[0] == "(1, 1)"
+                    ]
+                )
+                af = calc_af(
+                    n_homozygous, num_samples - n_homozygous, population_size
+                )
+                y.append(af)
         axs[num_modes].scatter(x, y, color=COLORS[num_modes], alpha=0.6)
         axs[num_modes].plot([0, 1], [0, 1], linestyle="--", color="grey")
         axs[num_modes].set_title(f"Num Modes={num_modes + 1}")
@@ -1165,12 +1182,12 @@ def plot_d_accuracy_by_case(case: str):
     files = [
         f
         for f in os.listdir("synthetic_data")
-        if re.match(r"results\d+\.csv", f)
+        if re.match(r"resultsn=\d+\.csv", f)
     ]
     n_samples = sorted(
-        [int(re.search(r"results(\d+)\.csv", f).group(1)) for f in files]
+        [int(re.search(r"resultsn=(\d+)\.csv", f).group(1)) for f in files]
     )
-    midpoint = len(n_samples) / 2
+    midpoint = int(len(n_samples) / 2)
     vals_to_plot = [
         n_samples[0],
         n_samples[int(midpoint / 2)],
@@ -1184,7 +1201,7 @@ def plot_d_accuracy_by_case(case: str):
         list
     )  # for the small plots below the large plot, for vals_to_plot
     for n in n_samples:
-        file = f"synthetic_data/results{n}.csv"
+        file = f"synthetic_data/resultsn={n}.csv"
         df = pd.read_csv(file)
         df = df[df["case"] == case]
 
@@ -1194,7 +1211,7 @@ def plot_d_accuracy_by_case(case: str):
 
             # distance values match the ones in synthetic_tests.py
             if case in ["A", "B", "C"]:
-                distances = list(range(0, 502, 2))
+                distances = list(range(0, 505, 5))
             else:
                 distances = list(range(0, 1110, 10))
             for dist in distances:

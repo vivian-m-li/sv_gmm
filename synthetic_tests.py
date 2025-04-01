@@ -68,7 +68,7 @@ def write_csv(
     write_new_file: bool = False,
     fixed_n_samples: Optional[int] = None,
 ):
-    file = f"synthetic_data/results{'' if fixed_n_samples is None else 'n=' + fixed_n_samples}.csv"
+    file = f"synthetic_data/results{'' if fixed_n_samples is None else 'n=' + str(fixed_n_samples)}.csv"
     with open(
         file,
         mode="w" if write_new_file else "a",
@@ -194,7 +194,7 @@ def generate_data(case: str) -> List[Tuple[int, int]]:
     return data
 
 
-@break_after(hours=35, minutes=55)
+@break_after(hours=17, minutes=55)
 def d_accuracy_test(n_samples: int, test_case: Optional[str] = None):
     # generate synthetic data
     if test_case is None:
