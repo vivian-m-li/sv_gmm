@@ -99,9 +99,12 @@ def get_evidence_by_mode(
         np.mean([evidence.start_y for evidence in mode])
         for mode in evidence_by_mode
     ]
-    evidence_by_mode = [
-        x for _, x in sorted(zip(lengths_by_mode, evidence_by_mode))
-    ]
+    try:
+        evidence_by_mode = [
+            x for _, x in sorted(zip(lengths_by_mode, evidence_by_mode))
+        ]
+    except Exception:
+        print(L, R, lengths_by_mode, evidence_by_mode)
     return evidence_by_mode
 
 
