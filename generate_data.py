@@ -31,7 +31,7 @@ def query_random_svs(num_sample_range):
 
         l = giggle_format(chr, start)  # noqa741
         r = giggle_format(chr, stop)
-        query_stix(l, r)
+        query_stix(l=l, r=r)
 
 
 def generate_weights(num_svs: int):

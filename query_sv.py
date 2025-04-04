@@ -47,6 +47,18 @@ def reverse_giggle_format(l: str, r: str):  # noqa741
     return chr, start, stop
 
 
+def lookup_sv_position(sv_id: str):
+    lookup = pd.read_csv("1kgp/sv_lookup.csv")
+    row = lookup[lookup["id"] == sv_id]
+    if row.empty:
+        raise ValueError(f"SV ID {sv_id} not found in lookup table.")
+
+    chr = str(row["chr"].values[0])
+    start = int(row["start"].values[0])
+    stop = int(row["stop"].values[0])
+    return chr, start, stop
+
+
 def load_squiggle_data(filename: str):
     squiggle_data = {}
     if os.path.isfile(filename):
@@ -144,17 +156,26 @@ def write_processed_output(output_file: str, processed_output_file: str):
 
 
 def query_stix(
-    l: str,
-    r: str,
-    run_gmm: bool = True,
     *,
+    l: str = "",
+    r: str = "",
+    sv_id: str = "",
+    run_gmm: bool = True,
     filter_reference: bool = True,
     single_trial: bool = True,
     plot: bool = True,
     reference_genome: str = "grch38",  # or grch37
     scratch: bool = False,
 ):
-    chr, start, stop = reverse_giggle_format(l, r)
+    if sv_id == "" and (l == "" or r == ""):
+        raise ValueError("Missing SV position or ID")
+
+    if sv_id != "":
+        chr, start, stop = lookup_sv_position(sv_id)
+        l = giggle_format(chr, start)  # noqa741
+        r = giggle_format(chr, stop)
+    else:
+        chr, start, stop = reverse_giggle_format(l, r)
 
     # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
     if chr.lower() in ["x", "y"]:
@@ -266,6 +287,11 @@ def main():
         help="Right position of the structural variant, format=chromosome:position",
     )
     parser.add_argument(
+        "-id",
+        type=str,
+        help="Right position of the structural variant, format=chromosome:position",
+    )
+    parser.add_argument(
         "-p",
         type=bool,
         help="Plot the length and L coordinate of each sample",
@@ -286,15 +312,18 @@ def main():
     )
 
     args = parser.parse_args()
-    l = parse_input(args.l)  # noqa741
-    r = parse_input(args.r)
+
+    l = parse_input(args.l) if args.l is not None else ""  # noqa741
+    r = parse_input(args.r) if args.r is not None else ""
+    sv_id = args.id or ""
     p = args.p
     d = args.d
     reference_genome = "grch38" if args.ref != "grch37" else args.ref
     query_stix(
-        l,
-        r,
-        True,
+        l=l,
+        r=r,
+        sv_id=sv_id,
+        run_gmm=True,
         single_trial=not d,
         plot=p,
         reference_genome=reference_genome,

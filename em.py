@@ -247,7 +247,7 @@ def run_gmm(
 
     outliers = []
     aic_vals = []
-    if len(x) <= 10:  # small number of SVs detected
+    if len(x) <= 10:  # small number of samples detected
         opt_params, num_iterations = run_em(x, 1, plot)
         num_iterations_final = num_iterations
         num_sv = 1

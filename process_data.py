@@ -228,26 +228,25 @@ def filter_and_plot_sequences_bokeh(
             if len(z) >= 4:  # if there are more than 2 pairs of points
                 # Note: 2 vs >= 3 pairs of points didn't make a difference in the mean L/R coordinates of the reads
                 xp, yp = z[0::2], z[1::2]
-                sdl = np.sum(
-                    np.abs(yp) <= 2 * sig
-                )  # checking if the points are within 2 SD of read noise
+                # checking if the points are within 2 SD of read noise
+                sdl = np.sum(np.abs(yp) <= 2 * sig)
                 mb[i, :] = [sdl, len(xp), b, 0]
                 sv_evidence[i] = Evidence(
                     sample=Sample(id=sample_id),
                     intercept=b,
                     mean_l=mean_l,
-                    removed=3 if sdl < 3 else 0,
+                    removed=3 if sdl < 2 else 0,
                     paired_ends=paired_ends,
                     mean_insert_size=insert_size_lookup[sample_id],
                 )
 
-                # if more than 3 pieces of evidence (paired read_length-r ends), then there is an SV here for this sample
-                # include if >=3 (x,y) points within 2 sig distance of y=x+b line
-                if sdl >= 3:
+                # if more than 2 pieces of evidence (paired read_length-r ends), then there is an SV here for this sample
+                # include if >=2 (x,y) points within 2 sig distance of y=x+b line
+                if sdl >= 2:
                     mb[i, 3] = 1
 
                 if plot_bokeh:  # remove plotting to improve efficiency
-                    if sdl >= 3:
+                    if sdl >= 2:
                         p.line(
                             xp, yp, line_width=2, color=colors[i % len(colors)]
                         )
@@ -504,7 +503,7 @@ def run_viz_gmm(
         gmm, sv_evidence, L, R, gmm_model=gmm_model
     )
     if plot:
-        plot_evidence_by_mode(evidence_by_mode)
+        # plot_evidence_by_mode(evidence_by_mode)
         plot_2d_coords(
             evidence_by_mode,
             axis1="L",

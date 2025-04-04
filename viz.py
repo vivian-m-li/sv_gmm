@@ -24,7 +24,6 @@ from helper import (
     get_sample_sequencing_centers,
     get_sv_stats_df,
     get_sv_stats_collapsed_df,
-    get_deletions_df,
     get_svlen,
     calc_af,
 )
@@ -985,12 +984,8 @@ def analyze_ancestry() -> None:
     plt.show()
 
 
-def compare_sv_ancestry(by: str = "superpopulation"):
+def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
     ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
-    dissimilarity_df = pd.read_csv("1kgp/ancestry_dissimilarity.csv")
-    # dissimilarity_df = dissimilarity_df[
-    #     dissimilarity_df["dissimilarity"] >= 0.5
-    # ]
     sv_df = get_sv_stats_collapsed_df()
     sv_df = sv_df[sv_df["num_modes"] > 1]
 
@@ -1003,14 +998,6 @@ def compare_sv_ancestry(by: str = "superpopulation"):
         np.zeros(len(populations)) for _ in range(len(populations))
     ]
     for _, row in sv_df.iterrows():
-        skip_row = dissimilarity_df[
-            (dissimilarity_df["chr"] == row["chr"])
-            & (dissimilarity_df["start"] == row["start"])
-            & (dissimilarity_df["stop"] == row["stop"])
-        ].empty
-        if skip_row:
-            continue
-
         modes = ast.literal_eval(row["modes"])
         sp_by_mode = []
         for mode in modes:
@@ -1089,8 +1076,6 @@ Plots the allele frequencies for the SVs before and after being split by SVepera
 
 
 def plot_afs():
-    deletions_df = get_deletions_df()
-    population_size = deletions_df.shape[1] - 12
     sv_df = get_sv_stats_collapsed_df()
     sv_df = sv_df[sv_df["num_samples"] > 0]
     fig, axs = plt.subplots(1, 3, figsize=(18, 6))
@@ -1099,22 +1084,14 @@ def plot_afs():
         y = []  # new AFs
         df = sv_df[sv_df["num_modes"] == num_modes + 1]
         for _, row in df.iterrows():
-            deletions_row = deletions_df[deletions_df["id"] == row["id"]]
             original_af = float(ast.literal_eval(row["af"])[0])
             modes = ast.literal_eval(row["modes"])
-            for mode in modes:
+            for i, mode in enumerate(modes):
                 x.append(original_af)
-                sample_ids = mode["sample_ids"]
-                num_samples = len(sample_ids)
-                n_homozygous = len(
-                    [
-                        sample_id
-                        for sample_id in sample_ids
-                        if deletions_row[sample_id].values[0] == "(1, 1)"
-                    ]
-                )
                 af = calc_af(
-                    n_homozygous, num_samples - n_homozygous, population_size
+                    mode["num_homozygous"],
+                    mode["num_heterozygous"],
+                    2504,  # hard code population size for efficiency
                 )
                 y.append(af)
         axs[num_modes].scatter(x, y, color=COLORS[num_modes], alpha=0.6)
