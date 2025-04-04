@@ -605,6 +605,15 @@ def high_confidence_gene_intersections():
     )
 
 
+def write_post_processed_files():
+    get_n_modes()
+    get_consensus_svs()
+    write_sv_stats_collapsed()
+    get_outliers()
+    write_ancestry_dissimilarity()
+    # get_new_gene_intersections() # need bedtools to run this
+
+
 def get_sv_chr(sv_id: str):
     df = get_deletions_df()
     row = df[df["id"] == sv_id]
@@ -618,4 +627,4 @@ def get_sv_chr(sv_id: str):
 
 if __name__ == "__main__":
     # get_sv_chr("HGSV_58245")
-    write_ancestry_dissimilarity()
+    write_post_processed_files()
