@@ -32,7 +32,11 @@ def confusion_mat():
 def run_gmm(case, d, svs, weights, n_samples, results):
     for gmm_model in GMM_MODELS:
         gmm, evidence_by_mode = generate_synthetic_sv_data(
-            1, svs, n_samples=n_samples, p=weights, gmm_model=gmm_model
+            1,
+            svs,
+            n_samples=n_samples,
+            p=weights,
+            gmm_model=gmm_model,
         )
         results.append(
             [case, d, gmm_model, svs, n_samples, gmm, evidence_by_mode]

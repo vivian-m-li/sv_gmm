@@ -113,10 +113,10 @@ def generate_synthetic_sv_data(
 
         for _ in range(num_evidence):
             read_length = min(550, max(350, int(random.gauss(insert_size, 25))))
-            split = random.randint(1, read_length - 1)
-            # split = random.randint(
-            #     int(read_length / 2) - 100, int(read_length / 2) + 100
-            # ) # to prevent the read from being filtered out (too far from the y=x line)
+            # split = random.randint(1, read_length - 1) # the split can be anywhere
+            split = random.randint(
+                int(read_length / 2) - 100, int(read_length / 2) + 100
+            )  # to prevent the read from being filtered out (too far from the y=x line)
             evidence_start = mode_start - split
             evidence_stop = mode_end + (read_length - split)
             evidence[sample].extend([evidence_start, evidence_stop])
@@ -154,3 +154,5 @@ def generate_synthetic_sv_data(
         )
 
         return gmm, evidence_by_mode
+
+    return None, []
