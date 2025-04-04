@@ -87,9 +87,9 @@ def get_raw_data(row, sample_set) -> Tuple[Dict[str, np.ndarray[float]], int]:
     start = giggle_format(str(row["chr"]), row["start"])
     end = giggle_format(str(row["chr"]), row["stop"])
     squiggle_data = query_stix(
-        start,
-        end,
-        False,
+        l=start,
+        r=end,
+        run_gmm=False,
         filter_reference=False,
     )
     num_samples = len(squiggle_data)
