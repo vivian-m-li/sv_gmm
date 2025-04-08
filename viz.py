@@ -1084,7 +1084,7 @@ def plot_afs():
         y = []  # new AFs
         df = sv_df[sv_df["num_modes"] == num_modes + 1]
         for _, row in df.iterrows():
-            original_af = float(ast.literal_eval(row["af"])[0])
+            original_af = float(row["af"])
             modes = ast.literal_eval(row["modes"])
             for i, mode in enumerate(modes):
                 x.append(original_af)

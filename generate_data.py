@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import random
-import ast
 from process_data import run_viz_gmm
 from query_sv import giggle_format, query_stix
 from helper import get_deletions_df
@@ -24,7 +23,7 @@ def query_random_svs(num_sample_range):
         chr = str(row.chr.values[0])
         start = row.start.values[0]
         stop = row.stop.values[0]
-        af = round(ast.literal_eval(row.af.values[0])[0], 3)
+        af = round(row.af.values[0], 3)
         print(
             f"Chr {chr}: {start}-{stop} ({num_samples} samples, allele frequency={af})"
         )
