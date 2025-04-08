@@ -225,25 +225,30 @@ def filter_and_plot_sequences_bokeh(
             z[1::2] -= z[0::2] + b  # subtract MLE y=x+b line
             z[0::2] -= min(ux)  # shift left by min(x) units
             mean_l = int(np.mean([paired_end[0] for paired_end in paired_ends]))
-            if len(z) >= 4:  # if there are more than 2 pairs of points
+            if (
+                len(z) >= 10
+            ):  # if there are at least 5 pairs of paired-end reads
                 # Note: 2 vs >= 3 pairs of points didn't make a difference in the mean L/R coordinates of the reads
                 xp, yp = z[0::2], z[1::2]
                 # checking if the points are within 2 SD of read noise
+                # this check isn't being used anywhere anymore
                 sdl = np.sum(np.abs(yp) <= 2 * sig)
-                mb[i, :] = [sdl, len(xp), b, 0]
+                # set mb[i, 3] to 1 because we're not going to filter out samples for having points that deviate too far
+                mb[i, :] = [sdl, len(xp), b, 1]
                 sv_evidence[i] = Evidence(
                     sample=Sample(id=sample_id),
                     intercept=b,
                     mean_l=mean_l,
-                    removed=3 if sdl < 2 else 0,
+                    # removed=3 if sdl < 2 else 0, # this line checks which step of the pre-processing removes a data point
+                    removed=0,
                     paired_ends=paired_ends,
                     mean_insert_size=insert_size_lookup[sample_id],
                 )
 
                 # if more than 2 pieces of evidence (paired read_length-r ends), then there is an SV here for this sample
                 # include if >=2 (x,y) points within 2 sig distance of y=x+b line
-                if sdl >= 2:
-                    mb[i, 3] = 1
+                # if sdl >= 2:
+                #     mb[i, 3] = 1
 
                 if plot_bokeh:  # remove plotting to improve efficiency
                     if sdl >= 2:
@@ -339,7 +344,8 @@ def plot_fitted_lines_bokeh(
     # Loop through each row in mb to add lines and points at the start of each line
     for i, row in enumerate(mb):
         evidence = sv_evidence_unfiltered[i]
-        if row[3] == 1:  # sv-flag is True
+        # sv-flag is True (doesn't deviate too far from the y=x line)
+        if row[3] == 1:
 
             start_x = (
                 L - evidence.mean_insert_size
