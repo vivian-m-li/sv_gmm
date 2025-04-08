@@ -61,7 +61,7 @@ def run_dirichlet_wrapper(
     print(sv_id)
 
 
-@break_after(hours=23, minutes=55)
+@break_after(hours=11, minutes=55)
 def run_svs_until_convergence(run_subset: bool = False):
     deletions_df = get_deletions_df()
     sample_ids = set(get_sample_ids())
@@ -89,7 +89,7 @@ def run_svs_until_convergence(run_subset: bool = False):
 
 def run_svs():
     start = time.time()
-    run_svs_until_convergence(run_subset=False)
+    run_svs_until_convergence()
 
     # move files from scratch to home dir (even after timeout)
     for file in os.listdir(SCRATCH_FILE_DIR):
@@ -99,7 +99,7 @@ def run_svs():
 
     concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME)
     end = time.time()
-    print(f"Completed in {start - end}")
+    print(f"Completed in {end - start}")
 
 
 if __name__ == "__main__":
