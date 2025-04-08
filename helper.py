@@ -336,7 +336,7 @@ def write_sv_stats_collapsed():
         csv_writer.writeheader()
         for sv_id in sv_ids:
             rows = df[df["id"] == sv_id]
-            if len(rows) < 1 or rows["confidence"].values[0] == "low":
+            if len(rows) < 1:
                 continue
             consensus_num_modes = rows["consensus_num_modes"].values[0]
             rows = rows[rows["num_modes"] == consensus_num_modes]
@@ -451,7 +451,7 @@ def get_n_modes():
     sv_df.to_csv("1kgp/svs_n_modes.csv", index=False)
 
 
-def get_sv_outliers(sv_rows):
+def get_sv_outliers(sv_rows, threshold: float):
     n = len(sv_rows)
     outlier_counts = defaultdict(lambda: 0)
     for i, row in sv_rows.iterrows():
@@ -463,23 +463,21 @@ def get_sv_outliers(sv_rows):
 
     confident_outliers = []
     for outlier, count in outlier_counts.items():
-        if (
-            count / n > 0.8
-        ):  # this threshold is important for determining when we can confidently say something is an outlier
+        # this threshold is important for determining when we can confidently say something is an outlier
+        if count / n > threshold:
             confident_outliers.append(outlier)
 
     return confident_outliers
 
 
-def get_outliers():
-    # get all SVs where num_modes > 1 and check outliers
+def get_outliers(threshold: float = 0.9):
     n_modes_df = pd.read_csv("1kgp/svs_n_modes.csv")
     n_modes_df = n_modes_df[n_modes_df["num_modes"] > 1]
     df = get_sv_stats_converge_df()
     with open("1kgp/outliers.txt", "w") as f:
         for _, row in n_modes_df.iterrows():
             sv_rows = df[df["id"] == row["sv_id"]]
-            outliers = get_sv_outliers(sv_rows)
+            outliers = get_sv_outliers(sv_rows, threshold)
             if len(outliers) > 0:
                 f.write(f"{row['sv_id']} {','.join(outliers)}\n")
 
@@ -626,5 +624,5 @@ def get_sv_chr(sv_id: str):
 
 
 if __name__ == "__main__":
-    # get_sv_chr("HGSV_58245")
     write_post_processed_files()
+    # write_sv_stats_collapsed()

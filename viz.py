@@ -1226,7 +1226,7 @@ def plot_d_accuracy_by_case(case: str):
         ax_large.legend(loc="upper right")
         ax_large.set_xlabel("N", fontsize=14)
         ax_large.set_ylabel(
-            "Distance at 80% Accuracy", fontsize=14, labelpad=15
+            "Distance at 80% Accuracy, d$^*$", fontsize=14, labelpad=15
         )
         for j, ax in enumerate(axs_small):
             distances, accuracies = all_d_acc_vals[model][j]
