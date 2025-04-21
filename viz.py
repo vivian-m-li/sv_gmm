@@ -1078,35 +1078,89 @@ Plots the allele frequencies for the SVs before and after being split by SVepera
 def plot_afs():
     sv_df = get_sv_stats_collapsed_df()
     sv_df = sv_df[sv_df["num_samples"] > 0]
-    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
-    for num_modes in range(3):
+    # calc afs for all 3
+
+    afs = {}
+    for num_modes in range(1, 4):
         x = []  # original AFs
         y = []  # new AFs
-        df = sv_df[sv_df["num_modes"] == num_modes + 1]
+        df = sv_df[sv_df["num_modes"] == num_modes]
         for _, row in df.iterrows():
-            original_af = float(row["af"])
+            n_homozygous = 0
+            n_heterozygous = 0
             modes = ast.literal_eval(row["modes"])
             for i, mode in enumerate(modes):
-                x.append(original_af)
+                n_homozygous += mode["num_homozygous"]
+                n_heterozygous += mode["num_heterozygous"]
+
                 af = calc_af(
                     mode["num_homozygous"],
                     mode["num_heterozygous"],
                     2504,  # hard code population size for efficiency
                 )
                 y.append(af)
-        axs[num_modes].scatter(x, y, color=COLORS[num_modes], alpha=0.6)
-        axs[num_modes].plot([0, 1], [0, 1], linestyle="--", color="grey")
-        axs[num_modes].set_title(f"Num Modes={num_modes + 1}")
-    fig.text(0.5, 0.04, "Original Allele Frequency", ha="center", fontsize=12)
-    fig.text(
-        0.095,
-        0.5,
-        "New Allele Frequency",
-        va="center",
-        rotation="vertical",
-        fontsize=12,
-    )
-    plt.show()
+
+            # row["num_samples"] includes all samples, including reference. these are the samples that were run through the GMM
+            original_af = calc_af(n_homozygous, n_heterozygous, 2504)
+            for _ in modes:
+                x.append(original_af)
+
+            afs[num_modes] = [x, y]
+
+    for num_modes in range(1, 4):
+        x, y = afs[num_modes]
+        plt.figure(figsize=(6, 6))
+        plot_lim = max(x)
+
+        if num_modes == 2:
+            plot_lim += 0.01
+            x3, y3 = afs[3]
+            x3_max = max(x3) + 0.002
+
+            plt.gca().add_patch(
+                patches.Rectangle(
+                    (0, 0),
+                    x3_max,
+                    x3_max,
+                    linewidth=1,
+                    edgecolor="grey",
+                    facecolor="grey",
+                    alpha=0.2,
+                )
+            )
+        elif num_modes == 3:
+            plot_lim += 0.002
+            x2, y2 = afs[2]
+
+            plt.gca().add_patch(
+                patches.Rectangle(
+                    (0, 0),
+                    plot_lim,
+                    plot_lim,
+                    linewidth=1,
+                    edgecolor="grey",
+                    facecolor="grey",
+                    alpha=0.1,
+                )
+            )
+            plt.scatter(x2, y2, color=COLORS[1], alpha=0.1)
+
+        plt.scatter(x, y, color=COLORS[num_modes - 1], alpha=0.6)
+
+        if num_modes == 2:
+            x3, y3 = afs[3]
+            plt.scatter(x3, y3, color=COLORS[2], alpha=0.15)
+
+        plt.plot([0, plot_lim], [0, plot_lim], linestyle="--", color="darkgrey")
+        plt.xlim(0, plot_lim)
+        plt.ylim(0, plot_lim)
+
+        # plt.set_title(
+        #     f"Num Modes={num_modes + 1}, n={np.mean(n_samples):.1f}"
+        # )
+        plt.xlabel("Original Allele Frequency", fontsize=12)
+        plt.ylabel("New Allele Frequency", fontsize=12)
+        plt.show()
 
 
 """
@@ -1155,7 +1209,7 @@ def plot_d_accuracy_by_n(n_samples: int):
     plt.show()
 
 
-def plot_d_accuracy_by_case(case: str):
+def plot_d_accuracy_by_case(case: str, show_n_plots: bool = True):
     files = [
         f
         for f in os.listdir("synthetic_data")
@@ -1212,10 +1266,15 @@ def plot_d_accuracy_by_case(case: str):
                 accuracies = [a for a in accuracies if a != 0]
                 all_d_acc_vals[model].append([distances, accuracies])
 
-    fig = plt.figure(figsize=(12, 8))
-    gs = fig.add_gridspec(2, len(vals_to_plot), height_ratios=[3, 1])
-    ax_large = fig.add_subplot(gs[0, :])
-    axs_small = [fig.add_subplot(gs[1, i]) for i in range(len(vals_to_plot))]
+    if show_n_plots:
+        fig = plt.figure(figsize=(8, 6))
+        gs = fig.add_gridspec(2, len(vals_to_plot), height_ratios=[3, 1])
+        ax_large = fig.add_subplot(gs[0, :])
+        axs_small = [
+            fig.add_subplot(gs[1, i]) for i in range(len(vals_to_plot))
+        ]
+    else:
+        fig, ax_large = plt.subplots(figsize=(7, 5))
 
     for i, model in enumerate(GMM_MODELS):
         color = COLORS[i]
@@ -1224,19 +1283,31 @@ def plot_d_accuracy_by_case(case: str):
         ax_large.scatter(n_samples, vals, color=color)
         ax_large.set_ylim(-10, 1100 if case in ["D", "E"] else 500)
         ax_large.legend(loc="upper right")
-        ax_large.set_xlabel("N", fontsize=14)
-        ax_large.set_ylabel(
-            "Distance at 80% Accuracy, d$^*$", fontsize=14, labelpad=15
-        )
-        for j, ax in enumerate(axs_small):
-            distances, accuracies = all_d_acc_vals[model][j]
-            ax.plot(distances, accuracies, label=model, color=color)
-            ax.set_title(f"N={vals_to_plot[j]}")
-            if j == 0:
-                ax.set_ylabel("Accuracy", fontsize=12)
-        fig.text(0.5, 0.0, "Distance", ha="center", fontsize=12)
+        ax_large.set_xlabel("Number of samples (N)", fontsize=12)
+        ax_large.set_ylabel("Distance at 80% Accuracy (d$^*$)", fontsize=12)
 
-    plt.suptitle(f"Case {case}", fontsize=18)
+        if show_n_plots:
+            for j, ax in enumerate(axs_small):
+                # set all x axis to 0 to 500, set all y axis to 0 to 1, only show y axis label on the leftmost plot
+                ax.set_xlim(-10, 510)
+                ax.set_ylim(-0.05, 1.1)
+                if j > 0:
+                    ax.set_yticklabels([])
+                distances, accuracies = all_d_acc_vals[model][j]
+                ax.plot(distances, accuracies, label=model, color=color)
+                ax.set_title(f"N={vals_to_plot[j]}", fontsize=10)
+                if j == 0:
+                    fig.text(
+                        0.025,
+                        0.15,
+                        "Accuracy",
+                        va="center",
+                        rotation="vertical",
+                        fontsize=12,
+                    )
+            fig.text(0.5, 0.0, "Distance (d)", ha="center", fontsize=12)
+
+    # plt.suptitle(f"Test Case {case}", fontsize=18)
     plt.tight_layout()
     plt.show()
 

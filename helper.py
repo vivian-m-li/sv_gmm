@@ -152,7 +152,7 @@ def extract_data_from_deletions_df():
     # another option is to create a lookup for row index in deletions_df by chr, start, stop, sample_id and
     os.mkdir("1kgp/deletions_by_chr")
     for i in range(1, 23):
-        chr_df = deletions_df[deletions_df["chr"] == f"{i}"]
+        chr_df = deletions_df[deletions_df["chr"] == i]
         chr_df.to_csv(f"1kgp/deletions_by_chr/chr{i}.csv", index=False)
 
 
@@ -329,6 +329,9 @@ def write_sv_stats_collapsed():
         columns={"num_modes": "consensus_num_modes"}, inplace=True
     )
     df = df.merge(svs_n_modes, left_on="id", right_on="sv_id")
+    df.loc[df["num_modes"] == 0, "num_modes"] = (
+        1  # set num_modes = 1 where it is 0
+    )
     sv_ids = df["id"].unique()
     with open("1kgp/sv_stats_collapsed.csv", mode="w", newline="") as out:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
@@ -352,6 +355,7 @@ def write_sv_stats_collapsed():
                 samples_joined = ";".join(sample_ids)
                 samples.update([samples_joined])
                 samples_by_row[samples_joined] = i
+
             most_common = samples.most_common(1)[0][0]
             row = rows.loc[samples_by_row[most_common]].copy()
             row = row.drop(
@@ -430,7 +434,14 @@ def get_n_modes():
     svs = deletions_df["id"].unique()
     df = get_sv_stats_converge_df()
     for sv_id in svs:
-        outcomes = df[df["id"] == sv_id]["num_modes"].values
+        rows = df[df["id"] == sv_id]
+
+        # if the GMM didn't run at all on a sample, label it as 1 mode with high confidence
+        if len(rows) == 1 and rows["num_iterations"].values[0] == 0:
+            sv_df.loc[len(sv_df)] = [sv_id, 1, "high", np.NaN]
+            continue
+
+        outcomes = rows["num_modes"].values
         counter = Counter(outcomes)
         most_common = counter.most_common(2)
         num_modes = max(1, most_common[0][0])
@@ -484,7 +495,8 @@ def get_outliers(threshold: float = 0.9):
 
 def get_consensus_svs():
     df = get_sv_stats_converge_df()
-    sv_ids = df["id"].unique()
+    svs_n_modes = pd.read_csv("1kgp/svs_n_modes.csv")
+    sv_ids = svs_n_modes["sv_id"].unique()
     consensus_df = pd.DataFrame(
         columns=[
             "id",
@@ -603,6 +615,37 @@ def high_confidence_gene_intersections():
     )
 
 
+def recalculate_afs():
+    df = get_deletions_df().head(1000)
+    results_df = get_sv_stats_collapsed_df()
+    sample_ids = get_sample_ids()
+    for _, row in df.iterrows():
+        gt_samples = set()
+        for sample_id in sample_ids:
+            gt = ast.literal_eval(row[sample_id])
+            gt = tuple([0 if g is None else g for g in gt])  # convert None to 0
+            gt_sum = sum(gt)
+            if gt_sum > 0:
+                gt_samples.add(sample_id)
+
+        results_row = results_df[results_df["id"] == row["id"]]
+        if results_row.empty and len(gt_samples) == 0:
+            continue
+
+        model_samples = set()
+        if not results_row.empty:
+            modes = ast.literal_eval(results_row["modes"])
+            if len(modes) == 0:
+                continue
+            for mode in modes:
+                for sample_id in mode["sample_ids"]:
+                    model_samples.add(sample_id)
+
+        print(
+            f"SV {row['id']}: n samples with alleles={len(gt_samples)}, n samples through model={len(model_samples)}"
+        )
+
+
 def write_post_processed_files():
     get_n_modes()
     get_consensus_svs()
@@ -625,4 +668,3 @@ def get_sv_chr(sv_id: str):
 
 if __name__ == "__main__":
     write_post_processed_files()
-    # write_sv_stats_collapsed()
