@@ -457,7 +457,7 @@ def plot_2d_coords(
     color_by: str = "mode",
     size_by="num_evidence",
 ):
-    fig, ax_main = plt.subplots(figsize=(15, 8))
+    fig, ax_main = plt.subplots(figsize=(8, 6))
     scatter_cm = cm.get_cmap("tab20").colors + cm.get_cmap("tab20b").colors
     seq_center_df = get_sample_sequencing_centers()
     insert_sizes_df = pd.read_csv("1kgp/insert_sizes.csv")
@@ -549,14 +549,14 @@ def plot_2d_coords(
         ax_main.text(
             gmm.mu[0][0],
             gmm.mu[0][1],
-            f"n={len(mode)}\nAvg. num reads/sample: {np.mean(num_evidence):.1f}\nMean insert size: {int(np.mean(mean_insert_sizes))}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}",
+            f"n={len(mode)}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}\nAvg. num reads/sample: {np.mean(num_evidence):.1f}\nMean insert size: {int(np.mean(mean_insert_sizes))}",
             fontsize=10,
             ha="center",
             va="center",
             bbox=dict(facecolor="white", alpha=0.5, edgecolor="none"),
         )
 
-        # plot the 2D gaussian distributions
+        # plot the 2D gaussian distributions for each cluster
         eigenvalues, eigenvectors = np.linalg.eigh(gmm.cov[0])
         angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
         width, height = 2 * np.sqrt(eigenvalues)
@@ -571,28 +571,38 @@ def plot_2d_coords(
         )
         ax_main.add_patch(ellipse)
 
-        # plot the 1D gaussian distributions
+        # plot the 1D gaussian distributions along the axes
         ax_xhist = ax_main.inset_axes([0, 1, 1, 0.2], sharex=ax_main)
-        ax_xhist.hist(
-            x[:, 0], bins=20, color=COLORS[i], alpha=0.6, density=True
-        )
+        # ax_xhist.hist(
+        #     x[:, 0], bins=20, color=COLORS[i], alpha=0.6, density=True
+        # )
         mean_x, std_x = np.mean(x[:, 0]), np.std(x[:, 0])
         x_vals = np.linspace(mean_x - 3 * std_x, mean_x + 3 * std_x, 100)
-        ax_xhist.plot(x_vals, norm.pdf(x_vals, mean_x, std_x), color=COLORS[i])
+        ax_xhist.plot(
+            x_vals,
+            norm.pdf(x_vals, mean_x, std_x),
+            color=COLORS[i],
+            linewidth=2,
+        )
         ax_xhist.axis("off")
 
         ax_yhist = ax_main.inset_axes([1, 0, 0.2, 1], sharey=ax_main)
-        ax_yhist.hist(
-            x[:, 1],
-            bins=20,
-            color=COLORS[i],
-            alpha=0.6,
-            density=True,
-            orientation="horizontal",
-        )
+        # ax_yhist.hist(
+        #     x[:, 1],
+        #     bins=20,
+        #     color=COLORS[i],
+        #     alpha=0.6,
+        #     density=True,
+        #     orientation="horizontal",
+        # )
         mean_y, std_y = np.mean(x[:, 1]), np.std(x[:, 1])
         y_vals = np.linspace(mean_y - 3 * std_y, mean_y + 3 * std_y, 100)
-        ax_yhist.plot(norm.pdf(y_vals, mean_y, std_y), y_vals, color=COLORS[i])
+        ax_yhist.plot(
+            norm.pdf(y_vals, mean_y, std_y),
+            y_vals,
+            color=COLORS[i],
+            linewidth=2,
+        )
         ax_yhist.axis("off")
 
     if axis1 != "length":
