@@ -509,7 +509,7 @@ def run_viz_gmm(
         gmm, sv_evidence, L, R, gmm_model=gmm_model
     )
     if plot:
-        # plot_evidence_by_mode(evidence_by_mode)
+        plot_evidence_by_mode(evidence_by_mode)
         plot_2d_coords(
             evidence_by_mode,
             axis1="L",

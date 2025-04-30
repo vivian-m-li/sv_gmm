@@ -42,6 +42,10 @@ def get_sample_ids(file_root: str = "1kgp"):
     return sample_ids
 
 
+def get_sv_lookup(stem: str = "1kgp"):
+    return pd.read_csv(f"{stem}/sv_lookup.csv")
+
+
 def get_svlen(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
     """Calculate the mean length/start/stop for each mode of an SV"""
     all_stats = []
@@ -297,7 +301,7 @@ def get_unprocessed_svs():
     processed_files = os.listdir("processed_stix_output")
     pattern = r"([\w]+):(\d+)-\d+_[\w]+:(\d+)-\d+.csv"
     processed_svs = set(
-        [re.search(pattern, file).groups() for file in processed_files]
+        [re.search(pattern, file).groups for file in processed_files]
     )
 
     unprocessed_svs = svs - processed_svs
@@ -485,12 +489,14 @@ def get_outliers(threshold: float = 0.9):
     n_modes_df = pd.read_csv("1kgp/svs_n_modes.csv")
     n_modes_df = n_modes_df[n_modes_df["num_modes"] > 1]
     df = get_sv_stats_converge_df()
-    with open("1kgp/outliers.txt", "w") as f:
+    with open("1kgp/outliers.csv", "w") as f:
+        csv_writer = csv.writer(f)
+        csv_writer.writerow(["sv_id", "sample_ids"])
         for _, row in n_modes_df.iterrows():
             sv_rows = df[df["id"] == row["sv_id"]]
             outliers = get_sv_outliers(sv_rows, threshold)
             if len(outliers) > 0:
-                f.write(f"{row['sv_id']} {','.join(outliers)}\n")
+                csv_writer.writerow([row["sv_id"], ",".join(outliers)])
 
 
 def get_consensus_svs():
