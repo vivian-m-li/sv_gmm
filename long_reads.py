@@ -181,7 +181,7 @@ def compare_long_reads(sv_id: str, sample1: str, sample2: str, tolerance: int):
     row = sv_lookup[sv_lookup["id"] == sv_id]
     start = row["start"].values[0] - tolerance
     stop = row["stop"].values[0] + tolerance
-    region = f"{row["chr"].values[0]}:{start}-{stop}"
+    region = f"{row['chr'].values[0]}:{start}-{stop}"
 
     # check both samples have long read files
     long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
