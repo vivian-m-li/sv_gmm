@@ -7,8 +7,6 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from helper import get_sv_lookup
 
-reference_genome = "1kgp/hg38.fa"
-
 
 def parse_long_read_samples():
     file = "long_reads/raw_1kg_ont_vienna_hg38.txt"
@@ -53,7 +51,7 @@ def compare_long_reads(sv_id: str, sample1: str, sample2: str, tolerance: int):
     row = sv_lookup[sv_lookup["id"] == sv_id]
     start = row["start"].values[0] - tolerance
     stop = row["stop"].values[0] + tolerance
-    region = f"{row['chr'].values[0]}:{start}-{stop}"
+    region = f"chr{row['chr'].values[0]}:{start}-{stop}"
 
     # check both samples have long read files
     long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
@@ -74,8 +72,7 @@ def compare_long_reads(sv_id: str, sample1: str, sample2: str, tolerance: int):
                 "cram_file"
             ].values[0]
             subprocess.run(
-                ["bash", "get_cigar.sh"]
-                + [cram_file, region, output_file, reference_genome],
+                ["bash", "get_cigar.sh"] + [cram_file, region, output_file],
                 capture_output=True,
                 text=True,
             )
