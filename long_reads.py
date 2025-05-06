@@ -38,37 +38,42 @@ def parse_long_read_samples():
 
 
 def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
+    try:
+        bam = pysam.AlignmentFile(bam_file, "rb")
+    except ValueError as e:
+        print(f"Error opening BAM file {bam_file}: {e}")
+        return []
+
     deletions = []
-    with pysam.AlignmentFile(bam_file, "rb") as bam:
-        for read in bam.fetch():
-            if read.is_unmapped:
-                continue
-            cigar_string = read.cigarstring
-            if not cigar_string or "D" not in cigar_string:
-                continue
+    for read in bam.fetch():
+        if read.is_unmapped:
+            continue
+        cigar_string = read.cigarstring
+        if not cigar_string or "D" not in cigar_string:
+            continue
 
-            for match in re.finditer(r"(\d+)D", cigar_string):
-                deletion_size = int(match.group(1))
-                # account for 500 bp of tolerance
-                # TODO: this won't work for small deletions
-                if deletion_size >= sv_deletion_size - 500:
+        for match in re.finditer(r"(\d+)D", cigar_string):
+            deletion_size = int(match.group(1))
+            # account for 500 bp of tolerance
+            # TODO: this won't work for small deletions
+            if deletion_size >= sv_deletion_size - 500:
 
-                    ref_pos = read.reference_start
-                    cigar_tuples = read.cigartuples
+                ref_pos = read.reference_start
+                cigar_tuples = read.cigartuples
 
-                    for op, length in cigar_tuples:
-                        if op == 2 and length == deletion_size:  # 2 = deletion
-                            deletions.append(
-                                {
-                                    "start": ref_pos,
-                                    "stop": ref_pos + deletion_size,
-                                    "length": deletion_size,
-                                }
-                            )
-                            break
+                for op, length in cigar_tuples:
+                    if op == 2 and length == deletion_size:  # 2 = deletion
+                        deletions.append(
+                            {
+                                "start": ref_pos,
+                                "stop": ref_pos + deletion_size,
+                                "length": deletion_size,
+                            }
+                        )
+                        break
 
-                        if op in [0, 2, 3, 7, 8]:  # M, D, N, =, X
-                            ref_pos += length
+                    if op in [0, 2, 3, 7, 8]:  # M, D, N, =, X
+                        ref_pos += length
 
     return deletions
 
