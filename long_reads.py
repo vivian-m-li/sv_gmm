@@ -149,7 +149,7 @@ def get_all_long_reads():
             stop = np.mean(stops)
             length = np.mean(lengths)
             start_diff = abs(start - mode["start"])
-            stop_diff = abs(stop - mode["stop"])
+            stop_diff = abs(stop - mode["end"])
             length_diff = abs(length - mode["length"])
 
             new_df.loc[len(new_df)] = [
@@ -158,7 +158,7 @@ def get_all_long_reads():
                 row["chr"],
                 sample_ids,
                 mode["start"],
-                mode["stop"],
+                mode["end"],
                 mode["length"],
                 start,
                 stop,
