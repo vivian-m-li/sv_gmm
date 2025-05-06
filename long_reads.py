@@ -132,18 +132,20 @@ def get_all_long_reads():
         modes = sorted(modes, key=lambda x: x["start"])
         for i, mode in enumerate(modes):
             mode_id = f"{sv_id}_{i + 1}"
-            sample_ids = mode["sample_ids"]
-            deletions = get_long_read_svs(sv_id, sample_ids)
+            all_sample_ids = mode["sample_ids"]
+            deletions = get_long_read_svs(sv_id, all_sample_ids)
 
             starts = []
             stops = []
             lengths = []
-            for sample_sv in deletions.values():
-                if len(sample_sv) == 0:
+            sample_ids = []
+            for sample_id, sv in deletions.items():
+                if len(sv) == 0:
                     continue
-                starts.append(np.mean([x["start"] for x in sample_sv]))
-                stops.append(np.mean([x["stop"] for x in sample_sv]))
-                lengths.append(np.mean([x["length"] for x in sample_sv]))
+                sample_ids.append(sample_id)
+                starts.append(np.mean([x["start"] for x in sv]))
+                stops.append(np.mean([x["stop"] for x in sv]))
+                lengths.append(np.mean([x["length"] for x in sv]))
 
             if len(starts) == 0:
                 new_df.loc[len(new_df)] = [
