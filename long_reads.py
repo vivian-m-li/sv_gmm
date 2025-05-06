@@ -145,6 +145,24 @@ def get_all_long_reads():
                 stops.append(np.mean([x["stop"] for x in sample_sv]))
                 lengths.append(np.mean([x["length"] for x in sample_sv]))
 
+            if len(starts) == 0:
+                new_df.loc[len(new_df)] = [
+                    mode_id,
+                    sv_id,
+                    row["chr"],
+                    sample_ids,
+                    mode["start"],
+                    mode["end"],
+                    mode["length"],
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                    np.nan,
+                ]
+                continue
+
             start = np.mean(starts)
             stop = np.mean(stops)
             length = np.mean(lengths)
