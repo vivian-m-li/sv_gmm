@@ -34,13 +34,37 @@ def parse_long_read_samples():
     df.to_csv("long_reads/long_read_samples.csv", index=False)
 
 
-def read_cigars_from_file(bam_file):
+def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
     deletions = []
     with pysam.AlignmentFile(bam_file, "rb") as bam:
         for read in bam.fetch():
             if read.is_unmapped:
                 continue
-            cigar = read.cigarstring
+            cigar_string = read.cigarstring
+            if not cigar_string or "D" not in cigar_string:
+                continue
+
+            for match in re.finditer(r"(\d+)D", cigar_string):
+                deletion_size = int(match.group(1))
+                # account for 500 bp of tolerance
+                # TODO: this won't work for small deletions
+                if deletion_size >= sv_deletion_size - 500:
+
+                    ref_pos = read.reference_start
+                    cigar_tuples = read.cigartuples
+
+                    for op, length in cigar_tuples:
+                        if op == 2 and length == deletion_size:  # 2 = deletion
+                            deletions.append(
+                                {
+                                    "start": ref_pos,
+                                    "size": deletion_size,
+                                }
+                            )
+                            break
+
+                        if op in [0, 2, 3, 7, 8]:  # M, D, N, =, X
+                            ref_pos += length
 
     return deletions
 
@@ -52,6 +76,8 @@ def compare_long_reads(sv_id: str, sample1: str, sample2: str, tolerance: int):
     start = row["start"].values[0] - tolerance
     stop = row["stop"].values[0] + tolerance
     region = f"chr{row['chr'].values[0]}:{start}-{stop}"
+    sv_len = stop - start
+    print(region, sv_len)
 
     # check both samples have long read files
     long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
@@ -63,7 +89,7 @@ def compare_long_reads(sv_id: str, sample1: str, sample2: str, tolerance: int):
             "One or both samples does not have a corresponding long read file."
         )
 
-    cigar_strings = {}
+    deletions = {}
     for sample_id in (sample1, sample2):
         output_file = f"long_reads/reads/{sv_id}-{sample_id}.bam"
 
@@ -77,34 +103,7 @@ def compare_long_reads(sv_id: str, sample1: str, sample2: str, tolerance: int):
                 text=True,
             )
 
-        cigar_strings[sample_id] = read_cigars_from_file(output_file)
-
-    # compare the cigar strings
-
-    # summary = summarize_cigar(cigar)
-
-    # print(f"CIGAR Summary:")
-    # print(f"  Total operations: {summary['total_operations']}")
-    # print(f"  Operation counts:")
-    # for op, count in summary["operation_counts"].items():
-    #     print(f"    {op}: {count}")
-
-    # print(f"  Large indels (>= {args.min_sv_size} bp):")
-    # for sv_type, pos, length in summary["large_indels"]:
-    #     print(f"    {sv_type} at relative position {pos} with length {length}")
-
-    # return
-
-    # # Analyze from SAM/BAM files (simplified, would typically use pysam)
-    # # This is just a demonstration of the concept
-    # if args.file1 and args.file2 and args.region:
-    #     print(
-    #         f"Comparing CIGAR strings for region {args.region} between samples..."
-    #     )
-    #     print(
-    #         "This would typically use pysam to extract records from BAM/CRAM files"
-    #     )
-    #     # Implementation would depend on having pysam to read BAM/CRAM files
+        deletions[sample_id] = read_cigars_from_file(output_file, sv_len)
 
 
 if __name__ == "__main__":
