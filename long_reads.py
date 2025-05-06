@@ -5,8 +5,9 @@ import subprocess
 import pysam
 import pandas as pd
 from bs4 import BeautifulSoup
-from collections import defaultdict
 from helper import get_sv_lookup
+
+reference_genome = "1kgp/hg38.fa"
 
 
 def parse_long_read_samples():
@@ -39,9 +40,6 @@ def read_cigars_from_file(bam_file):
     deletions = []
     with pysam.AlignmentFile(bam_file, "rb") as bam:
         for read in bam.fetch():
-            import pdb
-
-            pdb.set_trace()
             if read.is_unmapped:
                 continue
             cigar = read.cigarstring
@@ -69,14 +67,15 @@ def compare_long_reads(sv_id: str, sample1: str, sample2: str, tolerance: int):
 
     cigar_strings = {}
     for sample_id in (sample1, sample2):
-        output_file = f"long_reads/reads/{sv_id}-{sample_id}.sam"
+        output_file = f"long_reads/reads/{sv_id}-{sample_id}.bam"
 
         if not os.path.exists(output_file):
             cram_file = sample_rows[sample_rows["sample_id"] == sample_id][
                 "cram_file"
             ].values[0]
             subprocess.run(
-                ["bash", "get_cigar.sh"] + [cram_file, region, output_file],
+                ["bash", "get_cigar.sh"]
+                + [cram_file, region, output_file, reference_genome],
                 capture_output=True,
                 text=True,
             )
@@ -128,6 +127,11 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    if args.id is None:
+        raise ValueError("SV ID is required")
+    if args.s1 is None or args.s2 is None:
+        raise ValueError("Both samples are required")
+
     compare_long_reads(
         args.id,
         args.s1,
