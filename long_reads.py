@@ -1,11 +1,14 @@
+import ast
 import re
 import os
 import argparse
 import subprocess
 import pysam
+import numpy as np
 import pandas as pd
 from bs4 import BeautifulSoup
-from helper import get_sv_lookup
+from helper import get_sv_lookup, get_sv_stats_collapsed_df
+from typing import List
 
 
 def parse_long_read_samples():
@@ -58,7 +61,8 @@ def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
                             deletions.append(
                                 {
                                     "start": ref_pos,
-                                    "size": deletion_size,
+                                    "stop": ref_pos + deletion_size,
+                                    "length": deletion_size,
                                 }
                             )
                             break
@@ -69,34 +73,25 @@ def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
     return deletions
 
 
-def compare_long_reads(sv_id: str, sample1: str, sample2: str, tolerance: int):
-    # get sv region
+def get_long_read_svs(sv_id: str, samples: List[str], tolerance: int = 100):
     sv_lookup = get_sv_lookup()
     row = sv_lookup[sv_lookup["id"] == sv_id]
     start = row["start"].values[0] - tolerance
     stop = row["stop"].values[0] + tolerance
     region = f"chr{row['chr'].values[0]}:{start}-{stop}"
     sv_len = stop - start
-    print(region, sv_len)
 
-    # check both samples have long read files
-    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
-    sample_rows = long_read_samples[
-        long_read_samples["sample_id"].isin([sample1, sample2])
-    ]
-    if len(sample_rows) < 2:
-        raise ValueError(
-            "One or both samples does not have a corresponding long read file."
-        )
-
+    long_reads = pd.read_csv("long_reads/long_read_samples.csv")
     deletions = {}
-    for sample_id in (sample1, sample2):
+    for sample_id in samples:
         output_file = f"long_reads/reads/{sv_id}-{sample_id}.bam"
 
         if not os.path.exists(output_file):
-            cram_file = sample_rows[sample_rows["sample_id"] == sample_id][
-                "cram_file"
-            ].values[0]
+            row = long_reads[long_reads["sample_id"] == sample_id]
+            if row.empty:
+                print(f"Sample {sample_id} not found in long reads")
+                continue
+            cram_file = row["cram_file"].values[0]
             subprocess.run(
                 ["bash", "get_cigar.sh"] + [cram_file, region, output_file],
                 capture_output=True,
@@ -105,13 +100,71 @@ def compare_long_reads(sv_id: str, sample1: str, sample2: str, tolerance: int):
 
         deletions[sample_id] = read_cigars_from_file(output_file, sv_len)
 
+    return deletions
+
+
+def get_all_long_reads():
+    df = get_sv_stats_collapsed_df()
+    split_svs = pd.read_csv("1kgp/split_svs.csv")
+    sv_ids = split_svs["sv_id"].unique()
+    df = df[df["sv_id"].isin(sv_ids)]
+
+    new_df = pd.DataFrame(
+        columns=[
+            "id",
+            "sv_id",
+            "chr",
+            "sample_ids",
+            "start",
+            "stop",
+            "length",
+            "lr_start",
+            "lr_stop",
+            "lr_length",
+            "start_diff",
+            "stop_diff",
+            "length_diff",
+        ]
+    )
+    for _, row in df.iterrows():
+        sv_id = row["id"]
+        modes = ast.literal_eval(row["modes"])
+        modes = sorted(modes, key=lambda x: x["start"])
+        for i, mode in enumerate(modes):
+            mode_id = f"{sv_id}_{i + 1}"
+            sample_ids = mode["sample_ids"]
+            deletions = get_long_read_svs(sv_id, sample_ids)
+            start = np.mean([x["start"] for x in deletions.values()])
+            stop = np.mean([x["stop"] for x in deletions.values()])
+            length = np.mean([x["length"] for x in deletions.values()])
+            start_diff = abs(start - mode["start"])
+            stop_diff = abs(stop - mode["stop"])
+            length_diff = abs(length - mode["length"])
+
+            new_df.loc[len(new_df)] = [
+                mode_id,
+                sv_id,
+                row["chr"],
+                sample_ids,
+                mode["start"],
+                mode["stop"],
+                mode["length"],
+                start,
+                stop,
+                length,
+                start_diff,
+                stop_diff,
+                length_diff,
+            ]
+
+    new_df.to_csv("long_reads/split_svs_lr.csv", index=False)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Compare between two CIGAR strings to identify differences in SV deletions"
     )
-    parser.add_argument("-s1", type=str, help="First BAM/CRAM file")
-    parser.add_argument("-s2", type=str, help="Second BAM/CRAM file")
+    parser.add_argument("-s", type=str, help="First BAM/CRAM file")
     parser.add_argument(
         "-id", type=str, help="SV ID both samples originate from"
     )
@@ -125,12 +178,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.id is None:
         raise ValueError("SV ID is required")
-    if args.s1 is None or args.s2 is None:
-        raise ValueError("Both samples are required")
+    if args.s is None:
+        raise ValueError("Sample ID is required")
 
-    compare_long_reads(
+    get_long_read_svs(
         args.id,
-        args.s1,
-        args.s2,
+        [args.s],
         args.t,
     )
