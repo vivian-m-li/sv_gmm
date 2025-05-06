@@ -104,10 +104,10 @@ def get_long_read_svs(sv_id: str, samples: List[str], tolerance: int = 100):
 
 
 def get_all_long_reads():
-    df = get_sv_stats_collapsed_df()
     split_svs = pd.read_csv("1kgp/split_svs.csv")
     sv_ids = split_svs["sv_id"].unique()
-    df = df[df["sv_id"].isin(sv_ids)]
+    df = get_sv_stats_collapsed_df()
+    df = df[df["id"].isin(sv_ids)]
 
     new_df = pd.DataFrame(
         columns=[
@@ -134,9 +134,20 @@ def get_all_long_reads():
             mode_id = f"{sv_id}_{i + 1}"
             sample_ids = mode["sample_ids"]
             deletions = get_long_read_svs(sv_id, sample_ids)
-            start = np.mean([x["start"] for x in deletions.values()])
-            stop = np.mean([x["stop"] for x in deletions.values()])
-            length = np.mean([x["length"] for x in deletions.values()])
+
+            starts = []
+            stops = []
+            lengths = []
+            for sample_sv in deletions.values():
+                if len(sample_sv) == 0:
+                    continue
+                starts.append(np.mean([x["start"] for x in sample_sv]))
+                stops.append(np.mean([x["stop"] for x in sample_sv]))
+                lengths.append(np.mean([x["length"] for x in sample_sv]))
+
+            start = np.mean(starts)
+            stop = np.mean(stops)
+            length = np.mean(lengths)
             start_diff = abs(start - mode["start"])
             stop_diff = abs(stop - mode["stop"])
             length_diff = abs(length - mode["length"])
@@ -176,13 +187,16 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    if args.id is None:
-        raise ValueError("SV ID is required")
-    if args.s is None:
-        raise ValueError("Sample ID is required")
+    if args.id is None and args.s is None:
+        get_all_long_reads()
+    else:
+        if args.id is None:
+            raise ValueError("SV ID is required")
+        if args.s is None:
+            raise ValueError("Sample ID is required")
 
-    get_long_read_svs(
-        args.id,
-        [args.s],
-        args.t,
-    )
+        get_long_read_svs(
+            args.id,
+            [args.s],
+            args.t,
+        )
