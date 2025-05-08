@@ -11,6 +11,11 @@ from helper import get_sv_lookup, get_sv_stats_collapsed_df
 from typing import List
 
 
+def get_long_read_sample_ids():
+    df = pd.read_csv("long_reads/long_read_samples.csv")
+    return df.sample_id.unique().tolist()
+
+
 def parse_long_read_samples():
     file = "long_reads/raw_1kg_ont_vienna_hg38.txt"
     root = "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1KG_ONT_VIENNA/hg38"
@@ -55,12 +60,10 @@ def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
         for match in re.finditer(r"(\d+)D", cigar_string):
             deletion_size = int(match.group(1))
             # account for 500 bp of tolerance
-            # TODO: this won't work for small deletions
-            if deletion_size >= sv_deletion_size - 500:
-
+            # set 25bp as threshold - smallest sv is 51bp
+            if deletion_size >= max(25, sv_deletion_size - 500):
                 ref_pos = read.reference_start
                 cigar_tuples = read.cigartuples
-
                 for op, length in cigar_tuples:
                     if op == 2 and length == deletion_size:  # 2 = deletion
                         deletions.append(
@@ -78,20 +81,26 @@ def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
     return deletions
 
 
-def get_long_read_svs(sv_id: str, samples: List[str], tolerance: int = 100):
+def get_long_read_svs(
+    sv_id: str,
+    samples: List[str],
+    *,
+    tolerance: int = 100,
+    get_file: bool = False,
+):
     sv_lookup = get_sv_lookup()
     row = sv_lookup[sv_lookup["id"] == sv_id]
     start = row["start"].values[0] - tolerance
     stop = row["stop"].values[0] + tolerance
     region = f"chr{row['chr'].values[0]}:{start}-{stop}"
-    sv_len = stop - start
+    sv_len = stop - start - 2 * tolerance
 
     long_reads = pd.read_csv("long_reads/long_read_samples.csv")
     deletions = {}
     for sample_id in samples:
         output_file = f"long_reads/reads/{sv_id}-{sample_id}.bam"
 
-        if not os.path.exists(output_file):
+        if not os.path.exists(output_file) or get_file:
             row = long_reads[long_reads["sample_id"] == sample_id]
             if row.empty:
                 print(f"Sample {sample_id} not found in long reads")
@@ -223,5 +232,5 @@ if __name__ == "__main__":
         get_long_read_svs(
             args.id,
             [args.s],
-            args.t,
+            tolerance=args.t,
         )
