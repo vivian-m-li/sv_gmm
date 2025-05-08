@@ -18,7 +18,7 @@ from timeout import break_after
 
 FILE_DIR = "long_reads/processed_svs_converge"
 SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
-OUTPUT_FILE_NAME = "long_reads/sv_stats_converge.csv"
+OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
 
 def convert_deletions_to_squiggle_data(deletions):
@@ -80,7 +80,7 @@ def run_lr_dirichlet_wrapper(
     print(sv_id)
 
 
-@break_after(hours=71, minutes=55)
+@break_after(hours=3, minutes=55)
 def run_svs_until_convergence(run_subset: bool = False):
     deletions_df = get_deletions_df().head(100)
     sample_ids = set(get_long_read_sample_ids())
@@ -107,7 +107,9 @@ def run_svs():
             os.path.join(SCRATCH_FILE_DIR, file), os.path.join(FILE_DIR, file)
         )
 
-    concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME)
+    concat_multi_processed_sv_files(
+        FILE_DIR, OUTPUT_FILE_NAME, stem="long_reads"
+    )
     end = time.time()
     print(f"Completed in {end - start}")
 

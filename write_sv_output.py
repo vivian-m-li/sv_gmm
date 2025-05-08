@@ -9,8 +9,10 @@ from gmm_types import SVInfoGMM, GMM, Evidence, ModeStat
 from typing import Set, Dict, List, Optional, Tuple
 
 
-def concat_processed_sv_files(file_dir: str, output_file_name: str):
-    with open(f"1kgp/{output_file_name}", mode="w", newline="") as out:
+def concat_processed_sv_files(
+    file_dir: str, output_file_name: str, *, stem: str = "1kgp"
+):
+    with open(f"{stem}/{output_file_name}", mode="w", newline="") as out:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
         csv_writer.writeheader()
