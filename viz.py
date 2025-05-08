@@ -1502,3 +1502,80 @@ def bootstrap_runs_histogram():
     plt.ylabel("Number of SVs")
     plt.legend()
     plt.show()
+
+
+def long_read_comparison():
+    df = pd.read_csv("long_reads/split_svs_lr.csv")
+    df.dropna(inplace=True)
+    sv_ids = df["sv_id"].unique()
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+    sv_df = pd.DataFrame(
+        columns=[
+            "sv_id",
+            "modes",
+            "short_read_length_diff",
+            "long_read_length_diff",
+            "deviation",
+        ]
+    )
+    n_svs = np.zeros(3, dtype=int)
+    for sv_id in sv_ids:
+        rows = df[df["sv_id"] == sv_id]
+        # svs may have been filtered out if there was no long read data
+        if len(rows) == 1:
+            continue
+
+        n_svs[len(rows) - 1] += 1
+        for i, row1 in rows.iterrows():
+            for j, row2 in rows.iterrows():
+                if i >= j:
+                    continue
+                # sort the rows by start position
+                if row1["start"] > row2["start"]:
+                    row1, row2 = row2, row1
+                short_read_length = row2["length"] - row1["length"]
+                long_read_length = row2["lr_length"] - row1["lr_length"]
+                sv_df.loc[len(sv_df)] = [sv_id, f"{i + 1}, {j + 1}"] + [
+                    short_read_length,
+                    long_read_length,
+                    long_read_length - short_read_length,
+                ]
+
+    axes[0].scatter(
+        sv_df["short_read_length_diff"].values,
+        sv_df["long_read_length_diff"].values,
+        alpha=0.4,
+    )
+    # y=x line is where the difference in lengths between short read and long read SVs is equal
+    axes[0].plot(
+        [
+            min(sv_df["short_read_length_diff"].values),
+            max(sv_df["short_read_length_diff"].values),
+        ],
+        [
+            min(sv_df["short_read_length_diff"].values),
+            max(sv_df["short_read_length_diff"].values),
+        ],
+        linestyle="--",
+        color="darkgrey",
+    )
+    axes[0].set_ylim(
+        min(sv_df["short_read_length_diff"].values),
+        max(sv_df["short_read_length_diff"].values),
+    )
+    axes[0].set_xlabel("Δ Length Between Modes (Short Reads)")
+    axes[0].set_ylabel("Δ Length Between Modes (Long Reads)")
+
+    axes[1].boxplot(
+        sv_df["deviation"].values, tick_labels=["Deviation from y=x"]
+    )
+    stats = sv_df["deviation"].describe()
+    axes[1].set_title(
+        f"Mean Deviation: {stats['mean']:.2f} ± {stats['std']:.2f}"
+    )
+    plt.suptitle(f"{n_svs[1] + n_svs[2]} SV Comparisons with Long Read Data")
+    plt.show()
+
+    sv_df["abs_deviation"] = sv_df["deviation"].abs()
+    print(sv_df.sort_values("abs_deviation").head(10))
