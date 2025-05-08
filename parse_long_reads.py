@@ -1,6 +1,7 @@
 import ast
 import re
 import os
+import shutil
 import argparse
 import subprocess
 import pysam
@@ -86,7 +87,7 @@ def get_long_read_svs(
     samples: List[str],
     *,
     tolerance: int = 100,
-    get_file: bool = False,
+    scratch: bool = False,
 ):
     sv_lookup = get_sv_lookup()
     row = sv_lookup[sv_lookup["id"] == sv_id]
@@ -98,14 +99,19 @@ def get_long_read_svs(
     long_reads = pd.read_csv("long_reads/long_read_samples.csv")
     deletions = {}
     for sample_id in samples:
-        output_file = f"long_reads/reads/{sv_id}-{sample_id}.bam"
+        output_file_name = f"{sv_id}-{sample_id}.bam"
+        output_file = os.path.join("long_reads/reads", output_file_name)
 
-        if not os.path.exists(output_file) or get_file:
+        if not os.path.exists(output_file):
             row = long_reads[long_reads["sample_id"] == sample_id]
             if row.empty:
                 print(f"Sample {sample_id} not found in long reads")
                 continue
             cram_file = row["cram_file"].values[0]
+            if scratch:
+                output_file = os.path.join(
+                    "/scratch/Users/vili4418/long_reads/reads", output_file_name
+                )
             subprocess.run(
                 ["bash", "get_cigar.sh"] + [cram_file, region, output_file],
                 capture_output=True,
@@ -113,6 +119,11 @@ def get_long_read_svs(
             )
 
         deletions[sample_id] = read_cigars_from_file(output_file, sv_len)
+
+        if scratch:
+            shutil.move(
+                output_file, os.path.join("long_reads/reads", output_file_name)
+            )
 
     return deletions
 

@@ -42,7 +42,7 @@ def run_lr_dirichlet_wrapper(
     sv_id = row["id"]
     # get all files with a bigger tolerance
     deletions = get_long_read_svs(
-        sv_id, sample_set, tolerance=300, get_file=True
+        sv_id, sample_set, tolerance=300, scratch=True
     )
     squiggle_data = convert_deletions_to_squiggle_data(deletions)
     num_samples = len(deletions)
