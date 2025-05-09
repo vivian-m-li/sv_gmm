@@ -69,6 +69,7 @@ def run_lr_dirichlet_wrapper(
                 "plot": False,
                 "plot_bokeh": False,
                 "insert_size_lookup": insert_size_lookup,
+                "min_pairs": 1,  # reduce number of points per sample
             },
         )
 

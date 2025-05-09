@@ -58,8 +58,6 @@ def run_dirichlet_wrapper(
             sv_id, alphas, posterior_distributions, SCRATCH_FILE_DIR
         )
 
-    print(sv_id)
-
 
 @break_after(hours=11, minutes=55)
 def run_svs_until_convergence(run_subset: bool = False):

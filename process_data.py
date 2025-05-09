@@ -158,6 +158,7 @@ def filter_and_plot_sequences_bokeh(
     R: int,
     insert_size_lookup: Dict[str, int],
     sig: int = 50,
+    min_pairs: int = 5,  # minimum number of paired end reads for a sample needed to keep the sample
     plot_bokeh: bool,
 ) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
     ux = get_unique_x_values(list(y.values()))
@@ -226,7 +227,7 @@ def filter_and_plot_sequences_bokeh(
             z[0::2] -= min(ux)  # shift left by min(x) units
             mean_l = int(np.mean([paired_end[0] for paired_end in paired_ends]))
             if (
-                len(z) >= 10
+                len(z) >= min_pairs * 2
             ):  # if there are at least 5 pairs of paired-end reads
                 # Note: 2 vs >= 3 pairs of points didn't make a difference in the mean L/R coordinates of the reads
                 xp, yp = z[0::2], z[1::2]
@@ -397,6 +398,7 @@ def get_intercepts(
     R: int,
     insert_size_lookup: Dict[str, int],
     plot_bokeh: bool = False,
+    min_pairs: int = 5,
 ) -> Tuple[np.ndarray[Tuple[float, int]], List[Evidence]]:
     mb, sv_evidence_unfiltered = filter_and_plot_sequences_bokeh(
         squiggle_data,
@@ -406,7 +408,12 @@ def get_intercepts(
         insert_size_lookup=insert_size_lookup,
         sig=50,
         plot_bokeh=plot_bokeh,
+        min_pairs=min_pairs,
     )
+
+    if len(sv_evidence_unfiltered) == 0:
+        return np.array([]), []
+
     intercepts, sv_evidence = plot_fitted_lines_bokeh(
         mb,
         sv_evidence_unfiltered,
@@ -458,6 +465,7 @@ def run_viz_gmm(
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
     insert_size_lookup: Optional[Dict[str, int]] = None,
+    min_pairs: int = 5,
 ):
     if insert_size_lookup is None:
         insert_size_lookup = get_insert_size_lookup()
@@ -484,6 +492,7 @@ def run_viz_gmm(
         R=R,
         insert_size_lookup=insert_size_lookup,
         plot_bokeh=plot_bokeh,
+        min_pairs=min_pairs,
     )
 
     if len(points) == 0:
