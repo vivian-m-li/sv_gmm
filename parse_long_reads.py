@@ -124,6 +124,10 @@ def get_long_read_svs(
             shutil.move(
                 output_file, os.path.join("long_reads/reads", output_file_name)
             )
+            shutil.move(
+                f"{output_file}.bai",
+                os.path.join("long_reads/reads", f"{output_file_name}.bai"),
+            )
 
     return deletions
 
