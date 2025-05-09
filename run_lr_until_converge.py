@@ -35,14 +35,23 @@ def convert_deletions_to_squiggle_data(deletions):
 
 
 def run_lr_dirichlet_wrapper(
-    row: Dict,
-    population_size: int,
-    sample_set: Set[int],
+    row: Dict, population_size: int, sample_set: Set[str]
 ):
     sv_id = row["id"]
+    insert_size_lookup = {
+        sample_id: 0 for sample_id in sample_set
+    }  # don't need to remove insert size for long reads
+
+    # filter for sample IDs that have the SV allele
+    filtered_sample_ids = []
+    sv_alleles = set(["(0, 1)", "(1, 0)", "(1, 1)"])
+    for sample_id in sample_set:
+        if row[sample_id] in sv_alleles:
+            filtered_sample_ids.append(sample_id)
+
     # get all files with a bigger tolerance
     deletions = get_long_read_svs(
-        sv_id, sample_set, tolerance=300, scratch=True
+        sv_id, filtered_sample_ids, tolerance=300, scratch=True
     )
     squiggle_data = convert_deletions_to_squiggle_data(deletions)
     num_samples = len(deletions)
@@ -59,6 +68,7 @@ def run_lr_dirichlet_wrapper(
                 "R": row["stop"],
                 "plot": False,
                 "plot_bokeh": False,
+                "insert_size_lookup": insert_size_lookup,
             },
         )
 
@@ -66,7 +76,10 @@ def run_lr_dirichlet_wrapper(
         sv_stat = init_sv_stat_row(
             row,
             num_samples=num_samples,
-            num_reference=num_samples - len(squiggle_data),
+            num_reference=num_samples
+            - len(
+                squiggle_data
+            ),  # this will be 0 since we are pre-filtering them out
         )
         write_sv_stats(
             sv_stat, gmm, evidence_by_mode, population_size, SCRATCH_FILE_DIR, i
