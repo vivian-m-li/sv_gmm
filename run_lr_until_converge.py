@@ -99,7 +99,7 @@ def run_lr_dirichlet_wrapper(
 @break_after(hours=3, minutes=55)
 def run_svs_until_convergence(with_multiprocessing, use_subset):
     if use_subset:
-        deletions_df = pd.read_csv("1kgp/deletions_df_subset.csv").head(1)
+        deletions_df = pd.read_csv("1kgp/deletions_df_subset.csv")
     else:
         deletions_df = get_deletions_df()
     sample_ids = set(get_long_read_sample_ids())
