@@ -219,6 +219,9 @@ def filter_and_plot_sequences_bokeh(
             for i in range(0, len(z_filtered), 2)
         ]
 
+        import pdb
+
+        pdb.set_trace()
         if len(z) > 0:
             b = int(
                 np.mean(z[1::2]) - np.mean(z[0::2])
@@ -400,6 +403,9 @@ def get_intercepts(
     plot_bokeh: bool = False,
     min_pairs: int = 5,
 ) -> Tuple[np.ndarray[Tuple[float, int]], List[Evidence]]:
+    import pdb
+
+    pdb.set_trace()
     mb, sv_evidence_unfiltered = filter_and_plot_sequences_bokeh(
         squiggle_data,
         file_name=file_name,
