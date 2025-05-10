@@ -219,9 +219,6 @@ def filter_and_plot_sequences_bokeh(
             for i in range(0, len(z_filtered), 2)
         ]
 
-        import pdb
-
-        pdb.set_trace()
         if len(z) > 0:
             b = int(
                 np.mean(z[1::2]) - np.mean(z[0::2])
@@ -403,9 +400,6 @@ def get_intercepts(
     plot_bokeh: bool = False,
     min_pairs: int = 5,
 ) -> Tuple[np.ndarray[Tuple[float, int]], List[Evidence]]:
-    import pdb
-
-    pdb.set_trace()
     mb, sv_evidence_unfiltered = filter_and_plot_sequences_bokeh(
         squiggle_data,
         file_name=file_name,
@@ -420,21 +414,15 @@ def get_intercepts(
     if len(sv_evidence_unfiltered) == 0:
         return np.array([]), []
 
-    try:
-        intercepts, sv_evidence = plot_fitted_lines_bokeh(
-            mb,
-            sv_evidence_unfiltered,
-            file_name=file_name,
-            L=L,
-            R=R,
-            sig=50,
-            plot_bokeh=plot_bokeh,
-        )
-    except Exception:
-        import pdb
-
-        pdb.set_trace()
-
+    intercepts, sv_evidence = plot_fitted_lines_bokeh(
+        mb,
+        sv_evidence_unfiltered,
+        file_name=file_name,
+        L=L,
+        R=R,
+        sig=50,
+        plot_bokeh=plot_bokeh,
+    )
     # plot_removed_evidence(sv_evidence_unfiltered, L, R)
 
     # save the largest x value associated with each intercept

@@ -3,6 +3,7 @@ import os
 import shutil
 import multiprocessing
 import numpy as np
+import pandas as pd
 from write_sv_output import (
     init_sv_stat_row,
     write_sv_stats,
@@ -30,7 +31,8 @@ def convert_deletions_to_squiggle_data(deletions):
         for deletion in deletion_list:
             data.append(deletion["start"])
             data.append(deletion["stop"])
-        squiggle_data[sample_id] = np.array(data)
+        if len(data) > 0:
+            squiggle_data[sample_id] = np.array(data)
     return squiggle_data
 
 
@@ -97,22 +99,24 @@ def run_lr_dirichlet_wrapper(
 
 @break_after(hours=3, minutes=55)
 def run_svs_until_convergence(run_subset: bool = False):
-    deletions_df = get_deletions_df().head(100)
+    # deletions_df = get_deletions_df()
+    deletions_df = pd.read_csv("1kgp/deletions_df_subset.csv").head(1)
     sample_ids = set(get_long_read_sample_ids())
     population_size = len(sample_ids)
 
-    for _, row in deletions_df.iterrows():
-        run_lr_dirichlet_wrapper(row.to_dict(), population_size, sample_ids)
+    #  test without multiprocessing
+    # for _, row in deletions_df.iterrows():
+    #     run_lr_dirichlet_wrapper(row.to_dict(), population_size, sample_ids)
 
-    # with multiprocessing.Manager():
-    #     cpu_count = multiprocessing.cpu_count()
-    #     p = multiprocessing.Pool(cpu_count)
-    #     args = []
-    #     for _, row in deletions_df.iterrows():
-    #         args.append((row.to_dict(), population_size, sample_ids))
-    #     p.starmap(run_lr_dirichlet_wrapper, args)
-    #     p.close()
-    #     p.join()
+    with multiprocessing.Manager():
+        cpu_count = multiprocessing.cpu_count()
+        p = multiprocessing.Pool(cpu_count)
+        args = []
+        for _, row in deletions_df.iterrows():
+            args.append((row.to_dict(), population_size, sample_ids))
+        p.starmap(run_lr_dirichlet_wrapper, args)
+        p.close()
+        p.join()
 
 
 def run_svs():
