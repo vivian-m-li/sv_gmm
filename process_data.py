@@ -414,15 +414,20 @@ def get_intercepts(
     if len(sv_evidence_unfiltered) == 0:
         return np.array([]), []
 
-    intercepts, sv_evidence = plot_fitted_lines_bokeh(
-        mb,
-        sv_evidence_unfiltered,
-        file_name=file_name,
-        L=L,
-        R=R,
-        sig=50,
-        plot_bokeh=plot_bokeh,
-    )
+    try:
+        intercepts, sv_evidence = plot_fitted_lines_bokeh(
+            mb,
+            sv_evidence_unfiltered,
+            file_name=file_name,
+            L=L,
+            R=R,
+            sig=50,
+            plot_bokeh=plot_bokeh,
+        )
+    except Exception:
+        import pdb
+
+        pdb.set_trace()
 
     # plot_removed_evidence(sv_evidence_unfiltered, L, R)
 

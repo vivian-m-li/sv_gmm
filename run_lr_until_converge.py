@@ -38,6 +38,7 @@ def run_lr_dirichlet_wrapper(
     row: Dict, population_size: int, sample_set: Set[str]
 ):
     sv_id = row["id"]
+    print(sv_id)
     insert_size_lookup = {
         sample_id: 0 for sample_id in sample_set
     }  # don't need to remove insert size for long reads
@@ -100,15 +101,18 @@ def run_svs_until_convergence(run_subset: bool = False):
     sample_ids = set(get_long_read_sample_ids())
     population_size = len(sample_ids)
 
-    with multiprocessing.Manager():
-        cpu_count = multiprocessing.cpu_count()
-        p = multiprocessing.Pool(cpu_count)
-        args = []
-        for _, row in deletions_df.iterrows():
-            args.append((row.to_dict(), population_size, sample_ids))
-        p.starmap(run_lr_dirichlet_wrapper, args)
-        p.close()
-        p.join()
+    for _, row in deletions_df.iterrows():
+        run_lr_dirichlet_wrapper(row.to_dict(), population_size, sample_ids)
+
+    # with multiprocessing.Manager():
+    #     cpu_count = multiprocessing.cpu_count()
+    #     p = multiprocessing.Pool(cpu_count)
+    #     args = []
+    #     for _, row in deletions_df.iterrows():
+    #         args.append((row.to_dict(), population_size, sample_ids))
+    #     p.starmap(run_lr_dirichlet_wrapper, args)
+    #     p.close()
+    #     p.join()
 
 
 def run_svs():
