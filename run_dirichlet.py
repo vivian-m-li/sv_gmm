@@ -186,9 +186,8 @@ def run_dirichlet(
         if ci[0] >= 0.6:
             if display_output:
                 print(
-                    f"Stopping after {n} iterations, {np.argmax(p) + 1} modes"
+                    f"{chr}:{L}-{R} - stopping after {n} iterations, {np.argmax(p) + 1} modes, ci={ci}"
                 )
-            print(f"{chr}:{L}-{R} - stopping after {n} iterations, ci={ci}") 
             break
 
     if display_output:

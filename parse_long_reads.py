@@ -48,14 +48,9 @@ def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
         subprocess.run(["samtools", "index", bam_file])
     try:
         bam = pysam.AlignmentFile(bam_file, "rb")
-    except ValueError as e:
-        print(f"Error opening BAM file {bam_file}: {e}")
-        return []
-
-    try:
         bam.fetch()
     except ValueError as e:
-        print(f"Error fetching from BAM file {bam_file}: {e}")
+        print(f"Error opening/fetching BAM file {bam_file}: {e}")
         return []
 
     deletions = []
@@ -139,7 +134,6 @@ def get_long_read_svs(
                 )
             except FileNotFoundError:
                 print(f"File {output_file}.bai not found")
-                
 
     return deletions
 
