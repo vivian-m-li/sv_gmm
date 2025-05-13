@@ -14,3 +14,4 @@ synthetic_data*
 *.ipynb
 profile
 long_reads
+sr_*

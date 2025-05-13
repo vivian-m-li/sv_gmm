@@ -124,10 +124,14 @@ def get_long_read_svs(
             shutil.move(
                 output_file, os.path.join("long_reads/reads", output_file_name)
             )
-            shutil.move(
-                f"{output_file}.bai",
-                os.path.join("long_reads/reads", f"{output_file_name}.bai"),
-            )
+            try:
+                shutil.move(
+                    f"{output_file}.bai",
+                    os.path.join("long_reads/reads", f"{output_file_name}.bai"),
+                )
+            except FileNotFoundError:
+                print(f"File {output_file}.bai not found")
+                
 
     return deletions
 
