@@ -44,10 +44,18 @@ def parse_long_read_samples():
 
 
 def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
+    if not os.path.exists(f"{bam_file}.bai"):
+        subprocess.run(["samtools", "index", bam_file])
     try:
         bam = pysam.AlignmentFile(bam_file, "rb")
     except ValueError as e:
         print(f"Error opening BAM file {bam_file}: {e}")
+        return []
+
+    try:
+        bam.fetch()
+    except ValueError as e:
+        print(f"Error fetching from BAM file {bam_file}: {e}")
         return []
 
     deletions = []
