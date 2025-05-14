@@ -93,16 +93,15 @@ def run_lr_dirichlet_wrapper(
             sv_id, alphas, posterior_distributions, SCRATCH_FILE_DIR
         )
 
-    print(sv_id)
+    print(f"Completed running {sv_id}")
 
 
-@break_after(hours=5, minutes=55)
+@break_after(hours=71, minutes=0)
 def run_svs_until_convergence(with_multiprocessing, use_subset):
     if use_subset:
         deletions_df = pd.read_csv("1kgp/deletions_df_subset.csv")
     else:
         deletions_df = get_deletions_df()
-        deletions_df = deletions_df.sample(n=192, random_state=42) # get 10000 random SVs
     sample_ids = set(get_long_read_sample_ids())
     population_size = len(sample_ids)
 
@@ -125,15 +124,16 @@ def run_svs(*, with_multiprocessing: bool = True, use_subset: bool = False):
     start = time.time()
     run_svs_until_convergence(with_multiprocessing, use_subset)
 
-    concat_multi_processed_sv_files(
-        SCRATCH_FILE_DIR, OUTPUT_FILE_NAME, stem="long_reads"
-    )
     # move files from scratch to home dir (even after timeout)
     for file in os.listdir(SCRATCH_FILE_DIR):
         shutil.move(
             os.path.join(SCRATCH_FILE_DIR, file),
             os.path.join(FILE_DIR, file),
         )
+
+    concat_multi_processed_sv_files(
+        FILE_DIR, OUTPUT_FILE_NAME, stem="long_reads"
+    )
 
     end = time.time()
     print(f"Completed in {end - start}")

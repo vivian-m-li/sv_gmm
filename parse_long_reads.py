@@ -44,8 +44,6 @@ def parse_long_read_samples():
 
 
 def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
-    if not os.path.exists(f"{bam_file}.bai"):
-        subprocess.run(["bash", "index_bam.sh"] + [bam_file])
     try:
         bam = pysam.AlignmentFile(bam_file, "rb")
         bam.fetch()
@@ -104,8 +102,12 @@ def get_long_read_svs(
     for sample_id in samples:
         output_file_name = f"{sv_id}-{sample_id}.bam"
         output_file = os.path.join("long_reads/reads", output_file_name)
+        indexed_output_file = f"{output_file}.bai"
 
-        if not os.path.exists(output_file):
+        # check that both the file and indexed file exist
+        if not os.path.exists(output_file) and not os.path.exists(
+            indexed_output_file
+        ):
             row = long_reads[long_reads["sample_id"] == sample_id]
             if row.empty:
                 print(f"Sample {sample_id} not found in long reads")
@@ -127,6 +129,7 @@ def get_long_read_svs(
             shutil.move(
                 output_file, os.path.join("long_reads/reads", output_file_name)
             )
+            # if the indexing doesn't work, it's because the bam file is corrupted
             try:
                 shutil.move(
                     f"{output_file}.bai",
