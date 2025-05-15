@@ -1,4 +1,5 @@
 import ast
+import csv
 import re
 import os
 import shutil
@@ -48,8 +49,9 @@ def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
         bam = pysam.AlignmentFile(bam_file, "rb")
         bam.fetch()
     except ValueError as e:
-        print(f"Error opening/fetching BAM file {bam_file}: {e}")
-        return []
+        raise ValueError(
+            f"Error opening/fetching BAM file {bam_file}: {e}"
+        ) from e
 
     deletions = []
     for read in bam.fetch():
@@ -81,6 +83,65 @@ def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
                         ref_pos += length
 
     return deletions
+
+
+def remove_bam_file(file: str):
+    os.remove(os.path.join("long_reads/reads", file))
+    try:
+        os.remove(os.path.join("long_reads/reads", f"{file}.bai"))
+    except FileNotFoundError:
+        return
+
+
+def write_long_read_evidence(
+    sv_id: str, sample_id: str, deletions: List, scratch: bool = False
+):
+    # make sure the file isn't being moved in multiple cores -- can only work with one SV at a time
+    base_file_name = f"long_reads/evidence/{sv_id}.csv"
+    file_name = base_file_name
+    if scratch:
+        file_name = shutil.move(
+            base_file_name,
+            os.path.join("/scratch/Users/vili4418", file_name),
+        )
+    with open(file_name, "a") as f:
+        csv_writer = csv.writer(f)
+        row = [sample_id]
+        for deletion in deletions:
+            row.extend([deletion["start"], deletion["stop"]])
+        csv_writer.writerow(row)
+
+    if scratch:
+        shutil.move(file_name, base_file_name)
+
+
+def write_all_long_read_evidence():
+    # rewrite bam files into CSVs to save memory
+    sv_lookup = get_sv_lookup()
+    files = os.listdir("long_reads/reads")
+    for file in files:
+        if ".bam" not in file or ".bai" in file:
+            continue
+        pattern = r"([\S]+)-([\S]+)\.bam"
+        match = re.search(pattern, file)
+        sv_id = match.group(1)
+        sample_id = match.group(2)
+
+        sv_row = sv_lookup[sv_lookup["id"] == sv_id]
+        start = sv_row["start"].values[0]
+        stop = sv_row["stop"].values[0]
+        svlen = stop - start
+
+        try:
+            deletions = read_cigars_from_file(
+                os.path.join("long_reads/reads", file), svlen
+            )
+        except (ValueError, OSError):
+            remove_bam_file(file)
+            continue
+
+        write_long_read_evidence(sv_id, sample_id, deletions)
+        remove_bam_file(file)
 
 
 def get_long_read_svs(
@@ -124,19 +185,8 @@ def get_long_read_svs(
             )
 
         deletions[sample_id] = read_cigars_from_file(output_file, sv_len)
-
-        if scratch:
-            shutil.move(
-                output_file, os.path.join("long_reads/reads", output_file_name)
-            )
-            # if the indexing doesn't work, it's because the bam file is corrupted
-            try:
-                shutil.move(
-                    f"{output_file}.bai",
-                    os.path.join("long_reads/reads", f"{output_file_name}.bai"),
-                )
-            except FileNotFoundError:
-                print(f"File {output_file}.bai not found")
+        write_long_read_evidence(sv_id, sample_id, deletions[sample_id], True)
+        remove_bam_file(output_file)
 
     return deletions
 
