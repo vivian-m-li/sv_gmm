@@ -1,4 +1,5 @@
 import ast
+import time
 import csv
 import re
 import os
@@ -96,14 +97,19 @@ def remove_bam_file(file: str):
 def write_long_read_evidence(
     sv_id: str, sample_id: str, deletions: List, scratch: bool = False
 ):
-    # make sure the file isn't being moved in multiple cores -- can only work with one SV at a time
     base_file_name = f"long_reads/evidence/{sv_id}.csv"
     file_name = base_file_name
     if scratch:
-        file_name = shutil.move(
-            base_file_name,
-            os.path.join("/scratch/Users/vili4418", file_name),
-        )
+        scratch_file = os.path.join("/scratch/Users/vili4418", file_name)
+        wait = 0
+        while os.path.exists(scratch_file):
+            # another core is writing to this file
+            if wait > 100:
+                print(f"Waiting to write {sample_id} to {sv_id}")
+            time.sleep(5)  # wait a few seconds and try again
+            wait += 1
+
+        file_name = shutil.move(base_file_name, scratch_file)
     with open(file_name, "a") as f:
         csv_writer = csv.writer(f)
         row = [sample_id]
@@ -144,10 +150,32 @@ def write_all_long_read_evidence():
         remove_bam_file(file)
 
 
+def get_processed_samples(sv_id: str):
+    file_name = f"long_reads/evidence/{sv_id}.csv"
+    if not os.path.exists(file_name):
+        return {}
+
+    sample_evidence = {}
+    with open(file_name, "r") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            sample_evidence[row[0]] = []
+            for i in range(1, len(row), 2):
+                sample_evidence[row[0]].append(
+                    {
+                        "start": int(row[i]),
+                        "stop": int(row[i + 1]),
+                        "length": int(row[i + 1]) - int(row[i]),
+                    }
+                )
+    return sample_evidence
+
+
 def get_long_read_svs(
     sv_id: str,
     samples: List[str],
     *,
+    cram_file: str = None,
     tolerance: int = 100,
     scratch: bool = False,
 ):
@@ -159,8 +187,11 @@ def get_long_read_svs(
     sv_len = stop - start - 2 * tolerance
 
     long_reads = pd.read_csv("long_reads/long_read_samples.csv")
-    deletions = {}
+    deletions = get_processed_samples(sv_id)
     for sample_id in samples:
+        if sample_id in deletions:
+            continue
+
         output_file_name = f"{sv_id}-{sample_id}.bam"
         output_file = os.path.join("long_reads/reads", output_file_name)
         indexed_output_file = f"{output_file}.bai"
@@ -173,7 +204,8 @@ def get_long_read_svs(
             if row.empty:
                 print(f"Sample {sample_id} not found in long reads")
                 continue
-            cram_file = row["cram_file"].values[0]
+            if cram_file is None:
+                cram_file = row["cram_file"].values[0]
             if scratch:
                 output_file = os.path.join(
                     "/scratch/Users/vili4418/long_reads/reads", output_file_name
