@@ -1,9 +1,10 @@
 import time
 import random
 import os
+import shutil
 import subprocess
 import pandas as pd
-import multiprocessing
+import multiprocessing as mp
 from parse_long_reads import get_long_read_svs
 from timeout import break_after
 
@@ -38,7 +39,7 @@ def remove_cram_file(file):
     os.remove(f"{file}.crai")
 
 
-def download_sample_evidence(sample_row, sv_ids):
+def download_sample_evidence(sample_row, sv_ids, queue):
     output_file = os.path.join(
         SCRATCH_DIR, sample_row["cram_file"].split("/")[-1]
     )
@@ -65,27 +66,68 @@ def download_sample_evidence(sample_row, sv_ids):
     remove_cram_file(output_file)
 
 
+def worker(args, queue):
+    sample_row, sv_ids = args
+    download_sample_evidence(sample_row, sv_ids, queue)
+
+
+def listener(queue, file):
+    """Listens for messages on the queue and writes to the file"""
+    with open(file, "a") as f:
+        while True:
+            m = queue.get()
+            if m == "kill":
+                break
+            f.write(m + "\n")
+            f.flush()
+
+
 @break_after(hours=15, minutes=55)
 def download_long_read_evidence():
     long_read_samples = pd.read_csv("long_reads/long_read_samples.csv").head(160)
     sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
-    with multiprocessing.Manager():
-        cpu_count = multiprocessing.cpu_count()
-        p = multiprocessing.Pool(cpu_count)
-        args = []
+    with mp.Manager() as manager:
+        cpu_count = mp.cpu_count()
+        pool = mp.Pool(cpu_count)
+        queue = manager.Queue()
+
+        # put listener to work
+        watcher = pool.apply_async(listener, (queue, ))
+
+        # fire off jobs
+        jobs = []
+        all_sv_ids = set()
         for _, row in long_read_samples.iterrows():
             sv_ids = sample_sv_lookup[
                 sample_sv_lookup["sample_id"] == row["sample_id"]
             ]["sv_id"].values
-            # shuffle sv_ids for fewer downstread I/O conflicts
-            sv_ids = random.sample(list(sv_ids), len(sv_ids))
+            all_sv_ids.update(sv_ids)
             if len(sv_ids) == 0:
                 print("No SVs found for sample", row["sample_id"])
                 continue
-            args.append((row.to_dict(), sv_ids))
-        p.starmap(download_sample_evidence, args)
-        p.close()
-        p.join()
+            job = pool.apply_async(worker, ((row.to_dict(), sv_ids), queue))
+            jobs.append(job)
+            # args.append((row.to_dict(), sv_ids))
+        
+        # move all sv files from home dir to scratch
+        for sv_id in all_sv_ids:
+            file_name = f"long_reads/evidence/{sv_id}.csv"
+            if not os.path.exists(file_name):
+                continue
+            shutil.move(file_name, os.path.join(SCRATCH_DIR, file_name))
+
+        for job in jobs:
+            job.get()
+            
+        # pool.starmap(download_sample_evidence, args)
+        queue.put("kill")
+        pool.close()
+        pool.join()
+
+        # move sv files back to home dir
+        for sv_id in all_sv_ids:
+            file_name = f"long_reads/evidence/{sv_id}.csv"
+            shutil.move(os.path.join(SCRATCH_DIR, file_name), file_name)
 
 
 if __name__ == "__main__":
