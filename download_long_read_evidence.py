@@ -46,7 +46,7 @@ def process_sample_evidence(
     sample_id: str, cram_file: str, sv_ids: List[str], queue: mp.Queue
 ):
     for sv_id in sv_ids:
-        region, sv_len = get_sv_region(sv_id)
+        region, sv_len = get_sv_region(sv_id, 300)
         output_file = get_bam_file(
             sv_id,
             sample_id,
@@ -107,8 +107,8 @@ def download_sample_evidence(
     remove_cram_file(output_file)
 
 
-def worker(**kwargs):
-    download_sample_evidence(**kwargs)
+def worker(sample_row: pd.Series, sv_ids: List[str], queue: mp.Queue):
+    download_sample_evidence(sample_row, sv_ids, queue)
 
 
 def listener(queue):
@@ -128,10 +128,10 @@ def listener(queue):
         return
 
 
-@break_after(hours=15, minutes=55)
+@break_after(hours=3, minutes=55)
 def download_long_read_evidence():
     start = time.time()
-    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
+    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv").head(20)
     sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
 
     all_sv_ids = set(sample_sv_lookup["sv_id"].unique())
@@ -165,7 +165,7 @@ def download_long_read_evidence():
                 continue
 
             job = pool.apply_async(
-                worker, (row.to_dict(), svs_to_process, queue)
+                worker, (row, svs_to_process, queue)
             )
             jobs.append(job)
 
