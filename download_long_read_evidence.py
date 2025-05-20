@@ -1,3 +1,5 @@
+import time
+import random
 import os
 import subprocess
 import pandas as pd
@@ -27,7 +29,7 @@ def get_svs_by_sample():
 def process_sample_evidence(sample_id, cram_file, sv_ids):
     for sv_id in sv_ids:
         get_long_read_svs(
-            sv_id, [sample_id], cram_file, tolerance=300, scratch=True
+            sv_id, [sample_id], cram_file=cram_file, tolerance=300, scratch=True
         )
 
 
@@ -63,36 +65,31 @@ def download_sample_evidence(sample_row, sv_ids):
     remove_cram_file(output_file)
 
 
-@break_after(hours=95, minutes=55)
-def download_long_read_evidence(*, with_multiprocessing=True):
-    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
+@break_after(hours=15, minutes=55)
+def download_long_read_evidence():
+    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv").head(160)
     sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
-    if with_multiprocessing:
-        with multiprocessing.Manager():
-            cpu_count = multiprocessing.cpu_count()
-            p = multiprocessing.Pool(cpu_count)
-            args = []
-            for _, row in long_read_samples.iterrows():
-                sv_ids = sample_sv_lookup[
-                    sample_sv_lookup["sample_id"] == row["sample_id"]
-                ]["sv_id"].values
-                if len(sv_ids) == 0:
-                    print("No SVs found for sample", row["sample_id"])
-                    continue
-                args.append((row.to_dict()), sv_ids)
-            p.starmap(download_sample_evidence, args)
-            p.close()
-            p.join()
-    else:
+    with multiprocessing.Manager():
+        cpu_count = multiprocessing.cpu_count()
+        p = multiprocessing.Pool(cpu_count)
+        args = []
         for _, row in long_read_samples.iterrows():
             sv_ids = sample_sv_lookup[
                 sample_sv_lookup["sample_id"] == row["sample_id"]
             ]["sv_id"].values
+            # shuffle sv_ids for fewer downstread I/O conflicts
+            sv_ids = random.sample(list(sv_ids), len(sv_ids))
             if len(sv_ids) == 0:
                 print("No SVs found for sample", row["sample_id"])
                 continue
-            download_sample_evidence(row.to_dict(), sv_ids)
+            args.append((row.to_dict(), sv_ids))
+        p.starmap(download_sample_evidence, args)
+        p.close()
+        p.join()
 
 
 if __name__ == "__main__":
-    download_long_read_evidence(with_multiprocessing=True)
+    start = time.time()
+    download_long_read_evidence()
+    end = time.time()
+    print("Time taken:", (end - start) / 60, "minutes")

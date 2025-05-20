@@ -86,6 +86,20 @@ def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
     return deletions
 
 
+def remove_blank_lines_from_evidence():
+    files = os.listdir("long_reads/evidence")
+    for file in files:
+        if ".csv" not in file:
+            continue
+        with open(os.path.join("long_reads/evidence", file), "r") as f:
+            lines = f.readlines()
+        with open(os.path.join("long_reads/evidence", file), "w") as f:
+            for line in lines:
+                row = line.split(",")
+                if len(row) > 1:
+                    f.write(line)
+        
+
 def remove_bam_file(file: str):
     os.remove(os.path.join("long_reads/reads", file))
     try:
@@ -93,23 +107,36 @@ def remove_bam_file(file: str):
     except FileNotFoundError:
         return
 
+def move_evidence_file(file_name: str): 
+    scratch_file = os.path.join("/scratch/Users/vili4418", file_name)
+    for _ in range(120): # skip the file after 2 minutes
+        if not os.path.exists(scratch_file):
+            break
+        # another core is writing to this file - wait a second and try again
+        time.sleep(1)
+    try:
+        return shutil.move(file_name, scratch_file)
+    except FileNotFoundError: # file has been moved by another core
+        return None
+
 
 def write_long_read_evidence(
-    sv_id: str, sample_id: str, deletions: List, scratch: bool = False
-):
+    sv_id: str, sample_id: str, deletions: List, scratch: bool = False 
+) -> bool:
+    if len(deletions) == 0:
+        return True
     base_file_name = f"long_reads/evidence/{sv_id}.csv"
-    file_name = base_file_name
+    file_name = None if scratch else base_file_name
     if scratch:
-        scratch_file = os.path.join("/scratch/Users/vili4418", file_name)
-        wait = 0
-        while os.path.exists(scratch_file):
-            # another core is writing to this file
-            if wait > 100:
-                print(f"Waiting to write {sample_id} to {sv_id}")
-            time.sleep(5)  # wait a few seconds and try again
-            wait += 1
+        for _ in range(10):
+            # this is in a loop because another core could have moved the file between the end of the while loop and attempting to move the file
+            file_name = move_evidence_file(base_file_name)
+            if file_name is not None:
+                break
 
-        file_name = shutil.move(base_file_name, scratch_file)
+        if file_name is None:
+            print(f"Could not write {sample_id} to {sv_id}")
+            return False
     with open(file_name, "a") as f:
         csv_writer = csv.writer(f)
         row = [sample_id]
@@ -119,7 +146,8 @@ def write_long_read_evidence(
 
     if scratch:
         shutil.move(file_name, base_file_name)
-
+    return True
+        
 
 def write_all_long_read_evidence():
     # rewrite bam files into CSVs to save memory
@@ -216,9 +244,14 @@ def get_long_read_svs(
                 text=True,
             )
 
-        deletions[sample_id] = read_cigars_from_file(output_file, sv_len)
-        write_long_read_evidence(sv_id, sample_id, deletions[sample_id], True)
-        remove_bam_file(output_file)
+        try:
+            deletions[sample_id] = read_cigars_from_file(output_file, sv_len)
+            can_remove_file = write_long_read_evidence(sv_id, sample_id, deletions[sample_id], True)
+        except ValueError:
+            can_remove_file = True
+
+        if can_remove_file:
+            remove_bam_file(output_file)
 
     return deletions
 
