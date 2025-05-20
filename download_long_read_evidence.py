@@ -33,6 +33,17 @@ def get_svs_by_sample():
     lookup_df.to_csv("long_reads/sample_sv_lookup.csv", index=False)
 
 
+def move_evidence_files(sv_ids, *, to_scratch: bool):
+    for sv_id in sv_ids:
+        file_name = f"long_reads/evidence/{sv_id}.csv"
+        if to_scratch:
+            if not os.path.exists(file_name):
+                continue
+            shutil.move(file_name, os.path.join(SCRATCH_DIR, file_name))
+        else:
+            shutil.move(os.path.join(SCRATCH_DIR, file_name), file_name)
+
+
 def is_sample_processed(sv_id: str, sample_id: str) -> bool:
     file_name = os.path.join(SCRATCH_DIR, f"long_reads/evidence/{sv_id}.csv")
     try:
@@ -135,11 +146,7 @@ def download_long_read_evidence():
     sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
 
     all_sv_ids = set(sample_sv_lookup["sv_id"].unique())
-    for sv_id in all_sv_ids:
-        file_name = f"long_reads/evidence/{sv_id}.csv"
-        if not os.path.exists(file_name):
-            continue
-        shutil.move(file_name, os.path.join(SCRATCH_DIR, file_name))
+    move_evidence_files(all_sv_ids, to_scratch=True)
 
     with mp.Manager() as manager:
         cpu_count = mp.cpu_count()
@@ -179,9 +186,7 @@ def download_long_read_evidence():
         pool.join()
 
     # move sv files back to home dir
-    for sv_id in all_sv_ids:
-        file_name = f"long_reads/evidence/{sv_id}.csv"
-        shutil.move(os.path.join(SCRATCH_DIR, file_name), file_name)
+    move_evidence_files(all_sv_ids, to_scratch=False)
 
 
 if __name__ == "__main__":

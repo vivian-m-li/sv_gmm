@@ -2,7 +2,6 @@ import time
 import os
 import shutil
 import multiprocessing
-import numpy as np
 import pandas as pd
 from write_sv_output import (
     init_sv_stat_row,
@@ -10,9 +9,9 @@ from write_sv_output import (
     write_posterior_distributions,
     concat_multi_processed_sv_files,
 )
+from query_sv import load_squiggle_data
 from run_dirichlet import run_dirichlet
 from helper import get_deletions_df
-from parse_long_reads import get_long_read_svs, get_long_read_sample_ids
 from typing import Set, Dict
 from timeout import break_after
 
@@ -22,18 +21,9 @@ SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
 OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
 
-def convert_deletions_to_squiggle_data(deletions):
-    # deletions is of format {sample_id: [{start, stop, length}]}
-    # squiggle_data is of format {sample_id: np.array([start, stop, start, stop, ...])}
-    squiggle_data = {}
-    for sample_id, deletion_list in deletions.items():
-        data = []
-        for deletion in deletion_list:
-            data.append(deletion["start"])
-            data.append(deletion["stop"])
-        if len(data) > 0:
-            squiggle_data[sample_id] = np.array(data)
-    return squiggle_data
+def get_long_read_sample_ids():
+    df = pd.read_csv("long_reads/long_read_samples.csv")
+    return df.sample_id.unique().tolist()
 
 
 def run_lr_dirichlet_wrapper(
@@ -51,12 +41,9 @@ def run_lr_dirichlet_wrapper(
         if row[sample_id] in sv_alleles:
             filtered_sample_ids.append(sample_id)
 
-    # get all files with a bigger tolerance
-    deletions = get_long_read_svs(
-        sv_id, filtered_sample_ids, tolerance=300, scratch=True
-    )
-    squiggle_data = convert_deletions_to_squiggle_data(deletions)
-    num_samples = len(deletions)
+    # load deletions for the SV
+    squiggle_data = load_squiggle_data(f"long_reads/evidence/{sv_id}.csv")
+    num_samples = len(squiggle_data)
 
     if len(squiggle_data) == 0:
         gmms, alphas, posterior_distributions = [(None, [])], [], []
@@ -71,7 +58,7 @@ def run_lr_dirichlet_wrapper(
                 "plot": False,
                 "plot_bokeh": False,
                 "insert_size_lookup": insert_size_lookup,
-                "min_pairs": 1,  # reduce number of points per sample
+                "min_pairs": 1,  # reduce number of points required per sample
             },
         )
 
@@ -96,7 +83,7 @@ def run_lr_dirichlet_wrapper(
     print(f"Completed running {sv_id}")
 
 
-@break_after(hours=71, minutes=0)
+@break_after(hours=23, minutes=0)
 def run_svs_until_convergence(with_multiprocessing, use_subset):
     if use_subset:
         deletions_df = pd.read_csv("1kgp/deletions_df_subset.csv")
@@ -108,13 +95,13 @@ def run_svs_until_convergence(with_multiprocessing, use_subset):
     if with_multiprocessing:
         with multiprocessing.Manager():
             cpu_count = multiprocessing.cpu_count()
-            p = multiprocessing.Pool(cpu_count)
+            pool = multiprocessing.Pool(cpu_count)
             args = []
             for _, row in deletions_df.iterrows():
                 args.append((row.to_dict(), population_size, sample_ids))
-            p.starmap(run_lr_dirichlet_wrapper, args)
-            p.close()
-            p.join()
+            pool.starmap(run_lr_dirichlet_wrapper, args)
+            pool.close()
+            pool.join()
     else:
         for _, row in deletions_df.iterrows():
             run_lr_dirichlet_wrapper(row.to_dict(), population_size, sample_ids)
