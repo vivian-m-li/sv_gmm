@@ -1,9 +1,7 @@
 import ast
-import time
 import csv
 import re
 import os
-import shutil
 import argparse
 import subprocess
 import pysam
@@ -98,7 +96,7 @@ def remove_blank_lines_from_evidence():
                 row = line.split(",")
                 if len(row) > 1:
                     f.write(line)
-        
+
 
 def remove_bam_file(file: str):
     os.remove(os.path.join("long_reads/reads", file))
@@ -107,36 +105,14 @@ def remove_bam_file(file: str):
     except FileNotFoundError:
         return
 
-def move_evidence_file(file_name: str): 
-    scratch_file = os.path.join("/scratch/Users/vili4418", file_name)
-    for _ in range(120): # skip the file after 2 minutes
-        if not os.path.exists(scratch_file):
-            break
-        # another core is writing to this file - wait a second and try again
-        time.sleep(1)
-    try:
-        return shutil.move(file_name, scratch_file)
-    except FileNotFoundError: # file has been moved by another core
-        return None
-
 
 def write_long_read_evidence(
-    sv_id: str, sample_id: str, deletions: List, scratch: bool = False 
+    sv_id: str, sample_id: str, deletions: List
 ) -> bool:
+    # assumes file is in home directory and not in scratch
     if len(deletions) == 0:
-        return True
-    base_file_name = f"long_reads/evidence/{sv_id}.csv"
-    file_name = None if scratch else base_file_name
-    if scratch:
-        for _ in range(10):
-            # this is in a loop because another core could have moved the file between the end of the while loop and attempting to move the file
-            file_name = move_evidence_file(base_file_name)
-            if file_name is not None:
-                break
-
-        if file_name is None:
-            print(f"Could not write {sample_id} to {sv_id}")
-            return False
+        return
+    file_name = f"long_reads/evidence/{sv_id}.csv"
     with open(file_name, "a") as f:
         csv_writer = csv.writer(f)
         row = [sample_id]
@@ -144,10 +120,6 @@ def write_long_read_evidence(
             row.extend([deletion["start"], deletion["stop"]])
         csv_writer.writerow(row)
 
-    if scratch:
-        shutil.move(file_name, base_file_name)
-    return True
-        
 
 def write_all_long_read_evidence():
     # rewrite bam files into CSVs to save memory
@@ -199,59 +171,74 @@ def get_processed_samples(sv_id: str):
     return sample_evidence
 
 
-def get_long_read_svs(
-    sv_id: str,
-    samples: List[str],
-    *,
-    cram_file: str = None,
-    tolerance: int = 100,
-    scratch: bool = False,
-):
+def get_sv_region(sv_id: str, tolerance: int):
     sv_lookup = get_sv_lookup()
     row = sv_lookup[sv_lookup["id"] == sv_id]
     start = row["start"].values[0] - tolerance
     stop = row["stop"].values[0] + tolerance
     region = f"chr{row['chr'].values[0]}:{start}-{stop}"
     sv_len = stop - start - 2 * tolerance
+    return region, sv_len
 
+
+def get_bam_file(
+    sv_id: str,
+    sample_id: str,
+    *,
+    region: str,
+    cram_file: str,
+    scratch: bool = False,
+):
+    output_file_name = f"{sv_id}-{sample_id}.bam"
+    output_file = os.path.join("long_reads/reads", output_file_name)
+    if scratch:
+        output_file = os.path.join("/scratch/Users/vili4418", output_file)
+    indexed_output_file = f"{output_file}.bai"
+
+    # check that both the file and indexed file exist
+    if not os.path.exists(output_file) and not os.path.exists(
+        indexed_output_file
+    ):
+        subprocess.run(
+            ["bash", "get_cigar.sh"] + [cram_file, region, output_file],
+            capture_output=True,
+            text=True,
+        )
+
+    return output_file
+
+
+def get_long_read_svs(
+    sv_id: str,
+    samples: List[str],
+    *,
+    tolerance: int = 100,
+    scratch: bool = False,
+):
+    region, sv_len = get_sv_region(sv_id, tolerance)
     long_reads = pd.read_csv("long_reads/long_read_samples.csv")
     deletions = get_processed_samples(sv_id)
     for sample_id in samples:
         if sample_id in deletions:
             continue
 
-        output_file_name = f"{sv_id}-{sample_id}.bam"
-        output_file = os.path.join("long_reads/reads", output_file_name)
-        indexed_output_file = f"{output_file}.bai"
+        row = long_reads[long_reads["sample_id"] == sample_id]
+        if row.empty:
+            print(f"Sample {sample_id} not found in long reads")
+            continue
+        cram_file = row["cram_file"].values[0]
+        output_file = get_bam_file(
+            sv_id,
+            sample_id,
+            region=region,
+            cram_file=cram_file,
+            scratch=scratch,
+        )
 
-        # check that both the file and indexed file exist
-        if not os.path.exists(output_file) and not os.path.exists(
-            indexed_output_file
-        ):
-            row = long_reads[long_reads["sample_id"] == sample_id]
-            if row.empty:
-                print(f"Sample {sample_id} not found in long reads")
-                continue
-            if cram_file is None:
-                cram_file = row["cram_file"].values[0]
-            if scratch:
-                output_file = os.path.join(
-                    "/scratch/Users/vili4418/long_reads/reads", output_file_name
-                )
-            subprocess.run(
-                ["bash", "get_cigar.sh"] + [cram_file, region, output_file],
-                capture_output=True,
-                text=True,
-            )
-
-        try:
-            deletions[sample_id] = read_cigars_from_file(output_file, sv_len)
-            can_remove_file = write_long_read_evidence(sv_id, sample_id, deletions[sample_id], True)
-        except ValueError:
-            can_remove_file = True
-
-        if can_remove_file:
-            remove_bam_file(output_file)
+        # possible ValueError
+        deletions[sample_id] = read_cigars_from_file(output_file, sv_len)
+        write_long_read_evidence(sv_id, sample_id, deletions[sample_id])
+        remove_bam_file(output_file)
 
     return deletions
 

@@ -1,12 +1,18 @@
 import time
-import random
 import os
 import shutil
 import subprocess
+import csv
 import pandas as pd
 import multiprocessing as mp
-from parse_long_reads import get_long_read_svs
+from parse_long_reads import (
+    get_sv_region,
+    get_bam_file,
+    read_cigars_from_file,
+    remove_bam_file,
+)
 from timeout import break_after
+from typing import List
 
 SCRATCH_DIR = "/scratch/Users/vili4418"
 
@@ -27,11 +33,40 @@ def get_svs_by_sample():
     lookup_df.to_csv("long_reads/sample_sv_lookup.csv", index=False)
 
 
-def process_sample_evidence(sample_id, cram_file, sv_ids):
+def is_sample_processed(sv_id: str, sample_id: str) -> bool:
+    file_name = os.path.join(SCRATCH_DIR, f"long_reads/evidence/{sv_id}.csv")
+    try:
+        with open(file_name, "r") as file:
+            return sample_id in file.read()
+    except Exception:
+        return False
+
+
+def process_sample_evidence(
+    sample_id: str, cram_file: str, sv_ids: List[str], queue: mp.Queue
+):
     for sv_id in sv_ids:
-        get_long_read_svs(
-            sv_id, [sample_id], cram_file=cram_file, tolerance=300, scratch=True
+        region, sv_len = get_sv_region(sv_id)
+        output_file = get_bam_file(
+            sv_id,
+            sample_id,
+            region=region,
+            cram_file=cram_file,
+            scratch=True,
         )
+
+        evidence = read_cigars_from_file(output_file, sv_len)
+        row = [sample_id]
+        for deletion in evidence:
+            row.extend([deletion["start"], deletion["stop"]])
+
+        # put the csv row in the queue to be written
+        file_name = os.path.join(
+            SCRATCH_DIR, f"long_reads/evidence/{sv_id}.csv"
+        )
+        queue.put((file_name, row))
+
+        remove_bam_file(output_file)
 
 
 def remove_cram_file(file):
@@ -39,7 +74,10 @@ def remove_cram_file(file):
     os.remove(f"{file}.crai")
 
 
-def download_sample_evidence(sample_row, sv_ids, queue):
+def download_sample_evidence(
+    sample_row: pd.Series, sv_ids: List[str], queue: mp.Queue
+):
+    # download the cram file and the indexed cram file
     output_file = os.path.join(
         SCRATCH_DIR, sample_row["cram_file"].split("/")[-1]
     )
@@ -62,72 +100,88 @@ def download_sample_evidence(sample_row, sv_ids, queue):
             text=True,
         )
 
-    process_sample_evidence(sample_row["sample_id"], output_file, sv_ids)
+    # process the sample for each sv
+    process_sample_evidence(sample_row["sample_id"], output_file, sv_ids, queue)
+
+    # remove the cram file at the end
     remove_cram_file(output_file)
 
 
-def worker(args, queue):
-    sample_row, sv_ids = args
-    download_sample_evidence(sample_row, sv_ids, queue)
+def worker(**kwargs):
+    download_sample_evidence(**kwargs)
 
 
-def listener(queue, file):
+def listener(queue):
     """Listens for messages on the queue and writes to the file"""
-    with open(file, "a") as f:
+    try:
         while True:
             m = queue.get()
             if m == "kill":
                 break
-            f.write(m + "\n")
-            f.flush()
+
+            file_name, row = m
+            with open(file_name, "a") as f:
+                csv_writer = csv.writer(f)
+                csv_writer.writerow(row)
+    except Exception as e:
+        print(f"Listener error: {e}")
+        return
 
 
 @break_after(hours=15, minutes=55)
 def download_long_read_evidence():
-    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv").head(160)
+    start = time.time()
+    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
     sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
+
+    all_sv_ids = set(sample_sv_lookup["sv_id"].unique())
+    for sv_id in all_sv_ids:
+        file_name = f"long_reads/evidence/{sv_id}.csv"
+        if not os.path.exists(file_name):
+            continue
+        shutil.move(file_name, os.path.join(SCRATCH_DIR, file_name))
+
     with mp.Manager() as manager:
         cpu_count = mp.cpu_count()
         pool = mp.Pool(cpu_count)
         queue = manager.Queue()
 
         # put listener to work
-        watcher = pool.apply_async(listener, (queue, ))
+        pool.apply_async(listener, (queue,))
 
         # fire off jobs
         jobs = []
-        all_sv_ids = set()
         for _, row in long_read_samples.iterrows():
             sv_ids = sample_sv_lookup[
                 sample_sv_lookup["sample_id"] == row["sample_id"]
             ]["sv_id"].values
-            all_sv_ids.update(sv_ids)
-            if len(sv_ids) == 0:
-                print("No SVs found for sample", row["sample_id"])
+            svs_to_process = []
+
+            for sv_id in sv_ids:
+                if not is_sample_processed(sv_id, row["sample_id"]):
+                    svs_to_process.append(sv_id)
+
+            if len(svs_to_process) == 0:
                 continue
-            job = pool.apply_async(worker, ((row.to_dict(), sv_ids), queue))
+
+            job = pool.apply_async(
+                worker, (row.to_dict(), svs_to_process, queue)
+            )
             jobs.append(job)
-            # args.append((row.to_dict(), sv_ids))
-        
-        # move all sv files from home dir to scratch
-        for sv_id in all_sv_ids:
-            file_name = f"long_reads/evidence/{sv_id}.csv"
-            if not os.path.exists(file_name):
-                continue
-            shutil.move(file_name, os.path.join(SCRATCH_DIR, file_name))
+
+        print("Time to prepare jobs:", (time.time() - start) / 60, "minutes")
 
         for job in jobs:
             job.get()
-            
-        # pool.starmap(download_sample_evidence, args)
+
         queue.put("kill")
         pool.close()
         pool.join()
 
-        # move sv files back to home dir
-        for sv_id in all_sv_ids:
-            file_name = f"long_reads/evidence/{sv_id}.csv"
-            shutil.move(os.path.join(SCRATCH_DIR, file_name), file_name)
+    # move sv files back to home dir
+    for sv_id in all_sv_ids:
+        file_name = f"long_reads/evidence/{sv_id}.csv"
+        shutil.move(os.path.join(SCRATCH_DIR, file_name), file_name)
 
 
 if __name__ == "__main__":
