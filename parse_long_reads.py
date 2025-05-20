@@ -12,11 +12,6 @@ from helper import get_sv_lookup, get_sv_stats_collapsed_df
 from typing import List
 
 
-def get_long_read_sample_ids():
-    df = pd.read_csv("long_reads/long_read_samples.csv")
-    return df.sample_id.unique().tolist()
-
-
 def parse_long_read_samples():
     file = "long_reads/raw_1kg_ont_vienna_hg38.txt"
     root = "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1KG_ONT_VIENNA/hg38"
