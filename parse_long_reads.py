@@ -93,10 +93,13 @@ def remove_blank_lines_from_evidence():
                     f.write(line)
 
 
-def remove_bam_file(file: str):
-    os.remove(os.path.join("long_reads/reads", file))
+def remove_bam_file(file: str, *, scratch: bool = False):
+    file_path = os.path.join("long_reads/reads", file)
+    if scratch:
+        file_path = os.path.join("/scratch/Users/vili4418", file_path)
     try:
-        os.remove(os.path.join("long_reads/reads", f"{file}.bai"))
+        os.remove(file_path)
+        os.remove(f"{file_path}.bai")
     except FileNotFoundError:
         return
 

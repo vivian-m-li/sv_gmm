@@ -36,12 +36,15 @@ def get_svs_by_sample():
 def move_evidence_files(sv_ids, *, to_scratch: bool):
     for sv_id in sv_ids:
         file_name = f"long_reads/evidence/{sv_id}.csv"
+        scratch_file = os.path.join(SCRATCH_DIR, file_name)
         if to_scratch:
             if not os.path.exists(file_name):
                 continue
-            shutil.move(file_name, os.path.join(SCRATCH_DIR, file_name))
+            shutil.move(file_name, scratch_file)
         else:
-            shutil.move(os.path.join(SCRATCH_DIR, file_name), file_name)
+            if not os.path.exists(scratch_file):
+                continue
+            shutil.move(scratch_file, file_name)
 
 
 def is_sample_processed(sv_id: str, sample_id: str) -> bool:
@@ -77,7 +80,7 @@ def process_sample_evidence(
         )
         queue.put((file_name, row))
 
-        remove_bam_file(output_file)
+        remove_bam_file(output_file, scratch=True)
 
 
 def remove_cram_file(file):
@@ -88,6 +91,9 @@ def remove_cram_file(file):
 def download_sample_evidence(
     sample_row: pd.Series, sv_ids: List[str], queue: mp.Queue
 ):
+    sample_id = sample_row["sample_id"]
+    print(f"Processing sample {sample_id}")
+
     # download the cram file and the indexed cram file
     output_file = os.path.join(
         SCRATCH_DIR, sample_row["cram_file"].split("/")[-1]
@@ -112,10 +118,12 @@ def download_sample_evidence(
         )
 
     # process the sample for each sv
-    process_sample_evidence(sample_row["sample_id"], output_file, sv_ids, queue)
+    process_sample_evidence(sample_id, output_file, sv_ids, queue)
 
     # remove the cram file at the end
     remove_cram_file(output_file)
+
+    print("Finished processing sample", sample_id)
 
 
 def worker(sample_row: pd.Series, sv_ids: List[str], queue: mp.Queue):
@@ -131,23 +139,20 @@ def listener(queue):
                 break
 
             file_name, row = m
-            with open(file_name, "a") as f:
-                csv_writer = csv.writer(f)
-                csv_writer.writerow(row)
+            if os.path.exists(file_name): # append to existing file
+                f = open(file_name, "a")
+            else: # file does not exist
+                f = open(file_name, "w")        
+            csv_writer = csv.writer(f)
+            csv_writer.writerow(row)
+            f.close()
     except Exception as e:
         print(f"Listener error: {e}")
         return
 
 
-@break_after(hours=3, minutes=55)
-def download_long_read_evidence():
-    start = time.time()
-    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv").head(20)
-    sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
-
-    all_sv_ids = set(sample_sv_lookup["sv_id"].unique())
-    move_evidence_files(all_sv_ids, to_scratch=True)
-
+@break_after(hours=95, minutes=0)  # leave time to move files
+def download_long_read_evidence_inner(long_read_samples, sample_sv_lookup):
     with mp.Manager() as manager:
         cpu_count = mp.cpu_count()
         pool = mp.Pool(cpu_count)
@@ -158,6 +163,7 @@ def download_long_read_evidence():
 
         # fire off jobs
         jobs = []
+        start = time.time()
         for _, row in long_read_samples.iterrows():
             sv_ids = sample_sv_lookup[
                 sample_sv_lookup["sample_id"] == row["sample_id"]
@@ -169,11 +175,12 @@ def download_long_read_evidence():
                     svs_to_process.append(sv_id)
 
             if len(svs_to_process) == 0:
+                print(
+                    f"Sample {row['sample_id']} already processed for all SVs"
+                )
                 continue
 
-            job = pool.apply_async(
-                worker, (row, svs_to_process, queue)
-            )
+            job = pool.apply_async(worker, (row, svs_to_process, queue))
             jobs.append(job)
 
         print("Time to prepare jobs:", (time.time() - start) / 60, "minutes")
@@ -184,6 +191,19 @@ def download_long_read_evidence():
         queue.put("kill")
         pool.close()
         pool.join()
+
+
+def download_long_read_evidence():
+    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
+    sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
+
+    all_sv_ids = set(sample_sv_lookup["sv_id"].unique())
+
+    # move sv files to scratch dir for faster I/O
+    move_evidence_files(all_sv_ids, to_scratch=True)
+
+    # run the multiprocessing code
+    download_long_read_evidence_inner(long_read_samples, sample_sv_lookup)
 
     # move sv files back to home dir
     move_evidence_files(all_sv_ids, to_scratch=False)
