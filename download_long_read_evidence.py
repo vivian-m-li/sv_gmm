@@ -1,3 +1,4 @@
+import sys
 import time
 import os
 import shutil
@@ -10,6 +11,7 @@ from parse_long_reads import (
     get_bam_file,
     read_cigars_from_file,
     remove_bam_file,
+    write_samples_to_redo,
 )
 from timeout import break_after
 from typing import List
@@ -31,6 +33,21 @@ def get_svs_by_sample():
                     row["id"],
                 ]
     lookup_df.to_csv("long_reads/sample_sv_lookup.csv", index=False)
+
+
+def get_samples_to_redo():
+    file = "long_reads/redo_samples.txt"
+    samples = {}
+    with open(file, "r") as f:
+        for line in f.readlines():
+            sample_id, sv_ids = line.strip().split(":")
+            sv_ids = sv_ids.split(",")
+            sv_ids = [sv_id.strip() for sv_id in sv_ids]
+            sv_ids = [sv_id for sv_id in sv_ids if sv_id != ""]
+            if len(sv_ids) == 0:
+                continue
+            samples[sample_id] = sv_ids
+    return samples
 
 
 def move_evidence_files(sv_ids, *, to_scratch: bool):
@@ -69,7 +86,12 @@ def process_sample_evidence(
             scratch=True,
         )
 
-        evidence = read_cigars_from_file(output_file, sv_len)
+        try:
+            evidence = read_cigars_from_file(output_file, sv_len)
+        except Exception as e:
+            print(f"Redo sample {sv_id}-{sample_id}")
+            continue
+
         row = [sample_id]
         for deletion in evidence:
             row.extend([deletion["start"], deletion["stop"]])
@@ -151,8 +173,16 @@ def listener(queue):
         return
 
 
-@break_after(hours=95, minutes=0)  # leave time to move files
-def download_long_read_evidence_inner(long_read_samples, sample_sv_lookup):
+@break_after(hours=86, minutes=0)  # leave time to move files
+def download_long_read_evidence_inner(
+    long_read_samples,
+    sample_sv_lookup,
+    redo_samples,
+):
+    if redo_samples:
+        samples_to_redo = get_samples_to_redo()
+        long_read_samples = long_read_samples[long_read_samples["sample_id"].isin(samples_to_redo.keys())]
+
     with mp.Manager() as manager:
         cpu_count = mp.cpu_count()
         pool = mp.Pool(cpu_count)
@@ -170,9 +200,12 @@ def download_long_read_evidence_inner(long_read_samples, sample_sv_lookup):
             ]["sv_id"].values
             svs_to_process = []
 
-            for sv_id in sv_ids:
-                if not is_sample_processed(sv_id, row["sample_id"]):
-                    svs_to_process.append(sv_id)
+            if redo_samples:
+                svs_to_process = set(samples_to_redo[row["sample_id"]])
+            else:
+                for sv_id in sv_ids:
+                    if not is_sample_processed(sv_id, row["sample_id"]):
+                        svs_to_process.append(sv_id)
 
             if len(svs_to_process) == 0:
                 print(
@@ -193,24 +226,36 @@ def download_long_read_evidence_inner(long_read_samples, sample_sv_lookup):
         pool.join()
 
 
-def download_long_read_evidence():
+def download_long_read_evidence(
+    *,
+    move_files: bool = True,
+    redo_samples: bool = False,
+):
     long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
     sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
 
     all_sv_ids = set(sample_sv_lookup["sv_id"].unique())
 
     # move sv files to scratch dir for faster I/O
-    move_evidence_files(all_sv_ids, to_scratch=True)
+    if move_files:
+        move_evidence_files(all_sv_ids, to_scratch=True)
 
     # run the multiprocessing code
-    download_long_read_evidence_inner(long_read_samples, sample_sv_lookup)
+    download_long_read_evidence_inner(long_read_samples, sample_sv_lookup, redo_samples)
 
     # move sv files back to home dir
-    move_evidence_files(all_sv_ids, to_scratch=False)
+    if move_files:
+        move_evidence_files(all_sv_ids, to_scratch=False)
+
+    # flush the buffered output
+    sys.stdout.flush()
+    write_samples_to_redo()
 
 
 if __name__ == "__main__":
     start = time.time()
-    download_long_read_evidence()
+
+    download_long_read_evidence(move_files=True, redo_samples=False)
+
     end = time.time()
     print("Time taken:", (end - start) / 60, "minutes")

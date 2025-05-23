@@ -10,6 +10,9 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from helper import get_sv_lookup, get_sv_stats_collapsed_df
 from typing import List
+from collections import defaultdict
+
+SCRATCH_DIR = "/scratch/Users/vili4418/"
 
 
 def parse_long_read_samples():
@@ -93,10 +96,33 @@ def remove_blank_lines_from_evidence():
                     f.write(line)
 
 
+def write_samples_to_redo():
+    file_dir = "/Users/vili4418/sv/eofiles"
+    files = os.listdir(file_dir)
+    samples_to_redo = defaultdict(list)
+    for file in files:
+        pattern = r"[\S]*[\/]*download_long_read_evidence_[\S]+\.out"
+        if not re.search(pattern, file):
+            continue
+        with open(os.path.join(file_dir, file), "r") as f:
+            for line in f.readlines():
+                if line.startswith("Redo"):
+                    pattern = r"Redo sample ([\S]+)-([\S]+)"
+                    match = re.search(pattern, line)
+                    sv_id = match.group(1)
+                    sample_id = match.group(2)
+                    samples_to_redo[sample_id].append(sv_id)
+                
+
+    with open("long_reads/redo_samples.txt", "w") as f:
+        for sample_id, sv_ids in samples_to_redo.items():
+            f.write(f"{sample_id}: {', '.join(sv_ids)}\n")
+
+
 def remove_bam_file(file: str, *, scratch: bool = False):
     file_path = os.path.join("long_reads/reads", file)
     if scratch:
-        file_path = os.path.join("/scratch/Users/vili4418", file_path)
+        file_path = os.path.join(SCRATCH_DIR, file_path)
     try:
         os.remove(file_path)
         os.remove(f"{file_path}.bai")
@@ -190,7 +216,7 @@ def get_bam_file(
     output_file_name = f"{sv_id}-{sample_id}.bam"
     output_file = os.path.join("long_reads/reads", output_file_name)
     if scratch:
-        output_file = os.path.join("/scratch/Users/vili4418", output_file)
+        output_file = os.path.join(SCRATCH_DIR, output_file)
     indexed_output_file = f"{output_file}.bai"
 
     # check that both the file and indexed file exist
