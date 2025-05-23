@@ -88,7 +88,7 @@ def process_sample_evidence(
 
         try:
             evidence = read_cigars_from_file(output_file, sv_len)
-        except Exception as e:
+        except Exception:
             print(f"Redo sample {sv_id}-{sample_id}")
             continue
 
@@ -161,10 +161,10 @@ def listener(queue):
                 break
 
             file_name, row = m
-            if os.path.exists(file_name): # append to existing file
+            if os.path.exists(file_name):  # append to existing file
                 f = open(file_name, "a")
-            else: # file does not exist
-                f = open(file_name, "w")        
+            else:  # file does not exist
+                f = open(file_name, "w")
             csv_writer = csv.writer(f)
             csv_writer.writerow(row)
             f.close()
@@ -181,7 +181,9 @@ def download_long_read_evidence_inner(
 ):
     if redo_samples:
         samples_to_redo = get_samples_to_redo()
-        long_read_samples = long_read_samples[long_read_samples["sample_id"].isin(samples_to_redo.keys())]
+        long_read_samples = long_read_samples[
+            long_read_samples["sample_id"].isin(samples_to_redo.keys())
+        ]
 
     with mp.Manager() as manager:
         cpu_count = mp.cpu_count()
@@ -241,7 +243,9 @@ def download_long_read_evidence(
         move_evidence_files(all_sv_ids, to_scratch=True)
 
     # run the multiprocessing code
-    download_long_read_evidence_inner(long_read_samples, sample_sv_lookup, redo_samples)
+    download_long_read_evidence_inner(
+        long_read_samples, sample_sv_lookup, redo_samples
+    )
 
     # move sv files back to home dir
     if move_files:
