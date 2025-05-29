@@ -48,6 +48,18 @@ def get_samples_to_redo():
                 continue
             samples[sample_id] = sv_ids
     return samples
+    
+
+def get_completed_samples():
+    file = "long_reads/completed_samples.txt"
+    samples = []
+    with open(file, "r") as f:
+        for line in f.readlines():
+            sample_id = line.strip()
+            if sample_id == "":
+                continue
+            samples.append(sample_id)
+    return samples
 
 
 def move_evidence_files(sv_ids, *, to_scratch: bool):
@@ -243,7 +255,7 @@ def download_long_read_evidence_inner(
         pool.join()
 
 
-@break_after(hours=82, minutes=0) 
+@break_after(hours=98, minutes=0) 
 def download_long_read_evidence_synchronous(
     long_read_samples,
     sample_sv_lookup,
@@ -282,8 +294,13 @@ def download_long_read_evidence(
     move_files: bool = True,
     redo_samples: bool = False,
 ):
-    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
     sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
+    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
+
+    completed_samples = get_completed_samples()
+    long_read_samples = long_read_samples[
+        ~long_read_samples["sample_id"].isin(completed_samples)
+    ]
 
     all_sv_ids = set(sample_sv_lookup["sv_id"].unique())
 
