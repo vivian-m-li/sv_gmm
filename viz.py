@@ -13,6 +13,7 @@ from Bio import SeqIO, Seq
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.cm as cm
+from matplotlib.colors import ListedColormap
 from brokenaxes import brokenaxes
 from matplotlib.ticker import FixedLocator, StrMethodFormatter
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
@@ -1193,6 +1194,144 @@ def plot_afs():
         plt.xlabel("Original Allele Frequency", fontsize=12)
         plt.ylabel("New Allele Frequency", fontsize=12)
         plt.show()
+
+
+def plot_afs_hexbin():
+    """
+    Plots hexbin maps of allele frequencies for 2- and 3-mode SVs.
+    """
+    sv_df = get_sv_stats_collapsed_df()
+    sv_df = sv_df[
+        (sv_df["num_samples"] > 0) & (sv_df["num_modes"].isin([2, 3]))
+    ]
+
+    afs = {2: ([], []), 3: ([], [])}
+
+    for _, row in sv_df.iterrows():
+        num_modes = row["num_modes"]
+        modes = ast.literal_eval(row["modes"])
+        x = afs[num_modes][0]
+        y = afs[num_modes][1]
+
+        n_homozygous = 0
+        n_heterozygous = 0
+
+        for mode in modes:
+            n_homozygous += mode["num_homozygous"]
+            n_heterozygous += mode["num_heterozygous"]
+
+            af = calc_af(
+                mode["num_homozygous"],
+                mode["num_heterozygous"],
+                2504,
+            )
+            y.append(af)
+
+        original_af = calc_af(n_homozygous, n_heterozygous, 2504)
+        for _ in modes:
+            x.append(original_af)
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+    for num_modes, ax in zip([2, 3], axes):
+        x, y = afs[num_modes]
+
+        orig_cmap = cm.get_cmap("Blues")
+        new_colors = orig_cmap(np.linspace(0.2, 1, 256))
+        darker_blues = ListedColormap(new_colors)
+        hb = ax.hexbin(x, y, gridsize=40, cmap=darker_blues, mincnt=1)
+
+        # Add identity line
+        plot_lim = max(max(x), max(y)) + 0.01
+        ax.plot([0, plot_lim], [0, plot_lim], linestyle="--", color="darkgrey")
+
+        ax.set_xlim(0, plot_lim)
+        ax.set_ylim(0, plot_lim)
+        ax.set_xlabel("Original Allele Frequency", fontsize=12)
+        ax.set_ylabel("New Allele Frequency", fontsize=12)
+        cb = fig.colorbar(hb, ax=ax)
+        cb.set_label("Counts")
+
+    plt.tight_layout()
+    plt.savefig("plots/afs_hexbin.png")
+    plt.show()
+
+
+def plot_af_delta_histogram():
+    sv_df = get_sv_stats_collapsed_df()
+    sv_df = sv_df[sv_df["num_samples"] > 0]
+    sv_df = sv_df[sv_df["num_modes"].isin([2, 3])]
+
+    # calculate delta ratios
+    delta_ratios = []
+    for _, row in sv_df.iterrows():
+        n_homozygous = 0
+        n_heterozygous = 0
+        modes = ast.literal_eval(row["modes"])
+        mode_afs = []
+
+        for mode in modes:
+            n_homozygous += mode["num_homozygous"]
+            n_heterozygous += mode["num_heterozygous"]
+            af = calc_af(mode["num_homozygous"], mode["num_heterozygous"], 2504)
+            mode_afs.append(af)
+
+        original_af = calc_af(n_homozygous, n_heterozygous, 2504)
+        for af in mode_afs:
+            if original_af > 0:
+                delta = af / original_af
+                delta_ratios.append(delta)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    # separate into regions
+    delta_star = 0.2  # TODO: pick a different threshold?
+    ax.axvspan(
+        0,
+        delta_star,
+        color=COLORS[0],
+        alpha=0.3,
+        label="A: Rare SVs/singletons",
+    )
+    ax.axvspan(
+        delta_star,
+        1 - delta_star,
+        color=COLORS[1],
+        alpha=0.3,
+        label="B: Evenly split SVs",
+    )
+    ax.axvspan(
+        1 - delta_star,
+        1.5,
+        color=COLORS[2],
+        alpha=0.3,
+        label="C: Common variants",
+    )
+    ax.axvline(
+        delta_star,
+        color="red",
+        linestyle="--",
+        label=f"Δ* Threshold={delta_star}",
+    )
+
+    bins = np.linspace(0, 1.5, 50)
+    ax.hist(
+        delta_ratios, bins=bins, color="black", alpha=0.8, edgecolor="white"
+    )
+    ax.set_xlim(-0.005, 1.015)
+
+    ax.set_xlabel("New AF / Original AF", fontsize=14)
+    ax.set_ylabel("Count", fontsize=14)
+    ax.tick_params(axis="both", labelsize=14)
+    ax.legend(
+        loc="upper right",
+        bbox_to_anchor=(1, 1),
+        fontsize=12,
+        borderaxespad=0.5,
+    )
+    plt.tight_layout()
+    plt.savefig("plots/af_delta_histogram.png")
+    plt.savefig("plots/af_delta_histogram.svg")
+    plt.show()
 
 
 def draw_conceptual_clusters(
