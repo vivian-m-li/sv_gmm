@@ -1046,28 +1046,61 @@ def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
     for i, row in ancestry_df.iterrows():
         population_lookup[row["Population code"]] = row["Superpopulation code"]
 
-    fig, ax = plt.subplots(figsize=(12, 12))
+    fig, ax = plt.subplots(figsize=(6, 6))
     im = ax.imshow(comparisons, cmap="Blues", interpolation="nearest")
-    ax.set_xticks(range(len(populations)))
     ax.set_yticks(range(len(populations)))
-    ax.set_xticklabels(populations)
-    ax.set_yticklabels(populations)
+    ax.set_xticklabels([])
+    ax.set_xticks([])
+    ax.set_yticklabels(populations, fontsize=12)
+    ax.text(7, -3.25, "Superpopulation", fontsize=14)
+    # ax.set_xlabel("Superpopulation", fontsize=14, labelpad=20)
+    ax.set_ylabel("Population" if by == "population" else "", fontsize=14)
+    ax.set_ylim(len(populations) - 0.5, -2.5)
     if by == "population":
         superpop_seen = set()
         for i, label in enumerate(populations):
             superpop = population_lookup[label]
             if superpop not in superpop_seen:
                 ax.text(
-                    i,
+                    i + 0.03,
                     -1,
                     superpop,
-                    ha="center",
-                    va="center",
-                    fontsize=12,
-                    color=ANCESTRY_COLORS[superpop],
+                    fontsize=14,
+                    zorder=2,
                 )
                 superpop_seen.add(superpop)
-    plt.colorbar(im)
+            rect = patches.Rectangle(
+                (i - 0.5, -2.5),
+                1,
+                2,
+                linewidth=0,
+                edgecolor="none",
+                facecolor=ANCESTRY_COLORS[superpop],
+                alpha=0.9,
+                zorder=1,
+            )
+            ax.add_patch(rect)
+
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    rect_border = patches.Rectangle(
+        (-0.5, -0.5),
+        len(populations),
+        len(populations),
+        linewidth=1,
+        edgecolor="black",
+        facecolor="none",
+        zorder=3,
+    )
+    ax.add_patch(rect_border)
+    cbar = plt.colorbar(im, fraction=0.046, pad=0.1)
+    cbar.ax.tick_params(labelsize=14)
+    ax.tick_params(bottom=False, top=False, labelbottom=False)
+    plt.savefig("plots/ancestry_comparison.png", bbox_inches="tight")
+    plt.savefig(
+        "plots/ancestry_comparison.eps", format="eps", bbox_inches="tight"
+    )
     plt.show()
 
 
