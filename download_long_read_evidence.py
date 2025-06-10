@@ -35,7 +35,27 @@ def get_svs_by_sample():
     lookup_df.to_csv("long_reads/sample_sv_lookup.csv", index=False)
 
 
-def get_samples_to_redo():
+def write_samples_to_redo():
+    # read all samples that need to be redone
+    # run this in the sv directory in fiji
+    sample_ids = set()
+    for file in os.listdir("eofiles"):
+        if not file.endswith(".out"):
+            continue
+        with open(os.path.join("eofiles", file), "r") as f:
+            for line in f.readlines():
+                pattern = f"Redo sample [\S]+-([\S]+)"
+                match = re.search(pattern, line)
+                if match:
+                    sample_id = match.group(1)
+                    sample_ids.add(sample_id)
+    with open("/Users/vili4418/sv/sv_gmm/long_reads/redo_samples.txt", "w") as f:
+        for sample_id in sample_ids:
+            f.write(f"{sample_id}\n")
+
+
+
+def get_samples_to_redo()
     file = "long_reads/redo_samples.txt"
     samples = {}
     with open(file, "r") as f:
