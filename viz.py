@@ -318,18 +318,16 @@ def plot_evidence_by_mode(
     )
 
     # Plot the pie chart
-    # TODO: fix text labels
     pie_ax = fig.add_axes([0.36, 0.68, 0.25, 0.25])
     counts = [len(mode) for mode in evidence_by_mode]
     total_population = sum(counts)
     mode_percentages = [count / total_population for count in counts]
     pie_ax.pie(
         mode_percentages,
-        labels=[f"{count}" for count in counts],
-        autopct="%1.1f%%",
         colors=COLORS[: len(mode_indices)],
         startangle=90,
     )
+    pie_ax.set_title("Samples per Cluster", fontsize=10, pad=-10)
     pie_ax.set_aspect("equal")
 
 
@@ -557,11 +555,12 @@ def plot_2d_coords(
         ax_main.text(
             gmm.mu[0][0],
             gmm.mu[0][1],
-            f"n={len(mode)}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}\nAvg. num reads/sample: {np.mean(num_evidence):.1f}\nMean insert size: {int(np.mean(mean_insert_sizes))}",
+            f"n={len(mode)}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}",
+            # f"n={len(mode)}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}\nAvg. num reads/sample: {np.mean(num_evidence):.1f}\nMean insert size: {int(np.mean(mean_insert_sizes))}",
             fontsize=10,
             ha="center",
             va="center",
-            bbox=dict(facecolor="white", alpha=0.5, edgecolor="none"),
+            bbox=dict(facecolor="white", alpha=0.7, edgecolor="none"),
             zorder=10,
         )
 
@@ -584,14 +583,13 @@ def plot_2d_coords(
         ax_xhist = ax_main.inset_axes([0, 1, 1, 0.2], sharex=ax_main)
         mean_x, std_x = np.mean(x[:, 0]), np.std(x[:, 0])
         x_vals = np.linspace(mean_x - 3 * std_x, mean_x + 3 * std_x, 100)
-        # TODO: fix zorder
-        zorder = i
+        zorder = 10 - i
         ax_xhist.plot(
             x_vals,
             norm.pdf(x_vals, mean_x, std_x),
             color=COLORS[i],
             linewidth=2,
-            alpha=0.9,
+            alpha=0.8,
             zorder=zorder,
         )
         ax_xhist.fill_between(
@@ -602,8 +600,11 @@ def plot_2d_coords(
             zorder=zorder,
         )
         ax_xhist.axis("off")
+        # set the zorder of the axes so the gaussians are plotted in the correct order
+        ax_xhist.set_zorder(zorder - 1)
 
         ax_yhist = ax_main.inset_axes([1, 0, 0.2, 1], sharey=ax_main)
+        ax_yhist.set_zorder(zorder - 1)
         mean_y, std_y = np.mean(x[:, 1]), np.std(x[:, 1])
         y_vals = np.linspace(mean_y - 3 * std_y, mean_y + 3 * std_y, 100)
         ax_yhist.plot(
@@ -611,7 +612,7 @@ def plot_2d_coords(
             y_vals,
             color=COLORS[i],
             linewidth=2,
-            alpha=0.9,
+            alpha=0.8,
             zorder=zorder,
         )
         ax_yhist.fill_betweenx(
@@ -619,7 +620,7 @@ def plot_2d_coords(
             0,
             norm.pdf(y_vals, mean_y, std_y),
             color=COLORS[i],
-            alpha=0.9,
+            alpha=0.8,
             zorder=zorder,
         )
         ax_yhist.axis("off")
@@ -659,7 +660,7 @@ def plot_single_sv(
     )
     plt.tight_layout()
     plt.subplots_adjust(
-        left=0.02, right=0.93, bottom=0.17, top=0.85, wspace=0.25, hspace=0
+        left=0.02, right=0.93, bottom=0.24, top=0.83, wspace=0.25, hspace=0
     )
     plot_title = f"plots/{sv_id}{'' if sv_id == '' else '_'}evidence_by_mode"
     plt.savefig(f"{plot_title}.pdf")
@@ -1765,6 +1766,33 @@ def plot_synthetic_data_figure():
     fontsize = 14
     plot_d_accuracy_by_case_all(fig, gs1, fontsize=fontsize)
     draw_conceptual_clusters_all(fig, gs2, fontsize=fontsize)
+    fig.text(
+        0.025,
+        0.98,
+        "A)",
+        fontsize=fontsize,
+        fontweight="bold",
+        ha="center",
+        va="center",
+    )
+    fig.text(
+        0.6,
+        0.98,
+        "B)",
+        fontsize=fontsize,
+        fontweight="bold",
+        ha="center",
+        va="center",
+    )
+    fig.text(
+        0.025,
+        0.3,
+        "C)",
+        fontsize=fontsize,
+        fontweight="bold",
+        ha="center",
+        va="center",
+    )
     plt.tight_layout()
     plt.subplots_adjust(
         left=0.07, right=0.985, top=0.975, bottom=0.05, wspace=0.0, hspace=0.0
@@ -2032,6 +2060,6 @@ def long_read_comparison():
     print(sv_df.sort_values("abs_deviation").head(10))
 
 
-plot_synthetic_data_figure()
+# plot_synthetic_data_figure()
 # plot_af_delta_histogram()
 # compare_sv_ancestry_by_mode(by="population")
