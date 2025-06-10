@@ -13,6 +13,7 @@ from Bio import SeqIO, Seq
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.cm as cm
+from matplotlib.colors import ListedColormap
 from brokenaxes import brokenaxes
 from matplotlib.ticker import FixedLocator, StrMethodFormatter
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
@@ -38,6 +39,7 @@ from gmm_types import (
     GMM_MODELS,
     SUPERPOPULATIONS,
     SUBPOPULATIONS,
+    SYNTHETIC_DATA_CENTROIDS,
 )
 
 REFERENCE_FILE = "hs37d5.fa.gz"
@@ -638,12 +640,10 @@ def get_svs_intersecting_genes(df: pd.DataFrame):
     return df[df["id"].isin(intersecting_svs)]
 
 
-"""
-Plots the rectangle shapes showing the distribution of all SVs and how they're split
-"""
-
-
 def plot_processed_sv_stats(filter_intersecting_genes: bool = False):
+    """
+    Plots the rectangle shapes showing the distribution of all SVs and how they're split
+    """
     df = get_sv_stats_collapsed_df()
     df = df[df["num_samples"] > 0]
 
@@ -808,12 +808,10 @@ def plot_processed_sv_stats(filter_intersecting_genes: bool = False):
     plt.show()
 
 
-"""
-For each # of modes, plots a boxplot of the sample size for each SV
-"""
-
-
 def plot_sample_size_per_mode(filter_intersecting_genes: bool = False):
+    """
+    For each # of modes, plots a boxplot of the sample size for each SV
+    """
     df = get_sv_stats_collapsed_df()
     if filter_intersecting_genes:
         df = get_svs_intersecting_genes(df)
@@ -840,12 +838,10 @@ def plot_sample_size_per_mode(filter_intersecting_genes: bool = False):
     plt.show()
 
 
-"""
-For an SV, plots the evidence that has been removed due to not enough evidence or deviation from the y=x+b line
-"""
-
-
 def plot_removed_evidence(sv_evidence: List[Evidence], L: int, R: int):
+    """
+    For an SV, plots the evidence that has been removed due to not enough evidence or deviation from the y=x+b line
+    """
     plt.figure(figsize=(15, 8))
     colors = {0: "grey", 1: "red", 2: "orange", 3: "blue"}
     evidence_sorted = {0: [], 1: [], 2: [], 3: []}
@@ -916,17 +912,15 @@ def query_sample(sample: str, chr: str, L: int, R: int):
     return sequence
 
 
-"""
-Populates each sample with its sex, population, and superpopulation information
-"""
-
-
 def populate_sample_info(
     sv_evidence: List[Evidence],
     chr: str,
     L: int,
     R: int,
 ) -> None:
+    """
+    Populates each sample with its sex, population, and superpopulation information
+    """
     ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
     deletions_df = pd.read_csv(f"1kgp/deletions_by_chr/chr{chr}.csv")
     deletions_row = deletions_df[
@@ -948,12 +942,10 @@ def populate_sample_info(
         )
 
 
-"""
-Plots a bar chart of the total ancestry and superancestry counts from the 1000 Genomes samples
-"""
-
-
 def analyze_ancestry() -> None:
+    """
+    Plots a bar chart of the total ancestry and superancestry counts from the 1000 Genomes samples
+    """
     df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
     population_data = Counter()
     superpopulation_data = Counter()
@@ -1055,37 +1047,68 @@ def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
     for i, row in ancestry_df.iterrows():
         population_lookup[row["Population code"]] = row["Superpopulation code"]
 
-    fig, ax = plt.subplots(figsize=(12, 12))
+    fig, ax = plt.subplots(figsize=(6, 6))
     im = ax.imshow(comparisons, cmap="Blues", interpolation="nearest")
-    ax.set_xticks(range(len(populations)))
     ax.set_yticks(range(len(populations)))
-    ax.set_xticklabels(populations)
-    ax.set_yticklabels(populations)
+    ax.set_xticklabels([])
+    ax.set_xticks([])
+    ax.set_yticklabels(populations, fontsize=12)
+    ax.text(7, -3.25, "Superpopulation", fontsize=14)
+    # ax.set_xlabel("Superpopulation", fontsize=14, labelpad=20)
+    ax.set_ylabel("Population" if by == "population" else "", fontsize=14)
+    ax.set_ylim(len(populations) - 0.5, -2.5)
     if by == "population":
         superpop_seen = set()
         for i, label in enumerate(populations):
             superpop = population_lookup[label]
             if superpop not in superpop_seen:
                 ax.text(
-                    i,
+                    i + 0.03,
                     -1,
                     superpop,
-                    ha="center",
-                    va="center",
-                    fontsize=12,
-                    color=ANCESTRY_COLORS[superpop],
+                    fontsize=14,
+                    zorder=2,
                 )
                 superpop_seen.add(superpop)
-    plt.colorbar(im)
+            rect = patches.Rectangle(
+                (i - 0.5, -2.5),
+                1,
+                2,
+                linewidth=0,
+                edgecolor="none",
+                facecolor=ANCESTRY_COLORS[superpop],
+                alpha=0.9,
+                zorder=1,
+            )
+            ax.add_patch(rect)
+
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    rect_border = patches.Rectangle(
+        (-0.5, -0.5),
+        len(populations),
+        len(populations),
+        linewidth=1,
+        edgecolor="black",
+        facecolor="none",
+        zorder=3,
+    )
+    ax.add_patch(rect_border)
+    cbar = plt.colorbar(im, fraction=0.046, pad=0.1)
+    cbar.ax.tick_params(labelsize=14)
+    ax.tick_params(bottom=False, top=False, labelbottom=False)
+    plt.savefig("plots/ancestry_comparison.png", bbox_inches="tight")
+    plt.savefig(
+        "plots/ancestry_comparison.eps", format="eps", bbox_inches="tight"
+    )
     plt.show()
 
 
-"""
-Plots the allele frequencies for the SVs before and after being split by SVeperator
-"""
-
-
 def plot_afs():
+    """
+    Plots the allele frequencies for the SVs before and after being split by SVeperator
+    """
     sv_df = get_sv_stats_collapsed_df()
     sv_df = sv_df[sv_df["num_samples"] > 0]
     # calc afs for all 3
@@ -1173,12 +1196,275 @@ def plot_afs():
         plt.show()
 
 
-"""
-Plots the accuracy of each of the GMM models for each example (see Figure 2) and distance
-"""
+def plot_afs_hexbin():
+    """
+    Plots hexbin maps of allele frequencies for 2- and 3-mode SVs.
+    """
+    sv_df = get_sv_stats_collapsed_df()
+    sv_df = sv_df[
+        (sv_df["num_samples"] > 0) & (sv_df["num_modes"].isin([2, 3]))
+    ]
+
+    afs = {2: ([], []), 3: ([], [])}
+
+    for _, row in sv_df.iterrows():
+        num_modes = row["num_modes"]
+        modes = ast.literal_eval(row["modes"])
+        x = afs[num_modes][0]
+        y = afs[num_modes][1]
+
+        n_homozygous = 0
+        n_heterozygous = 0
+
+        for mode in modes:
+            n_homozygous += mode["num_homozygous"]
+            n_heterozygous += mode["num_heterozygous"]
+
+            af = calc_af(
+                mode["num_homozygous"],
+                mode["num_heterozygous"],
+                2504,
+            )
+            y.append(af)
+
+        original_af = calc_af(n_homozygous, n_heterozygous, 2504)
+        for _ in modes:
+            x.append(original_af)
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+    for num_modes, ax in zip([2, 3], axes):
+        x, y = afs[num_modes]
+
+        orig_cmap = cm.get_cmap("Blues")
+        new_colors = orig_cmap(np.linspace(0.2, 1, 256))
+        darker_blues = ListedColormap(new_colors)
+        hb = ax.hexbin(x, y, gridsize=40, cmap=darker_blues, mincnt=1)
+
+        # Add identity line
+        plot_lim = max(max(x), max(y)) + 0.01
+        ax.plot([0, plot_lim], [0, plot_lim], linestyle="--", color="darkgrey")
+
+        ax.set_xlim(0, plot_lim)
+        ax.set_ylim(0, plot_lim)
+        ax.set_xlabel("Original Allele Frequency", fontsize=12)
+        ax.set_ylabel("New Allele Frequency", fontsize=12)
+        cb = fig.colorbar(hb, ax=ax)
+        cb.set_label("Counts")
+
+    plt.tight_layout()
+    plt.savefig("plots/afs_hexbin.png")
+    plt.show()
+
+
+def plot_af_delta_histogram():
+    sv_df = get_sv_stats_collapsed_df()
+    sv_df = sv_df[sv_df["num_samples"] > 0]
+    sv_df = sv_df[sv_df["num_modes"].isin([2, 3])]
+
+    # calculate delta ratios
+    delta_ratios = []
+    for _, row in sv_df.iterrows():
+        n_homozygous = 0
+        n_heterozygous = 0
+        modes = ast.literal_eval(row["modes"])
+        mode_afs = []
+
+        for mode in modes:
+            n_homozygous += mode["num_homozygous"]
+            n_heterozygous += mode["num_heterozygous"]
+            af = calc_af(mode["num_homozygous"], mode["num_heterozygous"], 2504)
+            mode_afs.append(af)
+
+        original_af = calc_af(n_homozygous, n_heterozygous, 2504)
+        for af in mode_afs:
+            if original_af > 0:
+                delta = af / original_af
+                delta_ratios.append(delta)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    # separate into regions
+    delta_star = 0.2  # TODO: pick a different threshold?
+    ax.axvspan(
+        0,
+        delta_star,
+        color=COLORS[0],
+        alpha=0.3,
+        label="A: Rare SVs/singletons",
+    )
+    ax.axvspan(
+        delta_star,
+        1 - delta_star,
+        color=COLORS[1],
+        alpha=0.3,
+        label="B: Evenly split SVs",
+    )
+    ax.axvspan(
+        1 - delta_star,
+        1.5,
+        color=COLORS[2],
+        alpha=0.3,
+        label="C: Common variants",
+    )
+    ax.axvline(
+        delta_star,
+        color="red",
+        linestyle="--",
+        label=f"Δ* Threshold={delta_star}",
+    )
+
+    bins = np.linspace(0, 1.5, 50)
+    ax.hist(
+        delta_ratios, bins=bins, color="black", alpha=0.8, edgecolor="white"
+    )
+    ax.set_xlim(-0.005, 1.015)
+
+    ax.set_xlabel("New AF / Original AF", fontsize=14)
+    ax.set_ylabel("Count", fontsize=14)
+    ax.tick_params(axis="both", labelsize=14)
+    ax.legend(
+        loc="upper right",
+        bbox_to_anchor=(1, 1),
+        fontsize=12,
+        borderaxespad=0.5,
+    )
+    plt.tight_layout()
+    plt.savefig("plots/af_delta_histogram.png")
+    plt.savefig("plots/af_delta_histogram.svg")
+    plt.show()
+
+
+def draw_conceptual_clusters(
+    ax1, ax2, case, n_per_cluster: int = 100, *, fontsize: int = 12
+):
+    lr_centroids = np.array(SYNTHETIC_DATA_CENTROIDS[case])
+    cluster_spread = 50
+
+    centroids = []
+    clusters = []
+    for lr_center in lr_centroids:
+        center = np.array([lr_center[0], lr_center[1] - lr_center[0]])
+        centroids.append(center)
+        points = np.random.normal(
+            loc=center, scale=cluster_spread, size=(n_per_cluster, 2)
+        ).astype(int)
+        clusters.append(points)
+    centroids = np.array(centroids)
+
+    for i, points in enumerate(clusters):
+        ax2.scatter(points[:, 0], points[:, 1], color=COLORS[i], s=10)
+
+    # draw lines between centroids
+    center1 = (
+        centroids[0] if case != "E" else (100500, 2278)
+    )  # midpoint between sv1 and sv2
+    center2 = centroids[1] if len(centroids) == 2 else centroids[2]
+    ax2.plot(
+        [center1[0], center2[0]],
+        [center1[1], center2[1]],
+        linewidth=2,
+        color="black",
+    )
+
+    padding = [0, 0]
+    match case:
+        case "A":
+            padding = [50, 50]
+        case "B":
+            padding = [0, 25]
+        case "C":
+            padding = [0, 25]
+        case "D":
+            padding = [60, -60]
+        case "E":
+            padding = [60, -60]
+
+    ax2.text(
+        (center1[0] + center2[0]) / 2 + padding[0],
+        (center1[1] + center2[1]) / 2 + padding[1],
+        "d",
+        fontsize=fontsize,
+        ha="center",
+        va="center",
+    )
+
+    if case == "E":
+        ax2.plot(
+            [centroids[0][0], centroids[1][0]],
+            [centroids[0][1], centroids[1][1]],
+            linestyle="--",
+            color="black",
+        )
+        ax2.scatter([100500], [2278], color="black", s=30)
+
+    ax2.set_xticks([])
+    ax2.set_yticks([])
+    ax2.spines["left"].set_linewidth(2)
+    ax2.spines["bottom"].set_linewidth(2)
+    ax2.spines["top"].set_visible(False)
+    ax2.spines["right"].set_visible(False)
+
+    # draw the patches representing the coordinate space
+    x_min = lr_centroids.min() - 100
+    x_max = lr_centroids.max() + 100
+    y_offset = 0
+    for i, (L, R) in enumerate(lr_centroids):
+        ax1.plot(
+            [x_min, L - 10],
+            [y_offset + 0.1, y_offset + 0.1],
+            color="black",
+            linewidth=2,
+        )
+        ax1.plot(
+            [R + 10, x_max],
+            [y_offset + 0.1, y_offset + 0.1],
+            color="black",
+            linewidth=2,
+        )
+        ax1.add_patch(
+            patches.Rectangle(
+                (L, y_offset),
+                R - L,
+                0.2,
+                color=COLORS[i],
+            )
+        )
+        y_offset += 0.25
+
+    ax1.set_xlim(x_min, x_max)
+    ax1.set_ylim(0, 1)
+    ax1.axis("off")
+
+
+def draw_conceptual_clusters_all(
+    fig, gs, *, fontsize: int = 12, n_per_cluster: int = 100
+):
+    for i, case in enumerate(["A", "B", "C", "D", "E"]):
+        ax1 = fig.add_subplot(gs[3, i])
+        ax2 = fig.add_subplot(gs[4, i])
+        pos1 = ax1.get_position()
+        pos2 = ax2.get_position()
+        dx = 0.1
+        ax1.set_position([pos1.x0 + dx, pos1.y0, pos1.width, pos1.height])
+        ax2.set_position([pos2.x0 + dx, pos2.y0, pos2.width, pos2.height])
+        draw_conceptual_clusters(
+            ax1, ax2, case, n_per_cluster, fontsize=fontsize
+        )
+    fig.text(0.5, 0.01, "L", fontsize=fontsize, ha="center")
+    fig.text(
+        0.04,
+        0.13,
+        "Length",
+        fontsize=fontsize,
+        va="center",
+        rotation="vertical",
+    )
 
 
 def plot_d_accuracy_by_n(n_samples: int):
+    """
+    Plots the accuracy of each of the GMM models for each example (see Figure 2) and distance
+    """
     file = f"synthetic_data/results{n_samples}.csv"
     if not os.path.exists(file):
         print(f"File for {n_samples} samples does not exist")
@@ -1219,7 +1505,16 @@ def plot_d_accuracy_by_n(n_samples: int):
     plt.show()
 
 
-def plot_d_accuracy_by_case(case: str, show_n_plots: bool = True):
+def plot_d_accuracy_by_case(
+    ax_large,
+    case: str,
+    show_n_plots: bool = True,
+    *,
+    show_legend: bool = False,
+    show_yticks: bool = True,
+    show_xticks: bool = True,
+    fontsize: int = 12,
+):
     files = [
         f
         for f in os.listdir("synthetic_data")
@@ -1283,18 +1578,12 @@ def plot_d_accuracy_by_case(case: str, show_n_plots: bool = True):
         axs_small = [
             fig.add_subplot(gs[1, i]) for i in range(len(vals_to_plot))
         ]
-    else:
-        fig, ax_large = plt.subplots(figsize=(7, 5))
 
     for i, model in enumerate(GMM_MODELS):
         color = COLORS[i]
         vals = d_acc_vals[model]
         ax_large.plot(n_samples, vals, label=model, color=color)
         ax_large.scatter(n_samples, vals, color=color)
-        ax_large.set_ylim(-10, 1100 if case in ["D", "E"] else 500)
-        ax_large.legend(loc="upper right")
-        ax_large.set_xlabel("Number of samples (N)", fontsize=12)
-        ax_large.set_ylabel("Distance at 80% Accuracy (d$^*$)", fontsize=12)
 
         if show_n_plots:
             for j, ax in enumerate(axs_small):
@@ -1317,8 +1606,77 @@ def plot_d_accuracy_by_case(case: str, show_n_plots: bool = True):
                     )
             fig.text(0.5, 0.0, "Distance (d)", ha="center", fontsize=12)
 
-    # plt.suptitle(f"Test Case {case}", fontsize=18)
+    # set the y_lim appropriately
+    ax_large.set_ylim(-10, 1100 if case in ["D", "E"] else 200)
+    ax_large.tick_params(axis="both", labelsize=fontsize)
+    for spine in ["left", "bottom", "top", "right"]:
+        ax_large.spines[spine].set_linewidth(2)
+    if show_legend:
+        ax_large.legend(loc="upper right", fontsize=fontsize)
+    if not show_xticks:
+        ax_large.set_xticks([])
+    if not show_yticks:
+        ax_large.set_yticks([])
+
+
+def plot_d_accuracy_by_case_all(fig, gs, *, fontsize: int = 12):
+    ax1_big = fig.add_subplot(gs[0:2, 0:3])
+    ax_small_1 = fig.add_subplot(gs[0, 4])
+    ax_small_2 = fig.add_subplot(gs[0, 5])
+    ax_small_3 = fig.add_subplot(gs[1, 4])
+    ax_small_4 = fig.add_subplot(gs[1, 5])
+    horizontal_pad = 0.2
+    for case, ax in zip(
+        ["A", "B", "C", "D", "E"],
+        [ax1_big, ax_small_1, ax_small_2, ax_small_3, ax_small_4],
+    ):
+        show_legend = case == "A"
+        show_xticks = case not in ["B", "C"]
+        show_yticks = case not in ["C", "E"]
+        pos = ax.get_position()
+        ax.set_position(
+            [pos.x0 + horizontal_pad, pos.y0, pos.width, pos.height]
+        )
+        plot_d_accuracy_by_case(
+            ax,
+            case,
+            False,
+            show_legend=show_legend,
+            show_yticks=show_yticks,
+            show_xticks=show_xticks,
+            fontsize=fontsize,
+        )
+    fig.text(0.5, 0.31, "Number of samples (N)", fontsize=fontsize, ha="center")
+    fig.text(
+        0.005,
+        0.67,
+        "Distance at 80% Accuracy (d$^*$)",
+        fontsize=fontsize,
+        va="center",
+        rotation="vertical",
+    )
+
+
+def plot_synthetic_data_figure():
+    fig = plt.figure(figsize=(12, 7))
+    gs1 = GridSpec(
+        5,
+        6,
+        figure=fig,
+        height_ratios=[1, 1, 0.15, 0.4, 0.6],
+        width_ratios=[1, 1, 1, 0.29, 1, 1],
+    )
+    gs2 = GridSpec(5, 5, figure=fig, height_ratios=[1, 1, 0.15, 0.4, 0.6])
+    gs2.update(wspace=0.12)
+    fontsize = 14
+    plot_d_accuracy_by_case_all(fig, gs1, fontsize=fontsize)
+    draw_conceptual_clusters_all(fig, gs2, fontsize=fontsize)
     plt.tight_layout()
+    plt.subplots_adjust(
+        left=0.07, right=0.985, top=0.975, bottom=0.05, wspace=0.0, hspace=0.0
+    )
+    fig.savefig("plots/synthetic_data.png")
+    fig.savefig("plots/synthetic_data.eps", format="eps")
     plt.show()
 
 
