@@ -255,6 +255,7 @@ def query_stix(
                 R=stop,
                 plot=plot,
                 plot_bokeh=False,
+                sv_id=sv_id,
             )
         else:
             run_dirichlet(

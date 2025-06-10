@@ -9,8 +9,7 @@ from em_1d import run_gmm as run_gmm_1d
 from viz import (
     populate_sample_info,
     get_evidence_by_mode,
-    plot_2d_coords,
-    plot_evidence_by_mode,
+    plot_single_sv,
 )
 from gmm_types import Evidence, Sample
 
@@ -465,6 +464,7 @@ def run_viz_gmm(
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
     insert_size_lookup: Optional[Dict[str, int]] = None,
     min_pairs: int = 5,
+    sv_id: Optional[str] = None,
 ):
     if insert_size_lookup is None:
         insert_size_lookup = get_insert_size_lookup()
@@ -517,22 +517,14 @@ def run_viz_gmm(
         gmm, sv_evidence, L, R, gmm_model=gmm_model
     )
     if plot:
-        plot_evidence_by_mode(evidence_by_mode)
-        plot_2d_coords(
+        plot_single_sv(
             evidence_by_mode,
+            sv_id=sv_id,
             axis1="L",
             axis2="Length",
             add_error_bars=False,
             size_by="insert_size",
             color_by="mode",
         )
-        # plot_2d_coords(
-        #     evidence_by_mode,
-        #     axis1="L",
-        #     axis2="R",
-        #     add_error_bars=False,
-        #     color_by="sequencing_center",
-        #     size_by="insert_size",
-        # )
 
     return gmm, evidence_by_mode

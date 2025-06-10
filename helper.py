@@ -441,15 +441,18 @@ def get_n_modes():
         rows = df[df["id"] == sv_id]
 
         # if the GMM didn't run at all on a sample, label it as 1 mode with high confidence
-        if len(rows) == 1 and rows["num_iterations"].values[0] == 0:
-            sv_df.loc[len(sv_df)] = [sv_id, 1, "high", np.NaN]
+        # or GMM defaulted to 1 mode because there were too few samples
+        if (len(rows) == 1 and rows["num_iterations"].values[0] == 0) or rows[
+            "num_samples"
+        ].values[0] < 10:
+            sv_df.loc[len(sv_df)] = [sv_id, 1, "inconclusive", np.nan]
             continue
 
         outcomes = rows["num_modes"].values
         counter = Counter(outcomes)
         most_common = counter.most_common(2)
         num_modes = max(1, most_common[0][0])
-        num_modes_2 = int(most_common[1][0]) if len(counter) > 1 else np.NaN
+        num_modes_2 = int(most_common[1][0]) if len(counter) > 1 else np.nan
 
         p, var = calculate_posteriors_from_trials(outcomes)
         ci = calculate_ci(p, var, len(outcomes))

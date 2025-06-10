@@ -37,6 +37,7 @@ from gmm_types import (
     COLORS,
     GMM_AXES,
     GMM_MODELS,
+    MODEL_NAMES,
     SUPERPOPULATIONS,
     SUBPOPULATIONS,
     SYNTHETIC_DATA_CENTROIDS,
@@ -141,13 +142,14 @@ def add_color_noise(hex_color: str):
     return "#{:02x}{:02x}{:02x}".format(*new_rgb)
 
 
-def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
+def plot_evidence_by_mode(
+    fig,
+    gs,
+    evidence_by_mode: List[List[Evidence]],
+):
     num_modes = len(evidence_by_mode)
     mode_indices = list(range(num_modes))
     mode_indices_reversed = mode_indices[::-1]
-
-    fig = plt.figure(figsize=(15, 8))
-    gs = GridSpec(1, 2, width_ratios=[1, 5], figure=fig, wspace=0.33)
 
     # Loop through data
     max_max_l = -np.inf
@@ -198,7 +200,7 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
                     color="black",
                 )
 
-    left_ax.set_xlabel("Proportion", labelpad=20, fontsize=12)
+    left_ax.set_xlabel("Proportion", labelpad=18, fontsize=12)
     left_ax.yaxis.set_ticks([])
     left_ax.yaxis.set_ticklabels([])
     for spine_name, spine in left_ax.spines.items():
@@ -215,9 +217,12 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
             (min_min_r - 50, min_min_r + x_distance + 20),
         ),
         hspace=0.05,
-        fig=fig,
-        subplot_spec=gs[1],
+        wspace=0.2,
+        subplot_spec=gs[0, 1],
     )
+    [
+        x.remove() for x in bax.diag_handles
+    ]  # remove diagonal lines since I can't get the positioning correct
 
     # SV plot
     min_y = np.inf
@@ -291,11 +296,13 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
         ax.yaxis.set_ticks([])
         ax.yaxis.set_ticklabels([])
         ax.tick_params(axis="y", length=0)
+        ax.tick_params(axis="x", labelrotation=15)
         ax.xaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
         ax.yaxis.set_major_locator(
             FixedLocator([mode + 1 for mode in mode_indices])
         )
     bax.locator_params(axis="x", nbins=4)
+    bax.set_xlabel("Paired Ends", labelpad=35, fontsize=12)
 
     # Add the legend
     handles = [
@@ -306,14 +313,13 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
         handles[::-1],
         list(ANCESTRY_COLORS.keys())[::-1],
         loc="center left",
-        bbox_to_anchor=(-0.17, 0.9),
+        bbox_to_anchor=(-0.18, 0.9),
         title="Superpopulation",
     )
 
-    bax.set_xlabel("Paired Ends", labelpad=30, fontsize=12)
-
     # Plot the pie chart
-    pie_ax = fig.add_axes([0.3, 0.7, 0.25, 0.25])
+    # TODO: fix text labels
+    pie_ax = fig.add_axes([0.36, 0.68, 0.25, 0.25])
     counts = [len(mode) for mode in evidence_by_mode]
     total_population = sum(counts)
     mode_percentages = [count / total_population for count in counts]
@@ -325,7 +331,6 @@ def plot_evidence_by_mode(evidence_by_mode: List[List[Evidence]]):
         startangle=90,
     )
     pie_ax.set_aspect("equal")
-    plt.show()
 
 
 def plot_sequence(
@@ -451,6 +456,7 @@ def plot_sv_coords(evidence_by_mode: List[List[Evidence]]):
 
 
 def plot_2d_coords(
+    ax_main,
     evidence_by_mode: List[List[Evidence]],
     *,
     axis1: str,
@@ -459,7 +465,6 @@ def plot_2d_coords(
     color_by: str = "mode",
     size_by="num_evidence",
 ):
-    fig, ax_main = plt.subplots(figsize=(8, 6))
     scatter_cm = cm.get_cmap("tab20").colors + cm.get_cmap("tab20b").colors
     seq_center_df = get_sample_sequencing_centers()
     insert_sizes_df = pd.read_csv("1kgp/insert_sizes.csv")
@@ -548,6 +553,7 @@ def plot_2d_coords(
                     alpha=0.6,
                 )
 
+        # manually adjust x/y for each figure
         ax_main.text(
             gmm.mu[0][0],
             gmm.mu[0][1],
@@ -556,6 +562,7 @@ def plot_2d_coords(
             ha="center",
             va="center",
             bbox=dict(facecolor="white", alpha=0.5, edgecolor="none"),
+            zorder=10,
         )
 
         # plot the 2D gaussian distributions for each cluster
@@ -575,28 +582,28 @@ def plot_2d_coords(
 
         # plot the 1D gaussian distributions along the axes
         ax_xhist = ax_main.inset_axes([0, 1, 1, 0.2], sharex=ax_main)
-        # ax_xhist.hist(
-        #     x[:, 0], bins=20, color=COLORS[i], alpha=0.6, density=True
-        # )
         mean_x, std_x = np.mean(x[:, 0]), np.std(x[:, 0])
         x_vals = np.linspace(mean_x - 3 * std_x, mean_x + 3 * std_x, 100)
+        # TODO: fix zorder
+        zorder = i
         ax_xhist.plot(
             x_vals,
             norm.pdf(x_vals, mean_x, std_x),
             color=COLORS[i],
             linewidth=2,
+            alpha=0.9,
+            zorder=zorder,
+        )
+        ax_xhist.fill_between(
+            x_vals,
+            norm.pdf(x_vals, mean_x, std_x),
+            color=COLORS[i],
+            alpha=0.8,
+            zorder=zorder,
         )
         ax_xhist.axis("off")
 
         ax_yhist = ax_main.inset_axes([1, 0, 0.2, 1], sharey=ax_main)
-        # ax_yhist.hist(
-        #     x[:, 1],
-        #     bins=20,
-        #     color=COLORS[i],
-        #     alpha=0.6,
-        #     density=True,
-        #     orientation="horizontal",
-        # )
         mean_y, std_y = np.mean(x[:, 1]), np.std(x[:, 1])
         y_vals = np.linspace(mean_y - 3 * std_y, mean_y + 3 * std_y, 100)
         ax_yhist.plot(
@@ -604,6 +611,16 @@ def plot_2d_coords(
             y_vals,
             color=COLORS[i],
             linewidth=2,
+            alpha=0.9,
+            zorder=zorder,
+        )
+        ax_yhist.fill_betweenx(
+            y_vals,
+            0,
+            norm.pdf(y_vals, mean_y, std_y),
+            color=COLORS[i],
+            alpha=0.9,
+            zorder=zorder,
         )
         ax_yhist.axis("off")
 
@@ -614,6 +631,38 @@ def plot_2d_coords(
 
     ax_main.set_xlabel(axis1, fontsize=12)
     ax_main.set_ylabel(axis2, fontsize=12)
+    ax_main.tick_params(axis="x", labelrotation=15)
+
+
+def plot_single_sv(
+    evidence_by_mode: List[List[Evidence]],
+    *,
+    sv_id: str = "",
+    axis1: str,
+    axis2: str,
+    add_error_bars: bool = False,
+    color_by: str = "mode",
+    size_by="num_evidence",
+):
+    fig = plt.figure(figsize=(12, 3))
+    gs = GridSpec(1, 3, width_ratios=[1, 5, 4], figure=fig)
+    plot_evidence_by_mode(fig, gs, evidence_by_mode)
+    ax2 = fig.add_subplot(gs[0, 2])
+    plot_2d_coords(
+        ax2,
+        evidence_by_mode,
+        axis1=axis1,
+        axis2=axis2,
+        add_error_bars=add_error_bars,
+        size_by=size_by,
+        color_by=color_by,
+    )
+    plt.tight_layout()
+    plt.subplots_adjust(
+        left=0.02, right=0.93, bottom=0.17, top=0.85, wspace=0.25, hspace=0
+    )
+    plot_title = f"plots/{sv_id}{'' if sv_id == '' else '_'}evidence_by_mode"
+    plt.savefig(f"{plot_title}.pdf")
     plt.show()
 
 
@@ -993,7 +1042,7 @@ def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
 
     populations = (
         SUPERPOPULATIONS if by == "superpopulation" else SUBPOPULATIONS
-    )
+    )[::-1]
 
     comparisons = [np.zeros(len(populations)) for _ in range(len(populations))]
     all_comparisons = [
@@ -1066,10 +1115,28 @@ def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
                     i + 0.03,
                     -1,
                     superpop,
+                    color="whitesmoke",
                     fontsize=14,
                     zorder=2,
                 )
                 superpop_seen.add(superpop)
+
+                if i != 0:
+                    ax.axhline(
+                        y=i - 0.5,
+                        color="black",
+                        linestyle="--",
+                        linewidth=0.8,
+                        zorder=10,
+                    )
+                    ax.axvline(
+                        x=i - 0.5,
+                        color="black",
+                        linestyle="--",
+                        linewidth=0.8,
+                        zorder=10,
+                    )
+
             rect = patches.Rectangle(
                 (i - 0.5, -2.5),
                 1,
@@ -1096,12 +1163,20 @@ def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
     )
     ax.add_patch(rect_border)
     cbar = plt.colorbar(im, fraction=0.046, pad=0.1)
+    cbar.set_label("Clustering Likelihood", fontsize=12, labelpad=10)
     cbar.ax.tick_params(labelsize=14)
     ax.tick_params(bottom=False, top=False, labelbottom=False)
-    plt.savefig("plots/ancestry_comparison.png", bbox_inches="tight")
-    plt.savefig(
-        "plots/ancestry_comparison.eps", format="eps", bbox_inches="tight"
+    ax.text(
+        0.5,
+        -0.1,
+        "Spacing",
+        fontsize=14,
+        color="white",
+        ha="center",
+        va="center",
+        transform=ax.transAxes,
     )
+    plt.savefig("plots/ancestry_comparison.pdf", bbox_inches="tight")
     plt.show()
 
 
@@ -1258,8 +1333,10 @@ def plot_afs_hexbin():
 
 def plot_af_delta_histogram():
     sv_df = get_sv_stats_collapsed_df()
-    sv_df = sv_df[sv_df["num_samples"] > 0]
+    sv_df = sv_df[sv_df["num_samples"] > 10]
+    original_afs = sv_df[sv_df["num_modes"] == 1]["af"].values
     sv_df = sv_df[sv_df["num_modes"].isin([2, 3])]
+    original_afs_split = sv_df["af"].values
 
     # calculate delta ratios
     delta_ratios = []
@@ -1283,59 +1360,50 @@ def plot_af_delta_histogram():
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    # separate into regions
-    delta_star = 0.2  # TODO: pick a different threshold?
-    ax.axvspan(
-        0,
-        delta_star,
-        color=COLORS[0],
-        alpha=0.3,
-        label="A: Rare SVs/singletons",
-    )
-    ax.axvspan(
-        delta_star,
-        1 - delta_star,
-        color=COLORS[1],
-        alpha=0.3,
-        label="B: Evenly split SVs",
-    )
-    ax.axvspan(
-        1 - delta_star,
-        1.5,
-        color=COLORS[2],
-        alpha=0.3,
-        label="C: Common variants",
-    )
-    ax.axvline(
-        delta_star,
-        color="red",
-        linestyle="--",
-        label=f"Δ* Threshold={delta_star}",
-    )
-
-    bins = np.linspace(0, 1.5, 50)
-    ax.hist(
-        delta_ratios, bins=bins, color="black", alpha=0.8, edgecolor="white"
-    )
+    ax.hist(delta_ratios, bins=20, color="black", alpha=0.8, edgecolor="white")
     ax.set_xlim(-0.005, 1.015)
 
-    ax.set_xlabel("New AF / Original AF", fontsize=14)
+    ax_box = ax.inset_axes([0.4, 0.65, 0.4, 0.3])
+    ax_box.boxplot(
+        [
+            original_afs[original_afs <= 0.5],
+            original_afs_split[original_afs_split <= 0.5],
+        ],
+        positions=[1, 2],
+        widths=0.4,
+        patch_artist=True,
+        boxprops=dict(facecolor="lightgrey", color="black"),
+        medianprops=dict(color="black"),
+        whiskerprops=dict(color="black"),
+        capprops=dict(color="black"),
+        flierprops=dict(marker="o", color="black", markersize=5),
+    )
+    ax_box.set_xticks([1, 2])
+    ax_box.set_xticklabels(
+        ["Unsplit SVs", "Split SVs"],
+        fontsize=12,
+    )
+    ax_box.set_ylabel("Original Allele\nFrequency", fontsize=12)
+    ax_box.set_ylim(0, 0.5)
+    ax_box.tick_params(axis="y", labelsize=12)
+    ax_box.yaxis.set_major_locator(FixedLocator(np.arange(0, 0.51, 0.1)))
+
+    ax.set_xlabel("Allele Frequency Ratio, New/Original", fontsize=14)
     ax.set_ylabel("Count", fontsize=14)
     ax.tick_params(axis="both", labelsize=14)
-    ax.legend(
-        loc="upper right",
-        bbox_to_anchor=(1, 1),
-        fontsize=12,
-        borderaxespad=0.5,
-    )
+    ax.xaxis.set_major_locator(FixedLocator(np.arange(0, 1.1, 0.2)))
+    ax.yaxis.set_major_locator(FixedLocator(np.arange(0, 181, 20)))
+    ax.xaxis.set_minor_locator(FixedLocator(np.arange(0, 1.1, 0.1)))
+    ax.yaxis.set_minor_locator(FixedLocator(np.arange(0, 181, 10)))
+    ax.tick_params(axis="x", which="minor", length=4, labelbottom=False)
+    ax.tick_params(axis="y", which="minor", length=4, labelleft=False)
     plt.tight_layout()
-    plt.savefig("plots/af_delta_histogram.png")
-    plt.savefig("plots/af_delta_histogram.svg")
+    plt.savefig("plots/af_delta_histogram.pdf")
     plt.show()
 
 
 def draw_conceptual_clusters(
-    ax1, ax2, case, n_per_cluster: int = 100, *, fontsize: int = 12
+    ax1, ax2, case, n_per_cluster: int = 50, *, fontsize: int = 12
 ):
     lr_centroids = np.array(SYNTHETIC_DATA_CENTROIDS[case])
     cluster_spread = 50
@@ -1362,7 +1430,7 @@ def draw_conceptual_clusters(
     ax2.plot(
         [center1[0], center2[0]],
         [center1[1], center2[1]],
-        linewidth=2,
+        linewidth=1.5,
         color="black",
     )
 
@@ -1399,8 +1467,8 @@ def draw_conceptual_clusters(
 
     ax2.set_xticks([])
     ax2.set_yticks([])
-    ax2.spines["left"].set_linewidth(2)
-    ax2.spines["bottom"].set_linewidth(2)
+    ax2.spines["left"].set_linewidth(1.5)
+    ax2.spines["bottom"].set_linewidth(1.5)
     ax2.spines["top"].set_visible(False)
     ax2.spines["right"].set_visible(False)
 
@@ -1441,7 +1509,7 @@ def draw_conceptual_clusters_all(
 ):
     for i, case in enumerate(["A", "B", "C", "D", "E"]):
         ax1 = fig.add_subplot(gs[3, i])
-        ax2 = fig.add_subplot(gs[4, i])
+        ax2 = fig.add_subplot(gs[5, i])
         pos1 = ax1.get_position()
         pos2 = ax2.get_position()
         dx = 0.1
@@ -1450,9 +1518,9 @@ def draw_conceptual_clusters_all(
         draw_conceptual_clusters(
             ax1, ax2, case, n_per_cluster, fontsize=fontsize
         )
-    fig.text(0.5, 0.01, "L", fontsize=fontsize, ha="center")
+    fig.text(0.5, 0.01, "L-position", fontsize=fontsize, ha="center")
     fig.text(
-        0.04,
+        0.03,
         0.13,
         "Length",
         fontsize=fontsize,
@@ -1579,11 +1647,19 @@ def plot_d_accuracy_by_case(
             fig.add_subplot(gs[1, i]) for i in range(len(vals_to_plot))
         ]
 
+    colors = ["#bfdbf7", "#1f7a8c", "#022b3a"]
+    markers = ["o", "s", "D"]
     for i, model in enumerate(GMM_MODELS):
-        color = COLORS[i]
+        color = colors[i]
         vals = d_acc_vals[model]
-        ax_large.plot(n_samples, vals, label=model, color=color)
-        ax_large.scatter(n_samples, vals, color=color)
+        ax_large.plot(
+            n_samples,
+            vals,
+            label=MODEL_NAMES[i],
+            color=color,
+            marker=markers[i],
+        )
+        ax_large.scatter(n_samples, vals, color=color, marker=markers[i])
 
         if show_n_plots:
             for j, ax in enumerate(axs_small):
@@ -1606,17 +1682,26 @@ def plot_d_accuracy_by_case(
                     )
             fig.text(0.5, 0.0, "Distance (d)", ha="center", fontsize=12)
 
-    # set the y_lim appropriately
-    ax_large.set_ylim(-10, 1100 if case in ["D", "E"] else 200)
+    ylim = [-10, 125]
+    if case in ["B", "C"]:
+        ylim = [-12, 150]
+    elif case in ["D", "E"]:
+        ylim = [-88, 1100]
+        ax_large.yaxis.set_minor_locator(FixedLocator(np.arange(0, 1100, 250)))
+    ax_large.set_ylim(ylim[0], ylim[1])
+    ax_large.set_xlim(-5, 510)
     ax_large.tick_params(axis="both", labelsize=fontsize)
+    ax_large.axhline(0, color="black", linestyle="--", linewidth=1)
     for spine in ["left", "bottom", "top", "right"]:
-        ax_large.spines[spine].set_linewidth(2)
+        ax_large.spines[spine].set_linewidth(1.5)
     if show_legend:
         ax_large.legend(loc="upper right", fontsize=fontsize)
+    ax_large.xaxis.set_minor_locator(FixedLocator(np.arange(0, 510, 100)))
+    ax_large.tick_params(axis="both", width=1.5, which="both")
     if not show_xticks:
-        ax_large.set_xticks([])
+        ax_large.set_xticklabels([])
     if not show_yticks:
-        ax_large.set_yticks([])
+        ax_large.set_yticklabels([])
 
 
 def plot_d_accuracy_by_case_all(fig, gs, *, fontsize: int = 12):
@@ -1625,7 +1710,6 @@ def plot_d_accuracy_by_case_all(fig, gs, *, fontsize: int = 12):
     ax_small_2 = fig.add_subplot(gs[0, 5])
     ax_small_3 = fig.add_subplot(gs[1, 4])
     ax_small_4 = fig.add_subplot(gs[1, 5])
-    horizontal_pad = 0.2
     for case, ax in zip(
         ["A", "B", "C", "D", "E"],
         [ax1_big, ax_small_1, ax_small_2, ax_small_3, ax_small_4],
@@ -1633,10 +1717,6 @@ def plot_d_accuracy_by_case_all(fig, gs, *, fontsize: int = 12):
         show_legend = case == "A"
         show_xticks = case not in ["B", "C"]
         show_yticks = case not in ["C", "E"]
-        pos = ax.get_position()
-        ax.set_position(
-            [pos.x0 + horizontal_pad, pos.y0, pos.width, pos.height]
-        )
         plot_d_accuracy_by_case(
             ax,
             case,
@@ -1646,9 +1726,22 @@ def plot_d_accuracy_by_case_all(fig, gs, *, fontsize: int = 12):
             show_xticks=show_xticks,
             fontsize=fontsize,
         )
-    fig.text(0.5, 0.31, "Number of samples (N)", fontsize=fontsize, ha="center")
     fig.text(
-        0.005,
+        0.33, 0.36, "Number of samples (N)", fontsize=fontsize, ha="center"
+    )
+    fig.text(
+        0.82, 0.36, "Number of samples (N)", fontsize=fontsize, ha="center"
+    )
+    fig.text(
+        0.008,
+        0.67,
+        "Distance at 80% Accuracy (d$^*$)",
+        fontsize=fontsize,
+        va="center",
+        rotation="vertical",
+    )
+    fig.text(
+        0.582,
         0.67,
         "Distance at 80% Accuracy (d$^*$)",
         fontsize=fontsize,
@@ -1660,13 +1753,14 @@ def plot_d_accuracy_by_case_all(fig, gs, *, fontsize: int = 12):
 def plot_synthetic_data_figure():
     fig = plt.figure(figsize=(12, 7))
     gs1 = GridSpec(
-        5,
+        6,
         6,
         figure=fig,
-        height_ratios=[1, 1, 0.15, 0.4, 0.6],
-        width_ratios=[1, 1, 1, 0.29, 1, 1],
+        height_ratios=[1, 1, 0.15, 0.4, 0.1, 0.6],
+        width_ratios=[1, 1, 1, 0.35, 1, 1],
     )
-    gs2 = GridSpec(5, 5, figure=fig, height_ratios=[1, 1, 0.15, 0.4, 0.6])
+    gs1.update(wspace=0.1, hspace=0.1)
+    gs2 = GridSpec(6, 5, figure=fig, height_ratios=[1, 1, 0.15, 0.4, 0.1, 0.6])
     gs2.update(wspace=0.12)
     fontsize = 14
     plot_d_accuracy_by_case_all(fig, gs1, fontsize=fontsize)
@@ -1675,8 +1769,7 @@ def plot_synthetic_data_figure():
     plt.subplots_adjust(
         left=0.07, right=0.985, top=0.975, bottom=0.05, wspace=0.0, hspace=0.0
     )
-    fig.savefig("plots/synthetic_data.png")
-    fig.savefig("plots/synthetic_data.eps", format="eps")
+    fig.savefig("plots/synthetic_data.pdf")
     plt.show()
 
 
@@ -1937,3 +2030,8 @@ def long_read_comparison():
 
     sv_df["abs_deviation"] = sv_df["deviation"].abs()
     print(sv_df.sort_values("abs_deviation").head(10))
+
+
+plot_synthetic_data_figure()
+# plot_af_delta_histogram()
+# compare_sv_ancestry_by_mode(by="population")

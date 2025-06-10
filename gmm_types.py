@@ -68,6 +68,7 @@ ANCESTRY_COLORS = {
 }
 
 GMM_MODELS = ["1d_len", "1d_L", "2d"]
+MODEL_NAMES = ["Length-only", "L-only", "Length-L"]
 
 GMM_AXES = {
     "L": lambda x, _: x[0],
