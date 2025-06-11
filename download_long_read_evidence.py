@@ -55,19 +55,16 @@ def write_samples_to_redo():
 
 
 
-def get_samples_to_redo()
+def get_samples_to_redo():
     file = "long_reads/redo_samples.txt"
-    samples = {}
+    sample_ids = set()
     with open(file, "r") as f:
         for line in f.readlines():
-            sample_id, sv_ids = line.strip().split(":")
-            sv_ids = sv_ids.split(",")
-            sv_ids = [sv_id.strip() for sv_id in sv_ids]
-            sv_ids = [sv_id for sv_id in sv_ids if sv_id != ""]
-            if len(sv_ids) == 0:
+            if line.strip() == "":
                 continue
-            samples[sample_id] = sv_ids
-    return samples
+            sample_id = line.strip()
+            sample_ids.add(sample_id)
+    return sample_ids
     
 
 def get_completed_samples():
@@ -229,7 +226,7 @@ def download_long_read_evidence_inner(
     if redo_samples:
         samples_to_redo = get_samples_to_redo()
         long_read_samples = long_read_samples[
-            long_read_samples["sample_id"].isin(samples_to_redo.keys())
+            long_read_samples["sample_id"].isin(samples_to_redo)
         ]
 
     with mp.Manager() as manager:
@@ -249,12 +246,9 @@ def download_long_read_evidence_inner(
             ]["sv_id"].values
             svs_to_process = []
 
-            if redo_samples:
-                svs_to_process = set(samples_to_redo[row["sample_id"]])
-            else:
-                for sv_id in sv_ids:
-                    if not is_sample_processed(sv_id, row["sample_id"]):
-                        svs_to_process.append(sv_id)
+            for sv_id in sv_ids:
+                if redo_samples or not is_sample_processed(sv_id, row["sample_id"]):
+                    svs_to_process.append(sv_id)
 
             if len(svs_to_process) == 0:
                 print(
@@ -284,22 +278,19 @@ def download_long_read_evidence_synchronous(
     if redo_samples:
         samples_to_redo = get_samples_to_redo()
         long_read_samples = long_read_samples[
-            long_read_samples["sample_id"].isin(samples_to_redo.keys())
+            long_read_samples["sample_id"].isin(samples_to_redo)
         ]
-
+    
     for _, row in long_read_samples.iterrows():
         sv_ids = sample_sv_lookup[
             sample_sv_lookup["sample_id"] == row["sample_id"]
         ]["sv_id"].values
         svs_to_process = []
 
-        if redo_samples:
-            svs_to_process = set(samples_to_redo[row["sample_id"]])
-        else:
-            for sv_id in sv_ids:
-                if not is_sample_processed(sv_id, row["sample_id"]):
-                    svs_to_process.append(sv_id)
-
+        for sv_id in sv_ids:
+            if redo_samples or not is_sample_processed(sv_id, row["sample_id"]):
+                svs_to_process.append(sv_id)
+        
         if len(svs_to_process) == 0:
             print(
                 f"Sample {row['sample_id']} already processed for all SVs"
@@ -317,9 +308,15 @@ def download_long_read_evidence(
     sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
     long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
 
-    completed_samples = get_completed_samples()
+    # completed_samples = get_completed_samples()
+    # long_read_samples = long_read_samples[
+    #     ~long_read_samples["sample_id"].isin(completed_samples)
+    # ]
+
+    # skip these samples because they keep failing
+    samples_to_redo = get_samples_to_redo()
     long_read_samples = long_read_samples[
-        ~long_read_samples["sample_id"].isin(completed_samples)
+        ~long_read_samples["sample_id"].isin(samples_to_redo)
     ]
 
     all_sv_ids = set(sample_sv_lookup["sv_id"].unique())
@@ -339,7 +336,6 @@ def download_long_read_evidence(
 
     # flush the buffered output
     sys.stdout.flush()
-    write_samples_to_redo()
 
 
 if __name__ == "__main__":

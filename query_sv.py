@@ -65,7 +65,9 @@ def load_squiggle_data(filename: str):
         with open(filename, newline="") as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:
-                squiggle_data[row[0]] = np.array([float(x) for x in row[1:]])
+                evidence = np.array([float(x) for x in row[1:]])
+                if len(evidence) > 0:
+                    squiggle_data[row[0]] = evidence
     return squiggle_data
 
 

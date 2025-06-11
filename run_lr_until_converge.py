@@ -1,5 +1,6 @@
 import time
 import os
+import sys
 import shutil
 import multiprocessing
 import pandas as pd
@@ -9,6 +10,7 @@ from write_sv_output import (
     write_posterior_distributions,
     concat_multi_processed_sv_files,
 )
+from download_long_read_evidence import get_samples_to_redo
 from query_sv import load_squiggle_data
 from run_dirichlet import run_dirichlet
 from helper import get_deletions_df
@@ -23,6 +25,10 @@ OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
 def get_long_read_sample_ids():
     df = pd.read_csv("long_reads/long_read_samples.csv")
+
+    # skip these samples because they keep failing
+    redo_samples = get_samples_to_redo()
+    df = df[~df["sample_id"].isin(redo_samples)]
     return df.sample_id.unique().tolist()
 
 
@@ -81,9 +87,10 @@ def run_lr_dirichlet_wrapper(
         )
 
     print(f"Completed running {sv_id}")
+    sys.stdout.flush()
 
 
-@break_after(hours=23, minutes=0)
+@break_after(hours=70, minutes=0)
 def run_svs_until_convergence(with_multiprocessing, use_subset):
     if use_subset:
         deletions_df = pd.read_csv("1kgp/deletions_df_subset.csv")
