@@ -630,9 +630,15 @@ def plot_2d_coords(
     if axis2 != "length":
         ax_main.yaxis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
 
-    ax_main.set_xlabel(axis1, fontsize=12)
-    ax_main.set_ylabel(axis2, fontsize=12)
-    ax_main.tick_params(axis="x", labelrotation=15)
+    ax_labels = [axis1, axis2]
+    for i, ax_label in enumerate(ax_labels):
+        if ax_label == "L" or ax_label == "R":
+            ax_labels[i] = f"{ax_label}-Position"
+    ax_main.set_xlabel(ax_labels[0], fontsize=12)
+    ax_main.set_ylabel(ax_labels[1], fontsize=12)
+
+    if axis1 == "L" or axis1 == "R":
+        ax_main.tick_params(axis="x", labelrotation=15)
 
 
 def plot_single_sv(
@@ -1403,6 +1409,67 @@ def plot_af_delta_histogram():
     plt.show()
 
 
+def plot_pre_post_split_diffs():
+    sv_df = get_sv_stats_collapsed_df()
+    sv_df = sv_df[sv_df["num_samples"] > 10]
+    original_afs = sv_df[sv_df["num_modes"] == 1]["af"].values
+    original_n = sv_df[sv_df["num_modes"] == 1]["num_samples"].values
+    split_afs = sv_df[sv_df["num_modes"].isin([2, 3])]["af"].values
+    split_n = sv_df[sv_df["num_modes"].isin([2, 3])]["num_samples"].values
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    ax1.violinplot(
+        [original_n, split_n],
+        showmeans=True,
+        showmedians=True,
+        widths=0.6,
+    )
+    ax1.set_xticks([1, 2])
+    ax1.set_xticklabels(["Unsplit SVs", "Split SVs"], fontsize=12)
+    ax1.set_ylabel("Original Number of Samples (N)", fontsize=12)
+
+    ax2.violinplot(
+        [original_afs, split_afs],
+        showmedians=True,
+        widths=0.6,
+    )
+    ax2.set_xticks([1, 2])
+    ax2.set_xticklabels(["Unsplit SVs", "Split SVs"], fontsize=12)
+    ax2.set_ylabel("Original Allele Frequency", fontsize=12)
+    plt.savefig("plots/pre_post_split_diffs.pdf", bbox_inches="tight")
+    plt.show()
+
+
+def plot_original_afs():
+    sv_df = get_sv_stats_collapsed_df()
+    sv_df = sv_df[sv_df["num_samples"] > 10]
+    original_afs = sv_df[sv_df["num_modes"] == 1]["af"].values
+    split_afs = sv_df[sv_df["num_modes"].isin([2, 3])]["af"].values
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    for ax, label, values, color in zip(
+        [ax1, ax2],
+        ["Unsplit SVs", "Split SVs"],
+        [original_afs, split_afs],
+        ["gray", "orange"],
+    ):
+        ax1.hist(
+            values,
+            bins=20,
+            color=color,
+            alpha=0.7,
+            edgecolor="black",
+        )
+        ax.set_xlim(0, 1)
+        ax.xaxis.set_major_locator(FixedLocator(np.arange(0, 1.1, 0.2)))
+        ax.xaxis.set_minor_locator(FixedLocator(np.arange(0, 1.1, 0.1)))
+        ax.tick_params(axis="x", which="minor", length=4, labelbottom=False)
+        ax.set_title(label, fontsize=14)
+    ax1.set_ylabel("Count", fontsize=12)
+    fig.text(0.5, 0.01, "Original Allele Frequency", fontsize=12, ha="center")
+    plt.savefig("plots/original_afs.pdf", bbox_inches="tight")
+    plt.show()
+
+
 def draw_conceptual_clusters(
     ax1, ax2, case, n_per_cluster: int = 50, *, fontsize: int = 12
 ):
@@ -1762,37 +1829,48 @@ def plot_synthetic_data_figure():
     )
     gs1.update(wspace=0.1, hspace=0.1)
     gs2 = GridSpec(6, 5, figure=fig, height_ratios=[1, 1, 0.15, 0.4, 0.1, 0.6])
-    gs2.update(wspace=0.12)
+    gs2.update(wspace=0.25)
     fontsize = 14
     plot_d_accuracy_by_case_all(fig, gs1, fontsize=fontsize)
     draw_conceptual_clusters_all(fig, gs2, fontsize=fontsize)
-    fig.text(
-        0.025,
-        0.98,
-        "A)",
-        fontsize=fontsize,
-        fontweight="bold",
-        ha="center",
-        va="center",
-    )
-    fig.text(
-        0.6,
-        0.98,
-        "B)",
-        fontsize=fontsize,
-        fontweight="bold",
-        ha="center",
-        va="center",
-    )
-    fig.text(
-        0.025,
-        0.3,
-        "C)",
-        fontsize=fontsize,
-        fontweight="bold",
-        ha="center",
-        va="center",
-    )
+
+    # figure labels
+    for x, y, label in [
+        (0.025, 0.98, "a"),
+        (0.6, 0.98, "b"),
+        (0.025, 0.3, "c"),
+    ]:
+        fig.text(
+            x,
+            y,
+            label,
+            fontsize=fontsize,
+            fontweight="bold",
+            ha="center",
+            va="center",
+        )
+
+    # test case labels
+    for x, y, label in [
+        (0.08, 0.95, "1"),
+        (0.67, 0.95, "2"),
+        (0.84, 0.95, "3"),
+        (0.67, 0.67, "4"),
+        (0.84, 0.67, "5"),
+        (0.06, 0.22, "1"),
+        (0.25, 0.22, "2"),
+        (0.44, 0.22, "3"),
+        (0.63, 0.22, "4"),
+        (0.82, 0.22, "5"),
+    ]:
+        fig.text(
+            x,
+            y,
+            label,
+            fontsize=fontsize,
+            ha="center",
+            va="center",
+        )
     plt.tight_layout()
     plt.subplots_adjust(
         left=0.07, right=0.985, top=0.975, bottom=0.05, wspace=0.0, hspace=0.0
@@ -2063,3 +2141,4 @@ def long_read_comparison():
 # plot_synthetic_data_figure()
 # plot_af_delta_histogram()
 # compare_sv_ancestry_by_mode(by="population")
+plot_original_afs()
