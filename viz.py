@@ -1440,6 +1440,36 @@ def plot_pre_post_split_diffs():
     plt.show()
 
 
+def plot_original_afs():
+    sv_df = get_sv_stats_collapsed_df()
+    sv_df = sv_df[sv_df["num_samples"] > 10]
+    original_afs = sv_df[sv_df["num_modes"] == 1]["af"].values
+    split_afs = sv_df[sv_df["num_modes"].isin([2, 3])]["af"].values
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    for ax, label, values, color in zip(
+        [ax1, ax2],
+        ["Unsplit SVs", "Split SVs"],
+        [original_afs, split_afs],
+        ["gray", "orange"],
+    ):
+        ax1.hist(
+            values,
+            bins=20,
+            color=color,
+            alpha=0.7,
+            edgecolor="black",
+        )
+        ax.set_xlim(0, 1)
+        ax.xaxis.set_major_locator(FixedLocator(np.arange(0, 1.1, 0.2)))
+        ax.xaxis.set_minor_locator(FixedLocator(np.arange(0, 1.1, 0.1)))
+        ax.tick_params(axis="x", which="minor", length=4, labelbottom=False)
+        ax.set_title(label, fontsize=14)
+    ax1.set_ylabel("Count", fontsize=12)
+    fig.text(0.5, 0.01, "Original Allele Frequency", fontsize=12, ha="center")
+    plt.savefig("plots/original_afs.pdf", bbox_inches="tight")
+    plt.show()
+
+
 def draw_conceptual_clusters(
     ax1, ax2, case, n_per_cluster: int = 50, *, fontsize: int = 12
 ):
@@ -2111,3 +2141,4 @@ def long_read_comparison():
 # plot_synthetic_data_figure()
 # plot_af_delta_histogram()
 # compare_sv_ancestry_by_mode(by="population")
+plot_original_afs()
