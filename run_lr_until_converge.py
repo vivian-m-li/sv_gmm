@@ -23,17 +23,11 @@ SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
 OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
 
-def get_long_read_sample_ids():
-    df = pd.read_csv("long_reads/long_read_samples.csv")
-
-    # skip these samples because they keep failing
-    redo_samples = get_samples_to_redo()
-    df = df[~df["sample_id"].isin(redo_samples)]
-    return df.sample_id.unique().tolist()
-
-
 def run_lr_dirichlet_wrapper(
-    row: Dict, population_size: int, sample_set: Set[str]
+    row: Dict,
+    population_size: int,
+    sample_set: Set[str],
+    samples_to_skip: Set[str] = set(),
 ):
     sv_id = row["id"]
     insert_size_lookup = {
@@ -49,6 +43,12 @@ def run_lr_dirichlet_wrapper(
 
     # load deletions for the SV
     squiggle_data = load_squiggle_data(f"long_reads/evidence/{sv_id}.csv")
+
+    # remove samples to skip
+    for sample_id in samples_to_skip:
+        if sample_id in squiggle_data:
+            del squiggle_data[sample_id]
+
     num_samples = len(squiggle_data)
 
     if len(squiggle_data) == 0:
@@ -90,13 +90,20 @@ def run_lr_dirichlet_wrapper(
     sys.stdout.flush()
 
 
-@break_after(hours=70, minutes=0)
+@break_after(hours=22, minutes=0)
 def run_svs_until_convergence(with_multiprocessing, use_subset):
     if use_subset:
         deletions_df = pd.read_csv("1kgp/deletions_df_subset.csv")
     else:
         deletions_df = get_deletions_df()
-    sample_ids = set(get_long_read_sample_ids())
+
+    long_read_samples_df = pd.read_csv("long_reads/long_read_samples.csv")
+    # skip these samples because they keep failing
+    samples_to_skip = get_samples_to_redo()
+    long_read_samples_df = long_read_samples_df[
+        ~long_read_samples_df["sample_id"].isin(samples_to_skip)
+    ]
+    sample_ids = set(long_read_samples_df["sample_id"].tolist())
     population_size = len(sample_ids)
 
     if with_multiprocessing:
@@ -105,13 +112,22 @@ def run_svs_until_convergence(with_multiprocessing, use_subset):
             pool = multiprocessing.Pool(cpu_count)
             args = []
             for _, row in deletions_df.iterrows():
-                args.append((row.to_dict(), population_size, sample_ids))
+                args.append(
+                    (
+                        row.to_dict(),
+                        population_size,
+                        sample_ids,
+                        samples_to_skip,
+                    )
+                )
             pool.starmap(run_lr_dirichlet_wrapper, args)
             pool.close()
             pool.join()
     else:
         for _, row in deletions_df.iterrows():
-            run_lr_dirichlet_wrapper(row.to_dict(), population_size, sample_ids)
+            run_lr_dirichlet_wrapper(
+                row.to_dict(), population_size, sample_ids, samples_to_skip
+            )
 
 
 def run_svs(*, with_multiprocessing: bool = True, use_subset: bool = False):
