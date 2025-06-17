@@ -2138,7 +2138,37 @@ def long_read_comparison():
     print(sv_df.sort_values("abs_deviation").head(10))
 
 
+def plot_cipos():
+    df = pd.read_csv("1kgp/cipos.csv")
+    starts = []
+    ends = []
+    for _, row in df.iterrows():
+        cipos = ast.literal_eval(row["cipos"])
+        ciend = ast.literal_eval(row["ciend"])
+        starts.extend([cipos[0], ciend[0]])
+        ends.extend([cipos[1], ciend[1]])
+
+    plt.figure()
+    plt.hist(
+        np.abs(starts) + 1,
+        bins=np.logspace(0, 3, 50),
+        alpha=0.5,
+        label="CI Start",
+    )
+    plt.hist(
+        np.abs(ends) + 1,
+        bins=np.logspace(0, 3, 50),
+        alpha=0.5,
+        label="CI End",
+    )
+    plt.xscale("log")
+    plt.gca().xaxis.set_minor_locator(FixedLocator(np.arange(-2000, 2001, 100)))
+    plt.tick_params(axis="x", which="minor", length=4, labelbottom=False)
+    plt.ylabel("Count")
+    plt.xlabel("Confidence Interval")
+    plt.show()
+
+
 # plot_synthetic_data_figure()
 # plot_af_delta_histogram()
 # compare_sv_ancestry_by_mode(by="population")
-plot_original_afs()
