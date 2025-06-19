@@ -1470,6 +1470,55 @@ def plot_original_afs():
     plt.show()
 
 
+def plot_reciprocal_overlap(ax, case: str):
+    file = "synthetic_data/resultsn=96.csv"
+    df = pd.read_csv(file)
+    df = df[
+        (df["expected_num_modes"] == 2)
+        & (df["case"] == case)
+        & (df["reciprocal_overlap"] > 0)
+    ]
+
+    colors = ["#bfdbf7", "#1f7a8c", "#022b3a"]
+    markers = ["o", "s", "D"]
+    for i, model in enumerate(GMM_MODELS):
+        model_df = df[df["gmm_model"] == model]
+        right = Counter()
+        total = Counter()
+        for _, row in model_df.iterrows():
+            overlap = row["reciprocal_overlap"]
+            total[overlap] += 1
+            if row["expected_num_modes"] == row["num_modes"]:
+                right[overlap] += 1
+
+        overlaps = sorted(total.keys())
+        acc = [right[overlap] / total[overlap] for overlap in overlaps]
+
+        ax.plot(
+            overlaps,
+            acc,
+            marker=markers[i],
+            color=colors[i],
+            label=model,
+            linewidth=2,
+        )
+        ax.set_xlabel("Reciprocal Overlap", fontsize=14)
+        ax.set_ylabel("Accuracy", fontsize=14)
+        ax.set_ylim(0, 1)
+    ax.legend(title="Model", fontsize=12, title_fontsize=14)
+
+
+def plot_reciprocal_overlap_all():
+    fig, axs = plt.subplots(1, 2, figsize=(18, 6))
+    cases = ["A", "B"]
+    for i, case in enumerate(cases):
+        plot_reciprocal_overlap(axs[i], case)
+        axs[i].set_title(f"Case {case}", fontsize=16)
+    plt.tight_layout()
+    plt.savefig("plots/reciprocal_overlap_accuracy.pdf", bbox_inches="tight")
+    plt.show()
+
+
 def draw_conceptual_clusters(
     ax1, ax2, case, n_per_cluster: int = 50, *, fontsize: int = 12
 ):
@@ -2172,3 +2221,4 @@ def plot_cipos():
 # plot_synthetic_data_figure()
 # plot_af_delta_histogram()
 # compare_sv_ancestry_by_mode(by="population")
+plot_reciprocal_overlap_all()

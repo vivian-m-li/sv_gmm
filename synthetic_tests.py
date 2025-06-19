@@ -1,32 +1,44 @@
+import os
+import ast
 import sys
 import csv
 import multiprocessing
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 import math
-from sklearn import metrics
 from generate_data import generate_synthetic_sv_data
 from gmm_types import GMM_MODELS, Evidence
 from typing import Optional, List, Tuple
 from timeout import break_after
 
 
-def confusion_mat():
-    for model in GMM_MODELS:
-        df = pd.read_csv(
-            f"synthetic_data/results_{model}.csv", low_memory=False
-        )
-        actual = df["expected_num_modes"]
-        predicted = df["num_modes"]
-        confusion_matrix = metrics.confusion_matrix(actual, predicted)
-        cm_display = metrics.ConfusionMatrixDisplay(
-            confusion_matrix=confusion_matrix,
-            display_labels=["1 mode", "2 modes", "3 modes"],
-        )
-        cm_display.plot()
-        plt.title(model)
-        plt.show()
+def reciprocal_overlap(sv1, sv2):
+    start1, end1 = sv1
+    start2, end2 = sv2
+    overlap_start = max(start1, start2)
+    overlap_end = min(end1, end2)
+    if overlap_start >= overlap_end:
+        return 0.0
+    overlap_length = overlap_end - overlap_start
+    sv1_length = end1 - start1
+    sv2_length = end2 - start2
+    return min(overlap_length / sv1_length, overlap_length / sv2_length)
+
+
+def write_reciprocal_overlap():
+    files = os.listdir("synthetic_data")
+    for file in files:
+        df = pd.read_csv(f"synthetic_data/{file}")
+        df = df[df["expected_num_modes"] == 2]
+        df["reciprocal_overlap"] = 0.0
+        for _, row in df.iterrows():
+            Ls = np.array(ast.literal_eval(row["expected_Ls"]))
+            lengths = np.array(ast.literal_eval(row["expected_lengths"]))
+            Rs = Ls + lengths
+            df.at[_, "reciprocal_overlap"] = reciprocal_overlap(
+                [Ls[0], Rs[0]], [Ls[1], Rs[1]]
+            )
+        df.to_csv(f"synthetic_data/{file}")
 
 
 def run_gmm(case, d, svs, weights, n_samples, results):
@@ -199,7 +211,9 @@ def generate_data(case: str) -> List[Tuple[int, int]]:
 
 
 @break_after(hours=17, minutes=55)
-def d_accuracy_test(n_samples: int, test_case: Optional[str] = None):
+def d_accuracy_test(
+    n_samples: int, test_case: Optional[str] = None, vary_weights: bool = False
+):
     # generate synthetic data
     if test_case is None:
         data = []
@@ -214,8 +228,9 @@ def d_accuracy_test(n_samples: int, test_case: Optional[str] = None):
         results = manager.list()
         args = []
         for case, d, svs in data:
-            weights = [1.0 / len(svs) for _ in range(len(svs))]
             # run each case 100 times and average at the end
+            # TODO: do a range of weights if vary_weights is True. save data in a different output file
+            weights = [1.0 / len(svs) for _ in range(len(svs))]
             for _ in range(100):
                 args.append((case, d, svs, weights, n_samples, results))
 
