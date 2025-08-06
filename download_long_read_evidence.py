@@ -11,7 +11,6 @@ from parse_long_reads import (
     get_bam_file,
     read_cigars_from_file,
     remove_bam_file,
-    write_samples_to_redo,
 )
 from timeout import break_after
 from typing import List, Optional
@@ -35,26 +34,6 @@ def get_svs_by_sample():
     lookup_df.to_csv("long_reads/sample_sv_lookup.csv", index=False)
 
 
-def write_samples_to_redo():
-    # read all samples that need to be redone
-    # run this in the sv directory in fiji
-    sample_ids = set()
-    for file in os.listdir("eofiles"):
-        if not file.endswith(".out"):
-            continue
-        with open(os.path.join("eofiles", file), "r") as f:
-            for line in f.readlines():
-                pattern = f"Redo sample [\S]+-([\S]+)"
-                match = re.search(pattern, line)
-                if match:
-                    sample_id = match.group(1)
-                    sample_ids.add(sample_id)
-    with open("/Users/vili4418/sv/sv_gmm/long_reads/redo_samples.txt", "w") as f:
-        for sample_id in sample_ids:
-            f.write(f"{sample_id}\n")
-
-
-
 def get_samples_to_redo():
     file = "long_reads/redo_samples.txt"
     sample_ids = set()
@@ -65,7 +44,7 @@ def get_samples_to_redo():
             sample_id = line.strip()
             sample_ids.add(sample_id)
     return sample_ids
-    
+
 
 def get_completed_samples():
     file = "long_reads/completed_samples.txt"
@@ -247,7 +226,9 @@ def download_long_read_evidence_inner(
             svs_to_process = []
 
             for sv_id in sv_ids:
-                if redo_samples or not is_sample_processed(sv_id, row["sample_id"]):
+                if redo_samples or not is_sample_processed(
+                    sv_id, row["sample_id"]
+                ):
                     svs_to_process.append(sv_id)
 
             if len(svs_to_process) == 0:
@@ -269,7 +250,7 @@ def download_long_read_evidence_inner(
         pool.join()
 
 
-@break_after(hours=98, minutes=0) 
+@break_after(hours=98, minutes=0)
 def download_long_read_evidence_synchronous(
     long_read_samples,
     sample_sv_lookup,
@@ -280,7 +261,7 @@ def download_long_read_evidence_synchronous(
         long_read_samples = long_read_samples[
             long_read_samples["sample_id"].isin(samples_to_redo)
         ]
-    
+
     for _, row in long_read_samples.iterrows():
         sv_ids = sample_sv_lookup[
             sample_sv_lookup["sample_id"] == row["sample_id"]
@@ -290,11 +271,9 @@ def download_long_read_evidence_synchronous(
         for sv_id in sv_ids:
             if redo_samples or not is_sample_processed(sv_id, row["sample_id"]):
                 svs_to_process.append(sv_id)
-        
+
         if len(svs_to_process) == 0:
-            print(
-                f"Sample {row['sample_id']} already processed for all SVs"
-            )
+            print(f"Sample {row['sample_id']} already processed for all SVs")
             continue
 
         download_sample_evidence(row, svs_to_process)

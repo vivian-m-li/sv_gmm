@@ -112,7 +112,6 @@ def write_samples_to_redo():
                     sv_id = match.group(1)
                     sample_id = match.group(2)
                     samples_to_redo[sample_id].append(sv_id)
-                
 
     with open("long_reads/redo_samples.txt", "w") as f:
         for sample_id, sv_ids in samples_to_redo.items():
