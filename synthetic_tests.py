@@ -99,6 +99,7 @@ def write_csv(
             fieldnames = [
                 "case",
                 "r",
+                "r2",
                 "gmm_model",
                 "expected_num_modes",
                 "expected_lengths",
@@ -268,8 +269,8 @@ def generate_data_r(case: str, svlen: int):
                         [
                             SV1,
                             (
-                                midpoint - int(0.5 * sv2_len),
-                                midpoint + int(0.5 * sv2_len),
+                                midpoint - 0.5 * sv2_len,
+                                midpoint + 0.5 * sv2_len,
                             ),
                         ],
                     ]
@@ -301,7 +302,11 @@ def generate_data_r(case: str, svlen: int):
                     )
         case _:
             raise Exception("Invalid case")
-    return data
+    data_cleaned = []
+    for case, r, svs in data:
+        svs_int = [(int(sv[0]), int(sv[1])) for sv in svs]
+        data_cleaned.append([case, r, svs_int])
+    return data_cleaned
 
 
 @break_after(hours=23, minutes=55)
