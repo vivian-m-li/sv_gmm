@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import shutil
 import subprocess
 import argparse
@@ -10,6 +11,9 @@ from process_data import run_viz_gmm
 from run_dirichlet import run_dirichlet
 from helper import get_sample_ids
 from typing import List, Dict
+
+# Increase the field size limit to avoid triggering the error
+csv.field_size_limit(sys.maxsize)
 
 SCRATCH_DIR = "/scratch/Users/vili4418"
 FILE_DIR = "stix_output"
@@ -59,15 +63,31 @@ def lookup_sv_position(sv_id: str):
     return chr, start, stop
 
 
-def load_squiggle_data(filename: str):
+def load_squiggle_data(filename: str, rewrite_file: bool = False):
     squiggle_data = {}
-    if os.path.isfile(filename):
-        with open(filename, newline="") as csvfile:
-            reader = csv.reader(csvfile)
-            for row in reader:
-                evidence = np.array([float(x) for x in row[1:]])
-                if len(evidence) > 0:
-                    squiggle_data[row[0]] = evidence
+    if not os.path.isfile(filename):
+        return squiggle_data
+
+    with open(filename, newline="") as csvfile:
+        reader = csv.reader(csvfile)
+        for row in reader:
+            if len(row) < 2:
+                continue
+            pattern = r"[\S]*([A-Z][A-Z]\d\d\d\d\d)"
+            match = re.match(pattern, row[0])
+            if match is None:
+                raise ValueError("Invalid sample ID")
+            sample_id = match.group(1)
+            evidence = np.array([int(float(x)) for x in row[1:]])
+            if len(evidence) > 0:
+                squiggle_data[row[0]] = evidence
+
+    # write squiggle data
+    if rewrite_file:
+        with open(filename, "w") as file:
+            for sample_id, evidence in squiggle_data.items():
+                evidence_str = ",".join(map(str, evidence))
+                file.write(f"{sample_id},{evidence_str}\n")
     return squiggle_data
 
 

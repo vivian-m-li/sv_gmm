@@ -1,6 +1,7 @@
 import sys
 import time
 import os
+import re
 import shutil
 import subprocess
 import csv
@@ -13,10 +14,21 @@ from parse_long_reads import (
     remove_bam_file,
     write_samples_to_redo,
 )
+from query_sv import load_squiggle_data
 from timeout import break_after
 from typing import List, Optional
 
 SCRATCH_DIR = "/scratch/Users/vili4418"
+
+def find_failing_sv():
+    error_file = "long_reads/svs_to_redo.txt"
+    with open(error_file, "w") as f:
+        files = os.listdir("long_reads/evidence")
+        for file in files:
+            try:
+                load_squiggle_data(f"long_reads/evidence/{file}", rewrite_file=True)
+            except ValueError as e:
+                f.write(f"{file}: {e}\n")
 
 
 def get_svs_by_sample():
@@ -135,7 +147,6 @@ def process_sample_evidence(
         for deletion in evidence:
             row.extend([deletion["start"], deletion["stop"]])
 
-        # put the csv row in the queue to be written
         file_name = os.path.join(
             SCRATCH_DIR, f"long_reads/evidence/{sv_id}.csv"
         )
@@ -143,6 +154,7 @@ def process_sample_evidence(
         if queue is None:
             write_to_evidence_file(file_name, row)
         else:
+            # put the csv row in the queue to be written
             queue.put((file_name, row))
 
         remove_bam_file(output_file, scratch=True)
@@ -215,6 +227,34 @@ def listener(queue):
     except Exception as e:
         print(f"Listener error: {e}")
         return
+    
+
+@break_after(hours=335, minutes=30)
+def download_sv_subset():
+    sv_ids = set()
+    with open("long_reads/svs_to_redo.txt", "r") as f:
+        for line in f.readlines():
+            if line.strip() == "":
+                continue
+            row = line.split(" ")
+            sv_id = row[0].strip(".csv")
+            sv_ids.add(sv_id)
+    
+    sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
+    sample_ids = sample_sv_lookup[sample_sv_lookup["sv_id"].isin(sv_ids)]["sample_id"].unique()
+
+    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
+    long_read_samples = long_read_samples[
+        long_read_samples["sample_id"].isin(sample_ids)
+    ]
+
+    for _, row in long_read_samples.iterrows():
+        sample_sv_ids = sample_sv_lookup[
+            (sample_sv_lookup["sample_id"] == row["sample_id"]) & (sample_sv_lookup["sv_id"].isin(sv_ids))
+        ]["sv_id"].values
+        download_sample_evidence(row, sample_sv_ids)
+
+    move_evidence_files(sv_ids, to_scratch=False)
 
 
 @break_after(hours=82, minutes=0)  # leave time to move files
@@ -341,7 +381,9 @@ def download_long_read_evidence(
 if __name__ == "__main__":
     start = time.time()
 
-    download_long_read_evidence(move_files=True, redo_samples=False)
+    download_sv_subset()
+
+    # download_long_read_evidence(move_files=True, redo_samples=False)
 
     end = time.time()
     print("Time taken:", (end - start) / 60, "minutes")
