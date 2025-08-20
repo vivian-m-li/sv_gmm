@@ -44,6 +44,28 @@ def vcf_to_bed():
             )
 
 
+def write_cipos():
+    vcf_in = pysam.VariantFile(f"{FILE_DIR}/1kg.subset.vcf.gz")
+    df = pd.DataFrame(columns=["id", "cipos", "ciend"])
+    n_missing = 0
+    for record in vcf_in.fetch():
+        info = dict(record.info)
+        chr = record.chrom.strip("chr")
+        if info["SVTYPE"] != "DEL" or chr in ["X", "Y"]:
+            continue
+        if "CIPOS" in record.info:
+            df.loc[len(df)] = [
+                record.id,
+                record.info["CIPOS"],
+                record.info["CIEND"],
+            ]
+        else:
+            n_missing += 1
+
+    print(f"Number of records without CIPOS: {n_missing}")  # 74886 records
+    df.to_csv(f"{FILE_DIR}/cipos.csv", index=False)  # 11522 rows
+
+
 def load_vcf():
     vcf_in = pysam.VariantFile(f"{FILE_DIR}/1kg.subset.vcf.gz")
     header = [
