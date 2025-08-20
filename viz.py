@@ -2221,4 +2221,3 @@ def plot_cipos():
 # plot_synthetic_data_figure()
 # plot_af_delta_histogram()
 # compare_sv_ancestry_by_mode(by="population")
-plot_reciprocal_overlap_all()
