@@ -87,6 +87,7 @@ def write_csv(
     *,
     write_new_file: bool = False,
     fixed_n_samples: Optional[int] = None,
+    fixed_svlen: Optional[int] = None,
 ):
     file = f"synthetic_data/results{'' if fixed_n_samples is None else 'n=' + str(fixed_n_samples)}.csv"
     with open(
@@ -106,6 +107,7 @@ def write_csv(
                 "lengths",
                 "Ls",
                 "num_samples",
+                "svlen",
                 "weights",
             ]
             csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
@@ -145,6 +147,7 @@ def write_csv(
                     "lengths": lengths,
                     "Ls": Ls,
                     "num_samples": n_samples,
+                    "svlen": fixed_svlen,
                     "weights": weights,
                 }
             )
@@ -341,7 +344,7 @@ def r_accuracy_test(
             for weight in weights:
                 # run each case 10 times and average at the end
                 for _ in range(10):
-                    args.append((case, r, svs, weights, n_samples, results))
+                    args.append((case, r, svs, weight, n_samples, results))
 
         p.starmap(run_gmm, args)
         p.close()
@@ -349,7 +352,10 @@ def r_accuracy_test(
 
         # results: [(case, r, gmm_model, svs, n_samples, weights, gmm, evidence_by_mode), ...]
         write_csv(
-            results, write_new_file=test_case is None, fixed_n_samples=n_samples
+            results,
+            write_new_file=test_case is None,
+            fixed_n_samples=n_samples,
+            fixed_svlen=svlen,
         )
 
 
