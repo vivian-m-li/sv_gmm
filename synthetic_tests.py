@@ -358,7 +358,7 @@ def r_accuracy_test(
         # results: [(case, r, gmm_model, svs, n_samples, weights, gmm, evidence_by_mode), ...]
         write_csv(
             results,
-            write_new_file=test_case is None,
+            write_new_file=False,
             fixed_n_samples=n_samples,
             fixed_svlen=svlen,
         )
