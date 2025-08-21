@@ -326,9 +326,9 @@ Analyze SVs that have been run
 """
 
 
-def write_sv_stats_collapsed():
-    df = get_sv_stats_converge_df()
-    svs_n_modes = pd.read_csv("1kgp/svs_n_modes.csv")
+def write_sv_stats_collapsed(stem: str = "1kgp"):
+    df = get_sv_stats_converge_df(stem)
+    svs_n_modes = pd.read_csv(f"{stem}/svs_n_modes.csv")
     svs_n_modes.rename(
         columns={"num_modes": "consensus_num_modes"}, inplace=True
     )
@@ -337,7 +337,7 @@ def write_sv_stats_collapsed():
         1  # set num_modes = 1 where it is 0
     )
     sv_ids = df["id"].unique()
-    with open("1kgp/sv_stats_collapsed.csv", mode="w", newline="") as out:
+    with open(f"{stem}/sv_stats_collapsed.csv", mode="w", newline="") as out:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
         csv_writer.writeheader()
@@ -345,6 +345,7 @@ def write_sv_stats_collapsed():
             rows = df[df["id"] == sv_id]
             if len(rows) < 1:
                 continue
+
             consensus_num_modes = rows["consensus_num_modes"].values[0]
             rows = rows[rows["num_modes"] == consensus_num_modes]
             samples = Counter()
@@ -368,9 +369,9 @@ def write_sv_stats_collapsed():
             csv_writer.writerow(row.to_dict())
 
 
-def write_ancestry_dissimilarity():
+def write_ancestry_dissimilarity(stem: str = "1kgp"):
     df = get_sv_stats_collapsed_df()
-    confidence = pd.read_csv("1kgp/svs_n_modes.csv")
+    confidence = pd.read_csv(f"{stem}/svs_n_modes.csv")
     confidence.rename(
         columns={"num_modes": "consensus_num_modes"}, inplace=True
     )
@@ -425,10 +426,10 @@ def write_ancestry_dissimilarity():
     results_df["num_samples"] = results_df["num_samples"].astype(int)
 
     results_df = results_df.sort_values(by="dissimilarity", ascending=False)
-    results_df.to_csv("1kgp/ancestry_dissimilarity.csv", index=False)
+    results_df.to_csv(f"{stem}/ancestry_dissimilarity.csv", index=False)
 
 
-def get_n_modes():
+def get_n_modes(stem: str = "1kgp"):
     sv_df = pd.DataFrame(
         columns=["sv_id", "num_modes", "confidence", "num_modes_2"]
     )
@@ -436,12 +437,17 @@ def get_n_modes():
     deletions_df = get_deletions_df()
     deletions_df = deletions_df[deletions_df["num_samples"] > 0]
     svs = deletions_df["id"].unique()
-    df = get_sv_stats_converge_df()
+    df = get_sv_stats_converge_df(stem)
     for sv_id in svs:
         rows = df[df["id"] == sv_id]
 
-        # if the GMM didn't run at all on a sample, label it as 1 mode with high confidence
+        # if the sv_id didn't run (due to lack of evidence in long read analysis), skip the row
+        if len(rows) == 0:
+            continue
+
+        # if the GMM didn't run at all on a sample
         # or GMM defaulted to 1 mode because there were too few samples
+        # label it as 1 mode inconclusively
         if (len(rows) == 1 and rows["num_iterations"].values[0] == 0) or rows[
             "num_samples"
         ].values[0] < 10:
@@ -466,7 +472,7 @@ def get_n_modes():
         new_row.append(num_modes_2)
 
         sv_df.loc[len(sv_df)] = new_row
-    sv_df.to_csv("1kgp/svs_n_modes.csv", index=False)
+    sv_df.to_csv(f"{stem}/svs_n_modes.csv", index=False)
 
 
 def get_sv_outliers(sv_rows, threshold: float):
@@ -488,11 +494,11 @@ def get_sv_outliers(sv_rows, threshold: float):
     return confident_outliers
 
 
-def get_outliers(threshold: float = 0.9):
-    n_modes_df = pd.read_csv("1kgp/svs_n_modes.csv")
+def get_outliers(stem: str = "1kgp", threshold: float = 0.9):
+    n_modes_df = pd.read_csv(f"{stem}/svs_n_modes.csv")
     n_modes_df = n_modes_df[n_modes_df["num_modes"] > 1]
     df = get_sv_stats_converge_df()
-    with open("1kgp/outliers.csv", "w") as f:
+    with open(f"{stem}/outliers.csv", "w") as f:
         csv_writer = csv.writer(f)
         csv_writer.writerow(["sv_id", "sample_ids"])
         for _, row in n_modes_df.iterrows():
@@ -502,9 +508,9 @@ def get_outliers(threshold: float = 0.9):
                 csv_writer.writerow([row["sv_id"], ",".join(outliers)])
 
 
-def get_consensus_svs():
+def get_consensus_svs(stem: str = "1kgp"):
     df = get_sv_stats_converge_df()
-    svs_n_modes = pd.read_csv("1kgp/svs_n_modes.csv")
+    svs_n_modes = pd.read_csv(f"{stem}/svs_n_modes.csv")
     sv_ids = svs_n_modes["sv_id"].unique()
     consensus_df = pd.DataFrame(
         columns=[
@@ -549,7 +555,7 @@ def get_consensus_svs():
                 row.append(int(np.mean(values)))
                 row.append(np.std(values))
             consensus_df.loc[len(consensus_df)] = row
-    consensus_df.to_csv("1kgp/consensus_svs.csv", index=False)
+    consensus_df.to_csv(f"{stem}/consensus_svs.csv", index=False)
 
 
 def get_new_gene_intersections():
@@ -655,12 +661,51 @@ def recalculate_afs():
         )
 
 
-def write_post_processed_files():
-    get_n_modes()
-    get_consensus_svs()
-    write_sv_stats_collapsed()
-    get_outliers()
-    write_ancestry_dissimilarity()
+def compare_short_long_reads():
+    sr_df = pd.read_csv("1kgp/svs_n_modes.csv")
+    sr_df = sr_df[sr_df["confidence"] != "inconclusive"]
+    sr_df = sr_df.rename(
+        columns={
+            "num_modes": "sr_num_modes",
+            "confidence": "sr_confidence",
+            "num_modes_2": "sr_num_modes_2",
+        }
+    )
+
+    lr_df = pd.read_csv("long_reads/svs_n_modes.csv")
+    lr_df = lr_df[lr_df["confidence"] != "inconclusive"]
+    lr_df = lr_df.rename(
+        columns={
+            "num_modes": "lr_num_modes",
+            "confidence": "lr_confidence",
+            "num_modes_2": "lr_num_modes_2",
+        }
+    )
+
+    merged = lr_df.merge(sr_df, on="sv_id", how="inner")
+    merged["consensus"] = merged.apply(
+        lambda row: (
+            row["lr_num_modes"]
+            if row["lr_num_modes"] == row["sr_num_modes"]
+            else np.nan
+        ),
+        axis=1,
+    )
+    # consensus_df = merged[~merged["consensus"].isna()] # get all rows where the consensus is not NaN
+    merged.to_csv("1kgp/sr_lr_merged.csv", index=False)
+
+
+def write_post_processed_files(stem: str = "1kgp"):
+    get_n_modes(stem)
+    print("wrote svs_n_modes.csv")
+    get_consensus_svs(stem)
+    print("wrote consensus_svs.csv")
+    write_sv_stats_collapsed(stem)
+    print("wrote sv_stats_collapsed.csv")
+    get_outliers(stem)
+    print("wrote outliers.csv")
+    write_ancestry_dissimilarity(stem)
+    print("wrote ancestry_dissimilarity.csv")
     # get_new_gene_intersections() # need bedtools to run this
 
 
@@ -676,4 +721,4 @@ def get_sv_chr(sv_id: str):
 
 
 if __name__ == "__main__":
-    write_post_processed_files()
+    write_post_processed_files("long_reads")
