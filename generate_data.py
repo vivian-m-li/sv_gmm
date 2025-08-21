@@ -65,13 +65,6 @@ def get_random_insert_size(df):
     return df.sample().insert_size.values[0]
 
 
-"""
-Generates synthetic SV data for testing purposes
-chr: chromosome number (does not support X/Y), as a str
-svs: List of (start, stop) for each SV
-"""
-
-
 def generate_synthetic_sv_data(
     chr: int,
     svs: List[Tuple[int, int]],
@@ -83,6 +76,11 @@ def generate_synthetic_sv_data(
     plot_reads: bool = False,
     run_gmm: bool = True,
 ):
+    """
+    Generates synthetic SV data for testing purposes
+    chr: chromosome number (does not support X/Y), as a str
+    svs: List of (start, stop) for each SV
+    """
     num_svs = len(svs)
 
     # Decide how many samples we want in our population
@@ -151,7 +149,6 @@ def generate_synthetic_sv_data(
             gmm_model=gmm_model,
             insert_size_lookup=insert_size_lookup,
         )
-
         return gmm, evidence_by_mode
 
     return None, []

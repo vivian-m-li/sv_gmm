@@ -1470,14 +1470,10 @@ def plot_original_afs():
     plt.show()
 
 
-def plot_reciprocal_overlap(ax, case: str):
-    file = "synthetic_data/resultsn=96.csv"
+def plot_reciprocal_overlap(ax, case: str, sample_size: int, svlen: int):
+    file = f"synthetic_data/resultsn={sample_size}.csv"
     df = pd.read_csv(file)
-    df = df[
-        (df["expected_num_modes"] == 2)
-        & (df["case"] == case)
-        & (df["reciprocal_overlap"] > 0)
-    ]
+    df = df[(df["case"] == case) & (df["svlen"] == svlen)]
 
     colors = ["#bfdbf7", "#1f7a8c", "#022b3a"]
     markers = ["o", "s", "D"]
@@ -1486,7 +1482,7 @@ def plot_reciprocal_overlap(ax, case: str):
         right = Counter()
         total = Counter()
         for _, row in model_df.iterrows():
-            overlap = row["reciprocal_overlap"]
+            overlap = row["r"]
             total[overlap] += 1
             if row["expected_num_modes"] == row["num_modes"]:
                 right[overlap] += 1
@@ -1504,16 +1500,19 @@ def plot_reciprocal_overlap(ax, case: str):
         )
         ax.set_xlabel("Reciprocal Overlap", fontsize=14)
         ax.set_ylabel("Accuracy", fontsize=14)
-        ax.set_ylim(0, 1)
+        ax.set_ylim(-0.05, 1.1)
     ax.legend(title="Model", fontsize=12, title_fontsize=14)
 
 
 def plot_reciprocal_overlap_all():
-    fig, axs = plt.subplots(1, 2, figsize=(18, 6))
-    cases = ["A", "B"]
+    sample_size = 66
+    svlen = 17352
+    fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+    cases = ["B", "C"]
     for i, case in enumerate(cases):
-        plot_reciprocal_overlap(axs[i], case)
-        axs[i].set_title(f"Case {case}", fontsize=16)
+        ax = axs[i]
+        plot_reciprocal_overlap(ax, case, sample_size, svlen)
+        ax.set_title(f"Case {case}", fontsize=16)
     plt.tight_layout()
     plt.savefig("plots/reciprocal_overlap_accuracy.pdf", bbox_inches="tight")
     plt.show()
@@ -2221,3 +2220,4 @@ def plot_cipos():
 # plot_synthetic_data_figure()
 # plot_af_delta_histogram()
 # compare_sv_ancestry_by_mode(by="population")
+# plot_reciprocal_overlap_all()
