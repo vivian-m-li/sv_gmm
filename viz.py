@@ -1470,7 +1470,9 @@ def plot_original_afs():
     plt.show()
 
 
-def plot_reciprocal_overlap(ax, case: str, sample_size: int, svlen: int):
+def plot_reciprocal_overlap(
+    ax, case: str, sample_size: int, svlen: int, r_col: str = "r"
+):
     file = f"synthetic_data/resultsn={sample_size}.csv"
     df = pd.read_csv(file)
     df = df[(df["case"] == case) & (df["svlen"] == svlen)]
@@ -1482,7 +1484,7 @@ def plot_reciprocal_overlap(ax, case: str, sample_size: int, svlen: int):
         right = Counter()
         total = Counter()
         for _, row in model_df.iterrows():
-            overlap = row["r"]
+            overlap = row[r_col]
             total[overlap] += 1
             if row["expected_num_modes"] == row["num_modes"]:
                 right[overlap] += 1
@@ -1498,21 +1500,29 @@ def plot_reciprocal_overlap(ax, case: str, sample_size: int, svlen: int):
             label=model,
             linewidth=2,
         )
-        ax.set_xlabel("Reciprocal Overlap", fontsize=14)
+        ax.set_xlabel(f"Reciprocal Overlap ({r_col})", fontsize=14)
         ax.set_ylabel("Accuracy", fontsize=14)
         ax.set_ylim(-0.05, 1.1)
-    ax.legend(title="Model", fontsize=12, title_fontsize=14)
 
 
 def plot_reciprocal_overlap_all():
-    sample_size = 66
-    svlen = 17352
-    fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-    cases = ["B", "C"]
-    for i, case in enumerate(cases):
-        ax = axs[i]
-        plot_reciprocal_overlap(ax, case, sample_size, svlen)
+    sample_size = 118
+    svlen = 802
+    fig, axs = plt.subplots(2, 2, figsize=(10, 8))
+    cases = [("B", "r"), ("C", "r"), ("D", "r"), ("D", "r2")]
+    for i, (case, r_col) in enumerate(cases):
+        ax = axs[i // 2, i % 2]
+        plot_reciprocal_overlap(ax, case, sample_size, svlen, r_col)
         ax.set_title(f"Case {case}", fontsize=16)
+    handles, labels = axs[0, 0].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="center",
+        fontsize=12,
+        title="Model",
+        title_fontsize=14,
+    )
     plt.tight_layout()
     plt.savefig("plots/reciprocal_overlap_accuracy.pdf", bbox_inches="tight")
     plt.show()
@@ -2220,4 +2230,4 @@ def plot_cipos():
 # plot_synthetic_data_figure()
 # plot_af_delta_histogram()
 # compare_sv_ancestry_by_mode(by="population")
-# plot_reciprocal_overlap_all()
+plot_reciprocal_overlap_all()
