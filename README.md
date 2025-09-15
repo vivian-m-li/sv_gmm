@@ -2,10 +2,10 @@
 
 This tool is designed to analyze genetic data, determining the number of structural variants in a reading frame using statistical inference.
 
-Input: chr:left*paired_end_start-left_paired_end_end, chr:right_paired_end_start-right_paired_end_end\
-\_query_stix(l="1:113799624-113799624", r="1:113800089-113800089")*
+Input: chr:left_paired_end_start-left_paired_end_end, chr:right_paired_end_start-right_paired_end_end\
+Example: python query_sv.py -l 1:113799624-113799624 -r 1:113800089-113800089
 
-### 1. Query STIX for all evidence within the region, +- 50 bp from each end
+### 1a. Short-read data: Query STIX for all evidence within the region, +- 50 bp from each end
 
 | File ID | File Name               | Chr | Left Start | Left End  | Chr | Right Start | Right End | Paired/Split |
 | ------- | ----------------------- | --- | ---------- | --------- | --- | ----------- | --------- | ------------ |
@@ -15,6 +15,10 @@ Input: chr:left*paired_end_start-left_paired_end_end, chr:right_paired_end_start
 | 3       | alt_sort/HG00100.bed.gz | 1   | 113799234  | 113799333 | 1   | 113800090   | 113800190 | paired       |
 | 3       | alt_sort/HG00100.bed.gz | 1   | 113799235  | 113799334 | 1   | 113800139   | 113800238 | paired       |
 
+### 1b: Long-read data: Parse the cigar string for all available 1kg samples with long-read data
+
+From the sample's entire cram file, download the bam file corresponding to an SV region (start - tolerance, stop + tolerance). Look for instances of "D" in the cigar string, corresponding with a deletion in the selected region. Use the size of the original SV +- an additional tolerance to find deletions that match the original SV. Using the reference, calculate the start/stop/length of the deletion.
+
 ### 2. Filter out reference samples & process the output so that the each line contains pairs of evidence that correspond with one sample
 
 HG00096,113799540,113800187\
@@ -23,31 +27,19 @@ HG00099,113799516,113800321\
 HG00100,113799234,113800190,113799235,113800238,113799318,113800230,113799328,113800353,113799349,113800342,113799356,113800259,113799379,113800269,113799403,113800296,113799467,113800440\
 HG00101,113799430,113800209,113799529,113800307,113799553,113800389\
 
-#### Line Segments and Points
+### 3. Reduce each sample to one point
 
-<img width="500" alt="Line Segments and Points" src="https://github.com/user-attachments/assets/36d465b8-f474-447c-9b43-e5d659b77554">
-
-#### Fitted Lines
-
-<img width="500" alt="Fitted Lines" src="https://github.com/user-attachments/assets/28b290f1-b4c5-4948-98f3-0132ad815846">
-
-### 3. Calculate Intercepts
-
-#### Intercepts
-
-<img width="500" alt="Intercepts" src="https://github.com/user-attachments/assets/e6681b59-ca80-4598-a71f-88dfb9aa598f">
+Take the mean L and mean length of each paired-end read so that each sample is represented as a 2D point (length, L).
 
 ### 4. Run GMM
 
-Decide if the points are most likely to fit a 1, 2, or 3 mode distribution. Runs the EM algorithm for 30 iterations for each of the distributions and compares the AIC scores for each model.
+Decide if the points are most likely to fit a 1, 2, or 3 mode distribution. Runs the EM algorithm for 30 iterations for each of the distributions and compares the AIC scores for each model. Any SV with 10 or fewer samples will be marked as "inconclusive".
 
-#### Best Distribution Over All Data Points
+<!-- #### Best Distribution Over All Data Points
 
-<img width="500" alt="GMM Modes" src="https://github.com/user-attachments/assets/e0925a5d-7a4e-4b28-8bc8-ad157b835d8e">
+<img width="500" alt="GMM Modes" src="https://github.com/user-attachments/assets/e0925a5d-7a4e-4b28-8bc8-ad157b835d8e"> -->
 
-### 5. Assign points to modes
-
-Remove approximately 10% of the data from each mode to reduce the overlap between modes.
+### 5. Assign points to modes if more than 1 SV was found in the region
 
 #### Left-Right Coordinates of Points for Each Distribution & Ancestry Splits
 
