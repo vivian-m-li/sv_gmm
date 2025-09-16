@@ -1,7 +1,6 @@
 import sys
 import time
 import os
-import re
 import shutil
 import subprocess
 import csv
@@ -19,13 +18,16 @@ from typing import List, Optional
 
 SCRATCH_DIR = "/scratch/Users/vili4418"
 
+
 def find_failing_sv():
     error_file = "long_reads/svs_to_redo.txt"
     with open(error_file, "w") as f:
         files = os.listdir("long_reads/evidence")
         for file in files:
             try:
-                load_squiggle_data(f"long_reads/evidence/{file}", rewrite_file=True)
+                load_squiggle_data(
+                    f"long_reads/evidence/{file}", rewrite_file=True
+                )
             except ValueError as e:
                 f.write(f"{file}: {e}\n")
 
@@ -107,7 +109,8 @@ def process_sample_evidence(
     sample_id: str, cram_file: str, sv_ids: List[str], queue: Optional[mp.Queue]
 ):
     for sv_id in sv_ids:
-        region, sv_len = get_sv_region(sv_id, 300)
+        # add a tolerance of 500 bp on either side of the sv start/stop
+        region, sv_len = get_sv_region(sv_id, 500)
         output_file = get_bam_file(
             sv_id,
             sample_id,
@@ -206,7 +209,7 @@ def listener(queue):
     except Exception as e:
         print(f"Listener error: {e}")
         return
-    
+
 
 @break_after(hours=335, minutes=30)
 def download_sv_subset():
@@ -218,9 +221,11 @@ def download_sv_subset():
             row = line.split(" ")
             sv_id = row[0].strip(".csv")
             sv_ids.add(sv_id)
-    
+
     sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
-    sample_ids = sample_sv_lookup[sample_sv_lookup["sv_id"].isin(sv_ids)]["sample_id"].unique()
+    sample_ids = sample_sv_lookup[sample_sv_lookup["sv_id"].isin(sv_ids)][
+        "sample_id"
+    ].unique()
 
     long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
     long_read_samples = long_read_samples[
@@ -229,7 +234,8 @@ def download_sv_subset():
 
     for _, row in long_read_samples.iterrows():
         sample_sv_ids = sample_sv_lookup[
-            (sample_sv_lookup["sample_id"] == row["sample_id"]) & (sample_sv_lookup["sv_id"].isin(sv_ids))
+            (sample_sv_lookup["sample_id"] == row["sample_id"])
+            & (sample_sv_lookup["sv_id"].isin(sv_ids))
         ]["sv_id"].values
         download_sample_evidence(row, sample_sv_ids)
 

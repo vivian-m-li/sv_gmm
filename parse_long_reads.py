@@ -150,7 +150,7 @@ def get_sv_region(sv_id: str, tolerance: int) -> Tuple[str, int]:
     start = row["start"].values[0] - tolerance
     stop = row["stop"].values[0] + tolerance
     region = f"chr{row['chr'].values[0]}:{start}-{stop}"
-    sv_len = stop - start - 2 * tolerance
+    sv_len = stop - start - 2 * tolerance  # original sv length
     return region, sv_len
 
 
