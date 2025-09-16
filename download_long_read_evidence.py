@@ -20,6 +20,7 @@ SCRATCH_DIR = "/scratch/Users/vili4418"
 
 
 def find_failing_sv():
+    """Finds the svs that are failing to be processed by attempting to load them with load_squiggle_data."""
     error_file = "long_reads/svs_to_redo.txt"
     with open(error_file, "w") as f:
         files = os.listdir("long_reads/evidence")
@@ -33,6 +34,7 @@ def find_failing_sv():
 
 
 def get_svs_by_sample():
+    """Creates a lookup table of samples and the svs they don't have the reference allele for. Standalone function."""
     df = pd.read_csv("long_reads/long_read_samples.csv")
     deletions_df = pd.read_csv("1kgp/deletions_df.csv")
 
@@ -49,6 +51,7 @@ def get_svs_by_sample():
 
 
 def get_samples_to_redo():
+    """Gets the samples that need to be redone."""
     file = "long_reads/redo_samples.txt"
     sample_ids = set()
     with open(file, "r") as f:
@@ -61,6 +64,7 @@ def get_samples_to_redo():
 
 
 def get_completed_samples():
+    """Gets the samples that have finished processing."""
     file = "long_reads/completed_samples.txt"
     samples = []
     with open(file, "r") as f:
@@ -73,6 +77,7 @@ def get_completed_samples():
 
 
 def move_evidence_files(sv_ids, *, to_scratch: bool):
+    """Moves files between home directory and scratch directory."""
     for sv_id in sv_ids:
         file_name = f"long_reads/evidence/{sv_id}.csv"
         scratch_file = os.path.join(SCRATCH_DIR, file_name)
@@ -87,15 +92,17 @@ def move_evidence_files(sv_ids, *, to_scratch: bool):
 
 
 def is_sample_processed(sv_id: str, sample_id: str) -> bool:
+    """Checks if the sample has been processed for an sv by looking for the sample id in the sv evidence file."""
     file_name = os.path.join(SCRATCH_DIR, f"long_reads/evidence/{sv_id}.csv")
     try:
         with open(file_name, "r") as file:
             return sample_id in file.read()
-    except Exception:
+    except Exception: # sv evidence file does not exist yet
         return False
 
 
 def write_to_evidence_file(file_name, row):
+    """Writes the new row (sample id and start/stop of the deletions) to the evidence file for the sv."""
     if os.path.exists(file_name):  # append to existing file
         f = open(file_name, "a")
     else:  # file does not exist
@@ -108,6 +115,7 @@ def write_to_evidence_file(file_name, row):
 def process_sample_evidence(
     sample_id: str, cram_file: str, sv_ids: List[str], queue: Optional[mp.Queue]
 ):
+    """For each sv id for a given sample, download the bam file, extract cigar strings, and write to evidence file."""
     for sv_id in sv_ids:
         # add a tolerance of 500 bp on either side of the sv start/stop
         region, sv_len = get_sv_region(sv_id, 500)
@@ -133,6 +141,7 @@ def process_sample_evidence(
             SCRATCH_DIR, f"long_reads/evidence/{sv_id}.csv"
         )
 
+        # not used in the synchronous version
         if queue is None:
             write_to_evidence_file(file_name, row)
         else:
@@ -150,6 +159,7 @@ def remove_cram_file(file):
 def download_sample_evidence(
     sample_row: pd.Series, sv_ids: List[str], queue: Optional[mp.Queue] = None
 ):
+    """Download the cram file for a sample, process it for each sv, and then remove the cram file."""
     sample_id = sample_row["sample_id"]
     print(f"Processing sample {sample_id}")
 
@@ -163,7 +173,6 @@ def download_sample_evidence(
             capture_output=True,
             text=True,
         )
-
     if not os.path.exists(sample_row["indexed_cram_file"]):
         subprocess.run(
             [
@@ -302,12 +311,16 @@ def download_long_read_evidence_synchronous(
     sample_sv_lookup,
     redo_samples,
 ):
+    """Download long read evidence (cram -> bam -> cigar string) for all samples and SVs in the lookup table. Synchronous version without multiprocessing."""
+
+    # if redo samples, only process these samples
     if redo_samples:
         samples_to_redo = get_samples_to_redo()
         long_read_samples = long_read_samples[
             long_read_samples["sample_id"].isin(samples_to_redo)
         ]
 
+    # for each sample and its SVs, download sample evidence
     for _, row in long_read_samples.iterrows():
         sv_ids = sample_sv_lookup[
             sample_sv_lookup["sample_id"] == row["sample_id"]
@@ -330,20 +343,26 @@ def download_long_read_evidence(
     move_files: bool = True,
     redo_samples: bool = False,
 ):
+    """Download long read evidence (cram -> bam -> cigar string) for all samples and SVs in the lookup table. Moves evidence files between home directory and scratch to check for previous progress and speed up I/O on fiji."""
+
+    # only process SVs that have at least one long read sample, and only process samples that have short-read evidence
+    # it would take too long to process all svs for all samples
     sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
     long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
 
+    # skip samples that have already been completed
     # completed_samples = get_completed_samples()
     # long_read_samples = long_read_samples[
     #     ~long_read_samples["sample_id"].isin(completed_samples)
     # ]
 
     # skip these samples because they keep failing
-    samples_to_redo = get_samples_to_redo()
-    long_read_samples = long_read_samples[
-        ~long_read_samples["sample_id"].isin(samples_to_redo)
-    ]
+    # samples_to_redo = get_samples_to_redo()
+    # long_read_samples = long_read_samples[
+    #     ~long_read_samples["sample_id"].isin(samples_to_redo)
+    # ]
 
+    # sv ids to process
     all_sv_ids = set(sample_sv_lookup["sv_id"].unique())
 
     # move sv files to scratch dir for faster I/O
@@ -366,9 +385,7 @@ def download_long_read_evidence(
 if __name__ == "__main__":
     start = time.time()
 
-    download_sv_subset()
-
-    # download_long_read_evidence(move_files=True, redo_samples=False)
+    download_long_read_evidence(move_files=False, redo_samples=False)
 
     end = time.time()
     print("Time taken:", (end - start) / 60, "minutes")
