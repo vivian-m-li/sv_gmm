@@ -179,6 +179,42 @@ def get_processed_samples(sv_id: str) -> Dict[str, List[dict]]:
 """Long read data processing functions"""
 
 
+def filter_evidence(sv_id: str, start, end, svlen):
+    """For an SV, filters out evidence from each sample that is not within some range of the SV region"""
+    file = f"long_reads/evidence/{sv_id}.csv"
+    with open(file, "r") as f:
+        for row in f:
+            evidence = []
+            vals = row.split(",")
+            sample_id = vals[0]
+            vals = vals[1:]
+            for e_start, e_end in zip(vals[::2], vals[1::2]):
+                e_start, e_end = int(e_start), int(e_end)
+                # evidence is within twice the svlen of the evidence
+                if e_start >= start - svlen * 2 and e_end <= end + svlen * 2:
+                    evidence.append(
+                        {
+                            "start": e_start,
+                            "stop": e_end,
+                            "length": e_end - e_start,
+                        }
+                    )
+            write_sample_long_read_evidence(sv_id, sample_id, evidence)
+
+
+def filter_evidence_all():
+    "For all SVs, filter evidence to be within some range of the SV region (standalone function)"
+    sv_lookup = get_sv_lookup()
+    files = os.listdir("long_reads/evidence")
+    for file in files:
+        sv_id = file.split(".")[0]
+        row = sv_lookup[sv_lookup["id"] == sv_id]
+        start = row["start"].values[0]
+        stop = row["stop"].values[0]
+        svlen = stop - start
+        filter_evidence(sv_id, start, stop, svlen)
+
+
 def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
     """For a given bam file (sample-specific, filtered by SV region), read the cigar strings to identify deletions that match the given SV size."""
     try:
