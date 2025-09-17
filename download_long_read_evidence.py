@@ -97,7 +97,7 @@ def is_sample_processed(sv_id: str, sample_id: str) -> bool:
     try:
         with open(file_name, "r") as file:
             return sample_id in file.read()
-    except Exception: # sv evidence file does not exist yet
+    except Exception:  # sv evidence file does not exist yet
         return False
 
 
@@ -139,9 +139,7 @@ def process_sample_evidence_inner(
     for deletion in evidence:
         row.extend([deletion["start"], deletion["stop"]])
 
-    file_name = os.path.join(
-        SCRATCH_DIR, f"long_reads/evidence/{sv_id}.csv"
-    )
+    file_name = os.path.join(SCRATCH_DIR, f"long_reads/evidence/{sv_id}.csv")
 
     # not used in the synchronous version
     if queue is None:
@@ -158,12 +156,12 @@ def process_sample_evidence(
     cram_file: str,
     sv_ids: List[str],
     queue: Optional[mp.Queue],
-    with_mp: bool = False
+    with_mp: bool = False,
 ):
     """Parallelizes the processing function for each sv in sv_ids after the cram file has been downloaded for a sample."""
 
     if with_mp:
-        with mp.Manager() as manager:
+        with mp.Manager():
             cpu_count = mp.cpu_count()
             pool = mp.Pool(cpu_count)
             args = []
@@ -175,7 +173,6 @@ def process_sample_evidence(
     else:
         for sv_id in sv_ids:
             process_sample_evidence_inner(sv_id, sample_id, cram_file, queue)
-        
 
 
 def remove_cram_file(file):
@@ -221,11 +218,17 @@ def download_sample_evidence(
     remove_cram_file(output_file)
 
     end = time.time()
-    print("Finished processing sample", sample_id, "in ", (end - start) / 60, "minutes")
+    print(
+        "Finished processing sample",
+        sample_id,
+        "in ",
+        int((end - start) / 60),
+        "minutes",
+    )
     sys.stdout.flush()
 
 
-@break_after(hours=335, minutes=30) # takes about 14 days to run all SVs
+@break_after(hours=335, minutes=30)  # takes about 14 days to run all SVs
 def download_sv_subset():
     """Download long read evidence for a subset of svs that are failing."""
     sv_ids = set()

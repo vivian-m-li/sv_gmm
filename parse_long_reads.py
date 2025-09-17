@@ -179,38 +179,43 @@ def get_processed_samples(sv_id: str) -> Dict[str, List[dict]]:
 """Long read data processing functions"""
 
 
-def filter_evidence(sv_id: str, start, end, svlen):
+def filter_evidence(sv_id: str, start: int, end: int, svlen: int):
     """For an SV, filters out evidence from each sample that is not within some range of the SV region"""
     file = f"long_reads/evidence/{sv_id}.csv"
+    rows = []
     with open(file, "r") as f:
         for row in f:
-            evidence = []
             vals = row.split(",")
             sample_id = vals[0]
+            evidence = [sample_id]
             vals = vals[1:]
+            bounds = (start - svlen, end + svlen)
             for e_start, e_end in zip(vals[::2], vals[1::2]):
-                e_start, e_end = int(e_start), int(e_end)
-                # evidence is within twice the svlen of the evidence
-                if e_start >= start - svlen * 2 and e_end <= end + svlen * 2:
-                    evidence.append(
-                        {
-                            "start": e_start,
-                            "stop": e_end,
-                            "length": e_end - e_start,
-                        }
-                    )
-            write_sample_long_read_evidence(sv_id, sample_id, evidence)
+                e_start, e_end = int(e_start.strip("\n")), int(
+                    e_end.strip("\n")
+                )
+                # keep only evidence that starts within 1 sv length and ends within 1 sv length (0% reciprocal overlap with the original sv)
+                if e_start >= bounds[0] and e_end <= bounds[1]:
+                    evidence.extend([e_start, e_end])
+            if len(evidence) > 3:  # at least one pair of reads in the sv region
+                rows.append(evidence)
+
+    with open(file, "w") as f:
+        csv_writer = csv.writer(f)
+        for row in rows:
+            csv_writer.writerow(row)
 
 
 def filter_evidence_all():
     "For all SVs, filter evidence to be within some range of the SV region (standalone function)"
     sv_lookup = get_sv_lookup()
     files = os.listdir("long_reads/evidence")
-    for file in files:
+    for i, file in enumerate(files):
         sv_id = file.split(".")[0]
+        print(f"{i} {sv_id}", end="\r")
         row = sv_lookup[sv_lookup["id"] == sv_id]
-        start = row["start"].values[0]
-        stop = row["stop"].values[0]
+        start = int(row["start"].values[0])
+        stop = int(row["stop"].values[0])
         svlen = stop - start
         filter_evidence(sv_id, start, stop, svlen)
 
