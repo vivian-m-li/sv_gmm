@@ -29,19 +29,20 @@ def run_lr_dirichlet_wrapper(
     sample_set: Set[str],
     samples_to_skip: Set[str] = set(),
 ):
+    """Runs the dirichlet/GMM process for a single SV using long read data."""
     sv_id = row["id"]
-    insert_size_lookup = {
-        sample_id: 0 for sample_id in sample_set
-    }  # don't need to remove insert size for long reads
 
-    # filter for sample IDs that have the SV allele
+    # don't need to remove insert size for long reads
+    insert_size_lookup = {sample_id: 0 for sample_id in sample_set}
+
+    # filter for sample IDs that have the SV allele (not homozygous reference)
     filtered_sample_ids = []
     sv_alleles = set(["(0, 1)", "(1, 0)", "(1, 1)"])
     for sample_id in sample_set:
         if row[sample_id] in sv_alleles:
             filtered_sample_ids.append(sample_id)
 
-    # load deletions for the SV
+    # load deletions for the SV from the home dir, not scratch
     squiggle_data = load_squiggle_data(f"long_reads/evidence/{sv_id}.csv")
 
     # remove samples to skip
@@ -91,18 +92,20 @@ def run_lr_dirichlet_wrapper(
 
 
 @break_after(hours=22, minutes=0)
-def run_svs_until_convergence(with_multiprocessing, use_subset):
+def run_svs_until_convergence(with_multiprocessing: bool, use_subset: bool):
     if use_subset:
         deletions_df = pd.read_csv("1kgp/deletions_df_subset.csv")
     else:
         deletions_df = get_deletions_df()
 
     long_read_samples_df = pd.read_csv("long_reads/long_read_samples.csv")
+
     # skip these samples because they keep failing
     samples_to_skip = get_samples_to_redo()
     long_read_samples_df = long_read_samples_df[
         ~long_read_samples_df["sample_id"].isin(samples_to_skip)
     ]
+
     sample_ids = set(long_read_samples_df["sample_id"].tolist())
     population_size = len(sample_ids)
 
@@ -131,6 +134,7 @@ def run_svs_until_convergence(with_multiprocessing, use_subset):
 
 
 def run_svs(*, with_multiprocessing: bool = True, use_subset: bool = False):
+    """Cluster SVs using long read data."""
     start = time.time()
     run_svs_until_convergence(with_multiprocessing, use_subset)
 

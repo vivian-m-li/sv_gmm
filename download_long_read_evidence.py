@@ -53,6 +53,9 @@ def get_svs_by_sample():
 def get_samples_to_redo():
     """Gets the samples that need to be redone."""
     file = "long_reads/redo_samples.txt"
+    if not os.path.exists(file):
+        return set()
+    
     sample_ids = set()
     with open(file, "r") as f:
         for line in f.readlines():

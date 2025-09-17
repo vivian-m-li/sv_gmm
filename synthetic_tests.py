@@ -90,31 +90,31 @@ def write_csv(
     fixed_svlen: Optional[int] = None,
 ):
     file = f"synthetic_data/results{'' if fixed_n_samples is None else 'n=' + str(fixed_n_samples)}.csv"
+    if not os.path.exists(file):
+        write_new_file = True
     with open(
         file,
         mode="w" if write_new_file else "a",
         newline="",
     ) as out:
+        fieldnames = [
+            "case",
+            "r",
+            "r2",
+            "gmm_model",
+            "expected_num_modes",
+            "expected_lengths",
+            "expected_Ls",
+            "num_modes",
+            "lengths",
+            "Ls",
+            "num_samples",
+            "svlen",
+            "weights",
+        ]
+        csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
         if write_new_file:
-            fieldnames = [
-                "case",
-                "r",
-                "r2",
-                "gmm_model",
-                "expected_num_modes",
-                "expected_lengths",
-                "expected_Ls",
-                "num_modes",
-                "lengths",
-                "Ls",
-                "num_samples",
-                "svlen",
-                "weights",
-            ]
-            csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
             csv_writer.writeheader()
-        else:
-            csv_writer = csv.DictWriter(out)
 
         for (
             case,
@@ -309,7 +309,7 @@ def generate_data_r(case: str, svlen: int):
     return data_cleaned
 
 
-@break_after(hours=23, minutes=55)
+@break_after(hours=35, minutes=55)
 def r_accuracy_test(
     n_samples: int,
     svlen: int,
@@ -348,7 +348,7 @@ def r_accuracy_test(
                 weights = [[1.0 / len(svs) for _ in range(len(svs))]]
             for weight in weights:
                 # run each case 10 times and average at the end
-                for _ in range(10):
+                for _ in range(50):
                     args.append((case, r, svs, weight, n_samples, results))
 
         p.starmap(run_gmm, args)
