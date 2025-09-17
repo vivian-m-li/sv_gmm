@@ -112,43 +112,70 @@ def write_to_evidence_file(file_name, row):
     f.close()
 
 
-def process_sample_evidence(
-    sample_id: str, cram_file: str, sv_ids: List[str], queue: Optional[mp.Queue]
+def process_sample_evidence_inner(
+    sv_id: str,
+    sample_id: str,
+    cram_file: str,
+    queue: Optional[mp.Queue],
 ):
     """For each sv id for a given sample, download the bam file, extract cigar strings, and write to evidence file."""
-    for sv_id in sv_ids:
-        # add a tolerance of 500 bp on either side of the sv start/stop
-        region, sv_len = get_sv_region(sv_id, 500)
-        output_file = get_bam_file(
-            sv_id,
-            sample_id,
-            region=region,
-            cram_file=cram_file,
-            scratch=True,
-        )
+    # add a tolerance of 500 bp on either side of the sv start/stop
+    region, sv_len = get_sv_region(sv_id, 500)
+    output_file = get_bam_file(
+        sv_id,
+        sample_id,
+        region=region,
+        cram_file=cram_file,
+        scratch=True,
+    )
 
-        try:
-            evidence = read_cigars_from_file(output_file, sv_len)
-        except Exception:
-            print(f"Redo sample {sv_id}-{sample_id}")
-            continue
+    try:
+        evidence = read_cigars_from_file(output_file, sv_len)
+    except Exception:
+        print(f"Redo sample {sv_id}-{sample_id}")
+        return
 
-        row = [sample_id]
-        for deletion in evidence:
-            row.extend([deletion["start"], deletion["stop"]])
+    row = [sample_id]
+    for deletion in evidence:
+        row.extend([deletion["start"], deletion["stop"]])
 
-        file_name = os.path.join(
-            SCRATCH_DIR, f"long_reads/evidence/{sv_id}.csv"
-        )
+    file_name = os.path.join(
+        SCRATCH_DIR, f"long_reads/evidence/{sv_id}.csv"
+    )
 
-        # not used in the synchronous version
-        if queue is None:
-            write_to_evidence_file(file_name, row)
-        else:
-            # put the csv row in the queue to be written
-            queue.put((file_name, row))
+    # not used in the synchronous version
+    if queue is None:
+        write_to_evidence_file(file_name, row)
+    else:
+        # put the csv row in the queue to be written
+        queue.put((file_name, row))
 
-        remove_bam_file(output_file, scratch=True)
+    remove_bam_file(output_file, scratch=True)
+
+
+def process_sample_evidence(
+    sample_id: str,
+    cram_file: str,
+    sv_ids: List[str],
+    queue: Optional[mp.Queue],
+    with_mp: bool = False
+):
+    """Parallelizes the processing function for each sv in sv_ids after the cram file has been downloaded for a sample."""
+
+    if with_mp:
+        with mp.Manager() as manager:
+            cpu_count = mp.cpu_count()
+            pool = mp.Pool(cpu_count)
+            args = []
+            for sv_id in sv_ids:
+                args.append((sv_id, sample_id, cram_file, None))
+            pool.starmap(process_sample_evidence_inner, args)
+            pool.close()
+            pool.join()
+    else:
+        for sv_id in sv_ids:
+            process_sample_evidence_inner(sv_id, sample_id, cram_file, queue)
+        
 
 
 def remove_cram_file(file):
@@ -159,10 +186,9 @@ def remove_cram_file(file):
 def download_sample_evidence(
     sample_row: pd.Series, sv_ids: List[str], queue: Optional[mp.Queue] = None
 ):
-    """
-    Download the cram file for a sample, process it for each sv, and then remove the cram file.
-    TODO (if I need to rerun the entire dataset in the future): Parallelize the "process_sample_evidence" function for each sv in sv_ids after the cram file has been downloaded for a sample.
-    """
+    """Download the cram file for a sample, process it for each sv, and then remove the cram file."""
+    start = time.time()
+
     sample_id = sample_row["sample_id"]
     print(f"Processing sample {sample_id}")
 
@@ -188,12 +214,14 @@ def download_sample_evidence(
             text=True,
         )
 
-    process_sample_evidence(sample_id, output_file, sv_ids, queue)
+    # parallelized function to process the sample evidence for each sv
+    process_sample_evidence(sample_id, output_file, sv_ids, queue, with_mp=True)
 
     # remove the cram file at the end
     remove_cram_file(output_file)
 
-    print("Finished processing sample", sample_id)
+    end = time.time()
+    print("Finished processing sample", sample_id, "in ", (end - start) / 60, "minutes")
     sys.stdout.flush()
 
 
@@ -313,7 +341,7 @@ def download_long_read_evidence_inner(
         pool.join()
 
 
-@break_after(hours=98, minutes=0)
+@break_after(hours=5, minutes=30)
 def download_long_read_evidence_synchronous(
     long_read_samples,
     sample_sv_lookup,
@@ -393,7 +421,7 @@ def download_long_read_evidence(
 if __name__ == "__main__":
     start = time.time()
 
-    download_long_read_evidence(move_files=False, redo_samples=False)
+    download_long_read_evidence(move_files=True, redo_samples=False)
 
     end = time.time()
     print("Time taken:", (end - start) / 60, "minutes")
