@@ -245,7 +245,7 @@ def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
             # the digit in front of the D in the cigar string
             deletion_size = int(match.group(1))
 
-            # TODO:M deletion size should be in a range
+            # TODO: deletion size should be in a range
             # account for 500 bp of tolerance
             # set 25bp as threshold - smallest sv is 51bp
             if deletion_size >= max(25, sv_deletion_size - 500):
@@ -262,7 +262,7 @@ def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
                         )
                         break
 
-                    if op in [0, 2, 3, 7, 8]:  # M, D, N, =, X
+                    if op in [0, 2, 3, 7, 8]:  # M, D, N, =, X; I does not count
                         ref_pos += length
 
     return deletions

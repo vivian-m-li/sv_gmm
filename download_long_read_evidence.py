@@ -159,7 +159,10 @@ def remove_cram_file(file):
 def download_sample_evidence(
     sample_row: pd.Series, sv_ids: List[str], queue: Optional[mp.Queue] = None
 ):
-    """Download the cram file for a sample, process it for each sv, and then remove the cram file."""
+    """
+    Download the cram file for a sample, process it for each sv, and then remove the cram file.
+    TODO (if I need to rerun the entire dataset in the future): Parallelize the "process_sample_evidence" function for each sv in sv_ids after the cram file has been downloaded for a sample.
+    """
     sample_id = sample_row["sample_id"]
     print(f"Processing sample {sample_id}")
 
@@ -185,7 +188,6 @@ def download_sample_evidence(
             text=True,
         )
 
-    # process the sample for each sv
     process_sample_evidence(sample_id, output_file, sv_ids, queue)
 
     # remove the cram file at the end
@@ -195,33 +197,9 @@ def download_sample_evidence(
     sys.stdout.flush()
 
 
-def worker(sample_row: pd.Series, sv_ids: List[str], queue: mp.Queue):
-    download_sample_evidence(sample_row, sv_ids, queue)
-
-
-def listener(queue):
-    """Listens for messages on the queue and writes to the file"""
-    try:
-        while True:
-            m = queue.get()
-            if m == "kill":
-                break
-
-            file_name, row = m
-            if os.path.exists(file_name):  # append to existing file
-                f = open(file_name, "a")
-            else:  # file does not exist
-                f = open(file_name, "w")
-            csv_writer = csv.writer(f)
-            csv_writer.writerow(row)
-            f.close()
-    except Exception as e:
-        print(f"Listener error: {e}")
-        return
-
-
-@break_after(hours=335, minutes=30)
+@break_after(hours=335, minutes=30) # takes about 14 days to run all SVs
 def download_sv_subset():
+    """Download long read evidence for a subset of svs that are failing."""
     sv_ids = set()
     with open("long_reads/svs_to_redo.txt", "r") as f:
         for line in f.readlines():
@@ -251,12 +229,42 @@ def download_sv_subset():
     move_evidence_files(sv_ids, to_scratch=False)
 
 
-@break_after(hours=82, minutes=0)  # leave time to move files
+def worker(sample_row: pd.Series, sv_ids: List[str], queue: mp.Queue):
+    download_sample_evidence(sample_row, sv_ids, queue)
+
+
+def listener(queue):
+    """Listens for messages on the queue and writes to the file"""
+    try:
+        while True:
+            m = queue.get()
+            if m == "kill":
+                break
+
+            file_name, row = m
+            if os.path.exists(file_name):  # append to existing file
+                f = open(file_name, "a")
+            else:  # file does not exist
+                f = open(file_name, "w")
+            csv_writer = csv.writer(f)
+            csv_writer.writerow(row)
+            f.close()
+    except Exception as e:
+        print(f"Listener error: {e}")
+        return
+
+
 def download_long_read_evidence_inner(
     long_read_samples,
     sample_sv_lookup,
     redo_samples,
 ):
+    """
+    Parallelized version of downloading long read evidence using multiprocessing.
+    Requires a queue to write to the same evidence files from different processes.
+    Don't use this function -- use the synchronous version instead.
+    Downloading multiple cram files at the same time uses too many resources from the cluster.
+    """
     if redo_samples:
         samples_to_redo = get_samples_to_redo()
         long_read_samples = long_read_samples[
@@ -311,7 +319,7 @@ def download_long_read_evidence_synchronous(
     sample_sv_lookup,
     redo_samples,
 ):
-    """Download long read evidence (cram -> bam -> cigar string) for all samples and SVs in the lookup table. Synchronous version without multiprocessing."""
+    """Download long read evidence (cram -> bam -> cigar string) for all samples and SVs in the lookup table. Uses multiprocessing for one sample at a time."""
 
     # if redo samples, only process these samples
     if redo_samples:
