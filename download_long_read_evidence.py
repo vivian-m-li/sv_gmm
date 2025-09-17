@@ -194,10 +194,17 @@ def download_sample_evidence(
         SCRATCH_DIR, sample_row["cram_file"].split("/")[-1]
     )
     if not os.path.exists(sample_row["cram_file"]):
+        download_start = time.time()
         subprocess.run(
             ["wget", "-O", output_file, sample_row["cram_file"]],
             capture_output=True,
             text=True,
+        )
+        download_end = time.time()
+        print(
+            "Downloaded cram file in ",
+            int((download_end - download_start) / 60),
+            "minutes",
         )
     if not os.path.exists(sample_row["indexed_cram_file"]):
         subprocess.run(
@@ -344,7 +351,7 @@ def download_long_read_evidence_inner(
         pool.join()
 
 
-@break_after(hours=5, minutes=30)
+@break_after(hours=3, minutes=30)
 def download_long_read_evidence_synchronous(
     long_read_samples,
     sample_sv_lookup,
