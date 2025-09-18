@@ -153,6 +153,10 @@ def write_csv(
                 }
             )
 
+    df = pd.read_csv(file)
+    df = df.sort_values(by=["case", "gmm_model", "r", "r2"])
+    df.to_csv(file, index=False)
+
 
 def get_coordinates(sv1, sv2, d):
     x1, y1 = sv1
