@@ -143,15 +143,15 @@ def write_sample_long_read_evidence(
 """Helper functions"""
 
 
-def get_sv_region(sv_id: str, tolerance: int) -> Tuple[str, int]:
+def get_sv_region(sv_id: str, tolerance: int) -> Tuple[str, int, int, int]:
     """For a given SV, returns the frame (chr:start-stop) to extract reads from."""
     sv_lookup = get_sv_lookup()
     row = sv_lookup[sv_lookup["id"] == sv_id]
-    start = row["start"].values[0] - tolerance
-    stop = row["stop"].values[0] + tolerance
-    region = f"chr{row['chr'].values[0]}:{start}-{stop}"
-    sv_len = stop - start - 2 * tolerance  # original sv length
-    return region, sv_len
+    start = row["start"].values[0]
+    stop = row["stop"].values[0]
+    region = f"chr{row['chr'].values[0]}:{start - tolerance}-{stop + tolerance}"
+    sv_len = stop - start
+    return region, start, stop, sv_len
 
 
 def get_processed_samples(sv_id: str) -> Dict[str, List[dict]]:
@@ -220,7 +220,7 @@ def filter_evidence_all():
         filter_evidence(sv_id, start, stop, svlen)
 
 
-def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
+def read_cigars_from_file(bam_file: str, start: int, stop: int, svlen: int):
     """For a given bam file (sample-specific, filtered by SV region), read the cigar strings to identify deletions that match the given SV size."""
     try:
         # open the sample's bam file (corresponding to an SV region), read the cigar strings that
@@ -246,34 +246,31 @@ def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
             continue
 
         # look for all deletions in this cigar string
-        # TODO: iterating only over the Ds might miss some "consume the reference" operations
-        # go through every number/letter pair - might be at the wrong coordinate by the time I get to the deletions
-        for match in re.finditer(r"(\d+)D", cigar_string):
-            # the digit in front of the D in the cigar string
-            deletion_size = int(match.group(1))
+        ref_pos = read.reference_start
+        for op, length in read.cigartuples:
+            # operations that "consume" the reference sequence
+            if op in [0, 2, 3, 7, 8]:  # M, D, N, =, X
+                ref_pos += length
 
-            # TODO: deletion size should be in a range
-            # determine the genomic coordinates of each start/stop range of the cigar strings
-            # when is a read considered to support the sv?
+            # skip non-deletions
+            if op != 2:
+                continue
 
-            # account for 500 bp of tolerance
-            # set 25bp as threshold - smallest sv is 51bp
-            if deletion_size >= max(25, sv_deletion_size - 500):
-                ref_pos = read.reference_start
-                cigar_tuples = read.cigartuples
-                for op, length in cigar_tuples:
-                    if op == 2 and length == deletion_size:  # 2 = deletion
-                        deletions.append(
-                            {
-                                "start": ref_pos,
-                                "stop": ref_pos + deletion_size,
-                                "length": deletion_size,
-                            }
-                        )
-                        break
+            # ignore deletions that are too far away from the actual SV
+            if ref_pos < (start - svlen) or ref_pos > (stop + svlen):
+                continue
 
-                    if op in [0, 2, 3, 7, 8]:  # M, D, N, =, X; I does not count
-                        ref_pos += length
+            # ignore deletions that are too small/large
+            if length < svlen * 0.5 or length > svlen * 2:
+                continue
+
+            deletions.append(
+                {
+                    "start": ref_pos,
+                    "stop": ref_pos + length,
+                    "length": length,
+                }
+            )
 
     return deletions
 
@@ -298,7 +295,7 @@ def write_all_long_read_evidence():
 
         try:
             deletions = read_cigars_from_file(
-                os.path.join("long_reads/reads", file), svlen
+                os.path.join("long_reads/reads", file), start, stop, svlen
             )
         except (ValueError, OSError):
             remove_bam_file(file)
@@ -322,7 +319,7 @@ def get_long_read_svs(
     Writes the evidence and removes the bam file.
     """
 
-    region, sv_len = get_sv_region(sv_id, tolerance)
+    region, start, stop, sv_len = get_sv_region(sv_id, tolerance)
     long_reads = pd.read_csv("long_reads/long_read_samples.csv")
 
     # get samples that have been processed for this SV already
@@ -351,7 +348,9 @@ def get_long_read_svs(
 
         # process the sample - get the deletions from the cigar string
         # possible ValueError
-        deletions[sample_id] = read_cigars_from_file(output_file, sv_len)
+        deletions[sample_id] = read_cigars_from_file(
+            output_file, start, stop, sv_len
+        )
 
         # write evidence to file and remove bam file
         write_sample_long_read_evidence(sv_id, sample_id, deletions[sample_id])
