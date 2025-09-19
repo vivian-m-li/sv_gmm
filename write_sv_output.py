@@ -1,3 +1,5 @@
+"""Functions for writing synthetic or real data outputs."""
+
 import os
 import csv
 import pandas as pd
@@ -12,6 +14,7 @@ from typing import Set, Dict, List, Optional, Tuple
 def concat_processed_sv_files(
     file_dir: str, output_file_name: str, *, stem: str = "1kgp"
 ):
+    """Concatenates individual files in file_dir into one file."""
     with open(f"{stem}/{output_file_name}", mode="w", newline="") as out:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
@@ -25,6 +28,7 @@ def concat_processed_sv_files(
 def concat_multi_processed_sv_files(
     file_dir: str, output_file_name: str, stem: str = "1kgp"
 ):
+    """Concatenates individual files output from the dirichlet process (where the GMM is run for x iterations) in file_dir into one file. Used at the end of both short read and long read clustering processes."""
     with open(f"{stem}/{output_file_name}", mode="w", newline="") as out:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
@@ -38,6 +42,7 @@ def concat_multi_processed_sv_files(
 
 
 def write_sv_file(sv: SVInfoGMM, file_dir: str, iteration: int):
+    """Writes the output after one iteration of the GMM in the dirichlet process."""
     with open(
         f"{file_dir}/{sv.id}_iteration={iteration}.csv", mode="w"
     ) as file:
@@ -51,6 +56,7 @@ def get_reference_samples(
     sample_set: Set[int],
     squiggle_data: Dict[str, np.ndarray[float]],
 ) -> List[str]:
+    """Returns the samples with evidence that are actually homozygous for the reference allele (0, 0)."""
     samples = [
         sample_id for sample_id in sample_set if sample_id in squiggle_data
     ]
@@ -64,6 +70,7 @@ def init_sv_stat_row(
     num_samples: Optional[int] = 0,
     num_reference: Optional[int] = 0,
 ) -> SVInfoGMM:
+    """Initializes a row for the SV output file."""
     sv_stat = SVInfoGMM(
         id=row["id"],
         chr=row["chr"],
@@ -87,7 +94,10 @@ def init_sv_stat_row(
     return sv_stat
 
 
-def get_raw_data(row, sample_set) -> Tuple[Dict[str, np.ndarray[float]], int]:
+def get_raw_data(
+    row, sample_set: Set[str]
+) -> Tuple[Dict[str, np.ndarray[float]], int]:
+    """Gets the samples and evidence for an SV. Filters out samples that are homozygous for the reference allele."""
     start = giggle_format(str(row["chr"]), row["start"])
     end = giggle_format(str(row["chr"]), row["stop"])
     squiggle_data = query_stix(
@@ -113,6 +123,11 @@ def write_sv_stats(
     file_dir: str,
     iteration: int = 0,
 ) -> None:
+    """
+    Writes the output after one iteration of the GMM in the dirichlet process.
+
+    Output: SV info (id/chr/start/stop/svlen/ref/alt/qual/af), # samples total/pruned/reference, final svlen, # modes as determined by the GMM, total # iterations run in the EM algorithm, if the mode coordinates overlap, and the start/stop/length/samples/af for each mode.
+    """
     if gmm is None:
         write_sv_file(sv_stat, file_dir, iteration)
         return
@@ -186,16 +201,19 @@ def write_sv_stats(
 
 
 def dataclass_to_columns(dataclass_type):
+    """Returns the field names for the SVInfoGMM dataclass."""
     return [field.name for field in SVInfoGMM(dataclass_type)]
 
 
 def create_sv_stats_file():
+    """Creates the SV output file with the appropriate columns. Unused"""
     df_fields = [field.name for field in fields(SVInfoGMM)]
     df = pd.DataFrame(columns=df_fields)
     return df
 
 
 def write_posterior_distributions(sv_id, alphas, posteriors, file_dir):
+    """Writes the posterior distributions for each mode calculated during the dirichlet process."""
     with open(
         f"{file_dir}/{sv_id}_posteriors.csv", mode="w", newline=""
     ) as file:

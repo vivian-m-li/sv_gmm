@@ -53,8 +53,10 @@ def run_lr_dirichlet_wrapper(
     num_samples = len(squiggle_data)
 
     if len(squiggle_data) == 0:
+        # no samples were found with evidence for this SV
         gmms, alphas, posterior_distributions = [(None, [])], [], []
     else:
+        # run the dirichlet process
         gmms, alphas, posterior_distributions = run_dirichlet(
             squiggle_data,
             **{
@@ -65,16 +67,17 @@ def run_lr_dirichlet_wrapper(
                 "plot": False,
                 "plot_bokeh": False,
                 "insert_size_lookup": insert_size_lookup,
-                "min_pairs": 1,  # reduce number of points required per sample
+                "min_pairs": 1,  # reduce number of points required per sample - long read data is sparse and "more accurate"
             },
         )
 
+    # write the output files to scratch first
     for i, (gmm, evidence_by_mode) in enumerate(gmms):
         sv_stat = init_sv_stat_row(
             row,
             num_samples=num_samples,
             num_reference=num_samples
-            - len(
+            - len(  # noqa: 503
                 squiggle_data
             ),  # this will be 0 since we are pre-filtering them out
         )
@@ -93,6 +96,7 @@ def run_lr_dirichlet_wrapper(
 
 @break_after(hours=22, minutes=0)
 def run_svs_until_convergence(with_multiprocessing: bool, use_subset: bool):
+    """Parallelized wrapper to cluster SVs using long read data."""
     if use_subset:
         deletions_df = pd.read_csv("1kgp/deletions_df_subset.csv")
     else:

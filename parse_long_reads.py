@@ -246,11 +246,16 @@ def read_cigars_from_file(bam_file: str, sv_deletion_size: int):
             continue
 
         # look for all deletions in this cigar string
+        # TODO: iterating only over the Ds might miss some "consume the reference" operations
+        # go through every number/letter pair - might be at the wrong coordinate by the time I get to the deletions
         for match in re.finditer(r"(\d+)D", cigar_string):
             # the digit in front of the D in the cigar string
             deletion_size = int(match.group(1))
 
             # TODO: deletion size should be in a range
+            # determine the genomic coordinates of each start/stop range of the cigar strings
+            # when is a read considered to support the sv?
+
             # account for 500 bp of tolerance
             # set 25bp as threshold - smallest sv is 51bp
             if deletion_size >= max(25, sv_deletion_size - 500):

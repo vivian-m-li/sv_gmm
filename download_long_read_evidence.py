@@ -55,7 +55,7 @@ def get_samples_to_redo():
     file = "long_reads/redo_samples.txt"
     if not os.path.exists(file):
         return set()
-    
+
     sample_ids = set()
     with open(file, "r") as f:
         for line in f.readlines():
@@ -162,7 +162,6 @@ def process_sample_evidence(
     with_mp: bool = False,
 ):
     """Parallelizes the processing function for each sv in sv_ids after the cram file has been downloaded for a sample."""
-
     if with_mp:
         with mp.Manager():
             cpu_count = mp.cpu_count()
