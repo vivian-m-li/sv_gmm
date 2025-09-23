@@ -30,6 +30,7 @@ def reciprocal_overlap(sv1, sv2):
 
 
 def write_reciprocal_overlap():
+    """Calculates and writes the reciprocal overlap for synthetic data files that have already been written."""
     files = os.listdir("synthetic_data")
     for file in files:
         df = pd.read_csv(f"synthetic_data/{file}")
@@ -46,6 +47,7 @@ def write_reciprocal_overlap():
 
 
 def run_gmm(case, r, svs, weights, n_samples, results):
+    """Generates synthetic data and runs the GMM on it. Appends the results to the multiprocessing-managed list to be written to a CSV later."""
     for gmm_model in GMM_MODELS:
         gmm, evidence_by_mode = generate_synthetic_sv_data(
             1,
@@ -60,6 +62,7 @@ def run_gmm(case, r, svs, weights, n_samples, results):
 
 
 def get_len_L(evidence_by_mode: List[List[Evidence]]):
+    """Gets the average length and L coordinate for each mode from the evidence."""
     lengths = []
     Ls = []
     for mode in evidence_by_mode:
@@ -89,6 +92,7 @@ def write_csv(
     fixed_n_samples: Optional[int] = None,
     fixed_svlen: Optional[int] = None,
 ):
+    """Writes the results of the synthetic data tests to a CSV file."""
     file = f"synthetic_data/results{'' if fixed_n_samples is None else 'n=' + str(fixed_n_samples)}.csv"
     if not os.path.exists(file):
         write_new_file = True
@@ -159,6 +163,7 @@ def write_csv(
 
 
 def get_coordinates(sv1, sv2, d):
+    """Get coordinates of a third SV that is d distance away the sv1 point towards the direction of sv2. Used in the distance/accuracy tests."""
     x1, y1 = sv1
     x2, y2 = sv2
     dist = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
@@ -167,9 +172,11 @@ def get_coordinates(sv1, sv2, d):
     return (x3, y3)
 
 
-# DEPRECATED
 def generate_data(case: str) -> List[Tuple[int, int]]:
-    """Generates synthetic data to test the model with. See Figure 2 for the 5 scenarios."""
+    """
+    DEPRECATED: Use generate_data_r instead.
+    Generates synthetic data with increasing d (distance between cluster centroids) and runs the GMM on it to test accuracy.
+    """
     SVLEN = 2553  # median SV length
     SV1_L = 100000
     SV1_R = SV1_L + SVLEN
@@ -221,6 +228,10 @@ def generate_data(case: str) -> List[Tuple[int, int]]:
 def d_accuracy_test(
     n_samples: int, test_case: Optional[str] = None, vary_weights: bool = False
 ):
+    """
+    DEPRECATED: Use `r_accuracy_test` instead.
+    Parallelized synthetic data tests with varying d.
+    """
     # generate synthetic data
     if test_case is None:
         data = []
@@ -251,7 +262,7 @@ def d_accuracy_test(
 
 
 def generate_data_r(case: str, svlen: int):
-    """Generates data varying the reciprocal overlap."""
+    """Generates synthetic data with increasing r (reciprocal overlap) and runs the GMM on it to test accuracy."""
     # SVLEN = 802  # median SV length for high coverage data
     SV1_L = 100000
     SV1_R = SV1_L + svlen
@@ -320,6 +331,7 @@ def r_accuracy_test(
     test_case: Optional[str] = None,
     vary_weights: bool = False,
 ):
+    """Parallelized synthetic data tests with varying r and (optional) cluster weights. Each set of parameters is repeated 50 times. Run with the bash script run_synthetic_data_tests.sh to test different sample sizes and sv lengths."""
     # generate synthetic data
     if test_case is None:
         data = []

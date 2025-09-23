@@ -698,6 +698,9 @@ def compare_short_long_reads():
 def write_post_processed_files(stem: str = "1kgp"):
     get_n_modes(stem)
     print("wrote svs_n_modes.csv")
+    if stem == "long_reads":
+        compare_short_long_reads()
+        print("wrote sr_lr_merged.csv")
     get_consensus_svs(stem)
     print("wrote consensus_svs.csv")
     write_sv_stats_collapsed(stem)

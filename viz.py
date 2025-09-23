@@ -1505,9 +1505,7 @@ def plot_reciprocal_overlap(
         ax.set_ylim(-0.05, 1.1)
 
 
-def plot_reciprocal_overlap_all():
-    sample_size = 118
-    svlen = 802
+def plot_reciprocal_overlap_all(sample_size=66, svlen=802):
     fig, axs = plt.subplots(2, 2, figsize=(10, 8))
     cases = [("B", "r"), ("C", "r"), ("D", "r"), ("D", "r2")]
     for i, (case, r_col) in enumerate(cases):
