@@ -7,7 +7,7 @@ from typing import Dict
 from query_sv import giggle_format, query_stix, PROCESSED_FILE_DIR
 from helper import calc_af
 from process_data import (
-    get_intercepts,
+    process_data,
     get_insert_size_lookup,
 )
 from timeout import break_after
@@ -138,7 +138,7 @@ def get_num_samples(row_index: int, row, lookup: Dict[int, int]):
     )
     if len(squiggle_data) > 0:
         insert_size_lookup = get_insert_size_lookup()
-        intercepts, _ = get_intercepts(
+        intercepts, _ = process_data(
             squiggle_data,
             file_name=None,
             L=row.start,

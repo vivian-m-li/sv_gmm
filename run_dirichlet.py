@@ -125,6 +125,7 @@ def animate_dirichlet_heatmap(alphas):
 
 
 def animate_dirichlet_history(df):
+    """Animates the evolution of the Dirichlet distribution heatmap over trials."""
     alpha = np.array([1, 1, 1])
     outcomes = df["num_modes"].values
     alphas = [alpha]
@@ -135,6 +136,7 @@ def animate_dirichlet_history(df):
 
 
 def run_trial(squiggle_data, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
+    """Runs a single trial of Gaussian Mixture Model."""
     kwargs["plot"] = False
     kwargs["plot_bokeh"] = False
     gmm, evidence_by_mode = run_viz_gmm(squiggle_data, **kwargs)
@@ -144,6 +146,16 @@ def run_trial(squiggle_data, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
 def run_dirichlet(
     squiggle_data, **kwargs
 ) -> Tuple[List[GMM], List[np.ndarray]]:
+    """
+    Runs the Dirichlet process until convergence or max iterations.
+    1. Initialize alpha values and counts. Each outcome (1, 2, or 3 modes) is equally likely.
+    2. For each trial:
+        a. Run the GMM model to get the number of modes.
+        b. Update counts and alpha values.
+        c. Calculate posterior distributions and confidence intervals.
+        d. Check stopping condition based on confidence interval.
+    3. Return the outcomes, alpha values, and posterior distributions over all trials.
+    """
     chr, L, R = kwargs["chr"], kwargs["L"], kwargs["R"]
 
     display_output = kwargs.get("plot", False)

@@ -13,7 +13,7 @@ from query_sv import (
     load_squiggle_data,
     PROCESSED_FILE_DIR,
 )
-from process_data import get_intercepts
+from process_data import process_data
 from typing import Dict
 
 # for human genome assembly GRCh37, https://www.ncbi.nlm.nih.gov/grc/human/data?asm=GRCh37
@@ -95,7 +95,7 @@ def get_num_samples(row_index: int, row, chr: str, lookup: Dict[int, int]):
         f"{PROCESSED_FILE_DIR}/{start}_{end}.csv"
     )
     if len(squiggle_data) > 0:
-        intercepts, _ = get_intercepts(
+        intercepts, _ = process_data(
             squiggle_data, file_name=None, L=row.pos, R=row.end
         )
         lookup[row_index] = len(intercepts)

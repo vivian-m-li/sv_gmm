@@ -11,3 +11,9 @@
   - Unsure if the current version of stix will return the intervals; may need to use giggle or [excord-lr](https://github.com/zhengxinchang/excord-lr)
 - Replicating gnomad's merging (per Harrison's email)
   - Look into [ClusterBatch](https://broadinstitute.github.io/gatk-sv/docs/modules/cb/) in the GATK repo - what kind of data does it input? (will possibly need to generate a vcf file with the synthetic data, using pysam)
+- From GATK's [SVCluster](https://gatk.broadinstitute.org/hc/en-us/articles/27007962371099-SVCluster-BETA), SVs are clustered based on:
+  - Matching SV type. DEL and DUP are considered matching SV types if --enable-cnv is used and merged into a multi-allelic CNV type.
+  - Matching breakend strands (BND and INV only)
+  - Interval reciprocal overlap (inapplicable for BNDs).
+  - Distance between corresponding event breakends (breakend window).
+  - Sample reciprocal overlap, based on carrier status determined by available genotypes (GT fields). If no GT fields are called for a given variant, the tool attempts to find carriers based on copy number (CN field) and sample ploidy (as determined by the ECN FORMAT field).

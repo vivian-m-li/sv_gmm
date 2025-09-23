@@ -3,8 +3,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import random
 from process_data import run_viz_gmm
-from query_sv import giggle_format, query_stix
-from helper import get_deletions_df
 from collections import defaultdict
 from typing import List, Tuple, Optional
 
@@ -13,27 +11,8 @@ Data generation functions
 """
 
 
-def query_random_svs(num_sample_range):
-    df = get_deletions_df()
-    df = df[df.num_samples >= num_sample_range[0]]
-    df = df[df.num_samples <= num_sample_range[1]]
-    for _ in range(50):
-        row = df.sample()
-        num_samples = row.num_samples.values[0]
-        chr = str(row.chr.values[0])
-        start = row.start.values[0]
-        stop = row.stop.values[0]
-        af = round(row.af.values[0], 3)
-        print(
-            f"Chr {chr}: {start}-{stop} ({num_samples} samples, allele frequency={af})"
-        )
-
-        l = giggle_format(chr, start)  # noqa741
-        r = giggle_format(chr, stop)
-        query_stix(l=l, r=r)
-
-
 def generate_weights(num_svs: int):
+    """Generates random weights (0.5 <= p <= 0.95) for each SV mode."""
     if num_svs == 1:
         return [1.0]
 
@@ -50,6 +29,7 @@ def generate_weights(num_svs: int):
 
 
 def assign_modes(weights, samples):
+    """Assigns the samples to modes depending on their weights."""
     num_samples = len(samples)
     assigned = [round(w * num_samples) for w in weights]
     if sum(assigned) != num_samples:
@@ -61,26 +41,23 @@ def assign_modes(weights, samples):
 
 
 def get_random_insert_size(df):
-    # get a random value from the df
+    """Gets a random insert size from the 1kgp insert size distribution."""
     return df.sample().insert_size.values[0]
 
 
 def generate_synthetic_sv_data(
-    chr: int,
-    svs: List[Tuple[int, int]],
+    chr: int,  # chromosome number (does not support X/Y), as a str
+    svs: List[Tuple[int, int]],  # List of (start, stop) for each SV
     *,
     n_samples: Optional[int] = None,
     p: Optional[List[float]] = None,
     gmm_model: str = "2d",
+    run_gmm: bool = True,
     plot: bool = False,
     plot_reads: bool = False,
-    run_gmm: bool = True,
+    write_data: bool = False,
 ):
-    """
-    Generates synthetic SV data for testing purposes
-    chr: chromosome number (does not support X/Y), as a str
-    svs: List of (start, stop) for each SV
-    """
+    """Generates synthetic SV data for testing purposes and runs the data through the SV analysis pipeline."""
     num_svs = len(svs)
 
     # Decide how many samples we want in our population
@@ -135,6 +112,22 @@ def generate_synthetic_sv_data(
         plt.xlabel("L")
         plt.ylabel("R")
         plt.show()
+
+    if write_data:
+        # TODO: write data in the vcf file format
+        reads_df = pd.DataFrame(
+            columns=["sample_id", "L", "R", "mean_insert_size"]
+        )
+        for sample_id, values in evidence.items():
+            mean_insert_size = insert_size_lookup[sample_id]
+            for read_L, read_R in zip(values[::2], values[1::2]):
+                reads_df.loc[len(reads_df)] = [
+                    sample_id,
+                    read_L,
+                    read_R,
+                    mean_insert_size,
+                ]
+        reads_df.to_csv("synthetic_data/generated_data.csv", index=False)
 
     if run_gmm:
         gmm, evidence_by_mode = run_viz_gmm(

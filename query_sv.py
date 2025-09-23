@@ -312,7 +312,7 @@ def main():
     parser.add_argument(
         "-id",
         type=str,
-        help="Right position of the structural variant, format=chromosome:position",
+        help="Structural variant ID from 1000 Genomes Project",
     )
     parser.add_argument(
         "-p",

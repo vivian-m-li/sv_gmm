@@ -14,6 +14,8 @@ GMM/EM helper functions
 
 def calc_hinge_loss(num_samples: int, mu: List[np.ndarray]) -> float:
     """Adds a penalty to the log-likelihood to prevent cluster centroids from getting too close to each other, accounting for sequencing noise."""
+    # TODO: instead of using centroids, consider using reciprocal overlap to penalize clusters that overlap too much
+
     # c - alpha * d(mu_i, mu_j)
     # alpha is the slope
     # 0 at d(mu_i, mu_j) = 141, which is 2 SD
@@ -204,6 +206,7 @@ def assign_values_to_modes(
     cov: List[np.ndarray],
     p: np.ndarray,
 ) -> Tuple[List[np.ndarray], List[int]]:
+    """Assigns each data point to a mode based on the highest responsibility value."""
     gz = calc_responsibility(x, len(x), mu, cov, p)
     assignments = np.argmax(gz, axis=1)
     x_by_mode = [[] for _ in range(num_modes)]
@@ -222,7 +225,7 @@ def run_gmm(
     x is a 2D list of data points where each data point consists of:
       - the y-intercept of the L-R position calculated after a shift in the genome due to a deletion of greater than 1 base pair, and
       - the max L value read for each sample
-    If x contains 10 or fewer data points, then 1 structural variant is estimated. If x has more than 10 data points, then the EM algorithm is then run for a 1, 2, or 3 mode GMM, and the resulting AIC scores are calculated and compared across the estimated GMMs. The GMM with the lowest AIC score is returned as the optimal fit to the data. The GMM's mu value represents the length and L coordinate of each structural variant estimated.
+    If x contains 10 or fewer data points, then 1 structural variant is returned by default. If x has more than 10 data points, then the EM algorithm is then run for a 1, 2, or 3 mode GMM, and the resulting AIC scores are calculated and compared across the estimated GMMs. The GMM with the lowest AIC score is returned as the optimal fit to the data. The GMM's mu value represents the length and L coordinate of each structural variant estimated.
     """
     x = np.array(x, dtype=float)
     if len(x) == 0:
