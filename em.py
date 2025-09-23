@@ -27,7 +27,8 @@ def calc_hinge_loss(num_samples: int, mu: List[np.ndarray]) -> float:
                 dist = np.linalg.norm(
                     mu[i] - mu[j]
                 )  # add a large penalty for mus that are too close to each other
-                penalty = (500 * np.log(num_samples)) * (np.exp(-0.045 * dist))
+                # old hinge loss b term was -0.045
+                penalty = (500 * np.log(num_samples)) * (np.exp(-0.073 * dist))
                 hinge_loss += penalty
     return hinge_loss
 
