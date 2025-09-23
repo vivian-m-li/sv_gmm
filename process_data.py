@@ -15,6 +15,7 @@ from gmm_types import Evidence, Sample
 
 
 def sv_viz(data: List[np.ndarray[float]], *, file_name: str):
+    """Plots the paired-end read data as horizontal lines using Bokeh (written by Kit)."""
     p = figure(width=800, height=600)
     colors = cm.Set1.colors
     for i, sample_data in enumerate(data):
@@ -37,7 +38,6 @@ def sv_viz(data: List[np.ndarray[float]], *, file_name: str):
     save(p)
 
 
-# First Visualization with ALL points
 def bokeh_scatterplot(
     data: List[np.ndarray[float]],
     *,
@@ -49,8 +49,7 @@ def bokeh_scatterplot(
     read_length: Optional[int] = None,
     sig: int = 50,  # allowed error in short reads
 ):
-    """Creates a scatterplot with an SV region polygon using Bokeh, taking a list of arrays as input."""
-
+    """Creates a scatterplot with an SV region polygon using Bokeh, taking a list of arrays as input (written by Kit). Points have not been filtered yet."""
     p = figure(
         width=800,
         height=600,
@@ -103,6 +102,7 @@ def plot_deviation_bokeh(
     lower_y_lim: int = -400,
     upper_y_lim: int = 200,
 ):
+    """Plots the deviation of paired-end reads from the expected y=x+b line using Bokeh (written by Kit)."""
     p = figure(
         width=600,
         height=400,
@@ -141,6 +141,7 @@ def plot_deviation_bokeh(
 
 
 def get_unique_x_values(data: List[np.ndarray]) -> np.ndarray[int]:
+    """Extracts and returns unique x-values from a list of arrays."""
     all_x_values = []
     for array in data:
         x_values = array[0::2]
@@ -160,6 +161,10 @@ def filter_and_plot_sequences_bokeh(
     min_pairs: int = 5,  # minimum number of paired end reads for a sample needed to keep the sample
     plot_bokeh: bool,
 ) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
+    """
+    DEPRECATED
+    Filters out samples with too few paired-end reads and plots the remaining sequences using Bokeh (written by Kit).
+    """
     ux = get_unique_x_values(list(y.values()))
 
     if plot_bokeh:
@@ -302,6 +307,10 @@ def plot_fitted_lines_bokeh(
     sig: int,
     plot_bokeh: bool,
 ) -> np.ndarray[np.ndarray[float]]:
+    """
+    DEPRECATED
+    Loop through the samples and return only points that are not filtered out. Plot the fitted lines using Bokeh (written by Kit).
+    """
     mean_insert_size = int(
         np.mean([e.mean_insert_size for e in sv_evidence_unfiltered])
     )
@@ -399,6 +408,10 @@ def get_intercepts(
     plot_bokeh: bool = False,
     min_pairs: int = 5,
 ) -> Tuple[np.ndarray[Tuple[float, int]], List[Evidence]]:
+    """
+    DEPRECATED: use process_data instead
+    Wrapper function that filters and plots sequences.
+    """
     mb, sv_evidence_unfiltered = filter_and_plot_sequences_bokeh(
         squiggle_data,
         file_name=file_name,
@@ -437,18 +450,76 @@ def get_intercepts(
     return points, sv_evidence
 
 
+def process_data(
+    squiggle_data: Dict[str, np.ndarray[float]],
+    *,
+    L: int,
+    R: int,
+    insert_size_lookup: Dict[str, int],
+    min_pairs: int = 5,  # minimum number of paired end reads for a sample needed to keep the sample
+    plot_bokeh: bool = False,  # deprecated
+    file_name: Optional[str],  # deprecated - used for plotting
+):
+    """
+    Processes and filters samples and paired-end reads to be used in clustering.
+    Paired-end data is filtered out if points are 0 or nan.
+    Samples are filtered out if too few paired-end reads are present (< min_pairs). Long reads require fewer reads to support an SV.
+    Returns a list of points to cluster and a list of Evidence objects for the samples that passed filtering.
+    """
+    # list of evidence to keep after filtering
+    sv_evidence = []
+
+    # list of points to cluster in the shape [[intercept, mean_l], ...]
+    points = []
+
+    for sample_id, r in squiggle_data.items():
+        reads = r.copy()  # of the format [l1, r1, l2, r2, ...]
+        reads = reads[(reads != 0) & (~np.isnan(reads))]
+        paired_ends = [
+            [reads[i], reads[i + 1]] for i in range(0, len(reads), 2)
+        ]  # reformat the reads to be [[l1, r1], [l2, r2], ...]
+        if len(reads) >= min_pairs * 2:  # filter out samples with too few reads
+            # before, we would filter out paired-end reads that were too far from the SV coordinates
+            # however, we should be able to rely on STIX to return only relevant reads
+            # taking the mean of the coordinates will average out noise in the reads
+            mean_l = int(np.mean([paired_end[0] for paired_end in paired_ends]))
+            mean_r = int(np.mean([paired_end[1] for paired_end in paired_ends]))
+            # here, the intercept is just the length of the segment between the paired-end reads.
+            # subtract the insert size to get the length of the supposed deletion.
+            b = (
+                mean_r - mean_l - insert_size_lookup[sample_id]
+            )  # R - L (including read length)
+            sv_evidence.append(
+                Evidence(
+                    sample=Sample(id=sample_id),
+                    intercept=b,
+                    mean_l=mean_l,
+                    removed=0,  # deprecated - a flag used to indicate which step of the pre-processing removed a data point
+                    paired_ends=paired_ends,
+                    mean_insert_size=insert_size_lookup[sample_id],
+                )
+            )
+            # scale this by the SV coordinates so that the points are closer together
+            points.append((b - (R - L), mean_l - L))
+
+    return np.array(points), sv_evidence
+
+
 def get_insert_size_lookup() -> Dict[str, int]:
+    """Returns a dictionary mapping sample IDs to their mean insert sizes from sequencing high-coverage short-reads."""
     insert_size_df = pd.read_csv(
         "1kgp/insert_sizes.csv",
         dtype={"sample_id": str, "mean_insert_size": float},
     )
+    # temporary: use a constant insert size for all samples
+    # return {
+    #     sample_id: 450 for sample_id, mean_insert_size in insert_size_df.values
+    # }
+
     return {
         sample_id: int(mean_insert_size)
         for sample_id, mean_insert_size in insert_size_df.values
     }
-    # return {
-    #     sample_id: 450 for sample_id, mean_insert_size in insert_size_df.values
-    # }
 
 
 def run_viz_gmm(
@@ -456,41 +527,27 @@ def run_viz_gmm(
     *,
     file_name: str,
     chr: str,
-    L: int,
-    R: int,
+    L: int,  # sv start
+    R: int,  # sv stop
     plot: bool = True,
-    plot_bokeh: bool = False,
+    plot_bokeh: bool = False,  # these functions are deprecated
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
     insert_size_lookup: Optional[Dict[str, int]] = None,
     min_pairs: int = 5,
     sv_id: Optional[str] = None,
 ):
+    """Runs the GMM pipeline and visualizes the results."""
     if insert_size_lookup is None:
         insert_size_lookup = get_insert_size_lookup()
 
-    # plots that don't update data format
-    if plot_bokeh:
-        data = list(squiggle_data.values())
-        sv_viz(data, file_name=file_name)
-        bokeh_scatterplot(
-            data,
-            file_name=file_name,
-            lower_bound=L - 1900,
-            upper_bound=R + 1900,
-            L=L,
-            read_length=450,  # TODO(later): update the function to take a lookup
-            R=R,
-        )
-
-    # transforms data
-    points, sv_evidence = get_intercepts(
+    # transforms data to cluster
+    points, sv_evidence = process_data(
         squiggle_data,
         file_name=file_name,
         L=L,
         R=R,
         insert_size_lookup=insert_size_lookup,
-        plot_bokeh=plot_bokeh,
         min_pairs=min_pairs,
     )
 

@@ -72,9 +72,10 @@ def generate_synthetic_sv_data(
     n_samples: Optional[int] = None,
     p: Optional[List[float]] = None,
     gmm_model: str = "2d",
+    run_gmm: bool = True,
     plot: bool = False,
     plot_reads: bool = False,
-    run_gmm: bool = True,
+    write_data: bool = False,
 ):
     """
     Generates synthetic SV data for testing purposes
@@ -135,6 +136,22 @@ def generate_synthetic_sv_data(
         plt.xlabel("L")
         plt.ylabel("R")
         plt.show()
+
+    if write_data:
+        # TODO: write data in the vcf file format
+        reads_df = pd.DataFrame(
+            columns=["sample_id", "L", "R", "mean_insert_size"]
+        )
+        for sample_id, values in evidence.items():
+            mean_insert_size = insert_size_lookup[sample_id]
+            for read_L, read_R in zip(values[::2], values[1::2]):
+                reads_df.loc[len(reads_df)] = [
+                    sample_id,
+                    read_L,
+                    read_R,
+                    mean_insert_size,
+                ]
+        reads_df.to_csv("synthetic_data/generated_data.csv", index=False)
 
     if run_gmm:
         gmm, evidence_by_mode = run_viz_gmm(
