@@ -18,23 +18,27 @@ PROCESSED_SVS_DIR = "processed_svs"
 
 
 def get_deletions_df(stem: str = "1kgp"):
+    """Returns a dataframe of all SVs and genotypes for each sample."""
     return pd.read_csv(f"{stem}/deletions_df.csv", low_memory=False)
 
 
 def get_sv_stats_df(stem: str = "1kgp"):
+    """DEPRECATED: use get_sv_stats_collapsed_df instead. Used for pre-dirichlet analysis."""
     return pd.read_csv(f"{stem}/sv_stats.csv")
 
 
 def get_sv_stats_converge_df(stem: str = "1kgp"):
+    """Returns a dataframe of all SVs and GMM results for each run of the SV."""
     return pd.read_csv(f"{stem}/sv_stats_converge.csv", low_memory=False)
 
 
 def get_sv_stats_collapsed_df(stem: str = "1kgp"):
+    """Returns a dataframe of all SVs and GMM results after collapsing to consensus results."""
     return pd.read_csv(f"{stem}/sv_stats_collapsed.csv")
 
 
 def get_sample_ids(file_root: str = "1kgp"):
-    """Read and return the sample ids from a file"""
+    """Read and return the sample ids from a file."""
     sample_ids = set()
     with open(f"{file_root}/sample_ids.txt", "r") as f:
         for line in f:
@@ -43,11 +47,12 @@ def get_sample_ids(file_root: str = "1kgp"):
 
 
 def get_sv_lookup(stem: str = "1kgp"):
+    """Get a dataframe mapping sv_id to chr, start, stop."""
     return pd.read_csv(f"{stem}/sv_lookup.csv")
 
 
 def get_svlen(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
-    """Calculate the mean length/start/stop for each mode of an SV"""
+    """Calculates the mean length/start/stop for each mode of an SV."""
     all_stats = []
     for mode in evidence_by_mode:
         stats = []
@@ -72,11 +77,12 @@ def get_svlen(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
 
 
 def calc_af(n_homozygous, n_heterozygous, population_size):
+    """Calculate allele frequency from number of homozygous and heterozygous individuals."""
     return ((n_homozygous * 2) + n_heterozygous) / (population_size * 2)
 
 
 def df_to_bed(in_file: str, out_file: str):
-    """Convert a csv to a bed file to be used with bedtools"""
+    """Converts a csv to a bed file to be used with bedtools"""
     df = pd.read_csv(in_file)
     with open(out_file, "w") as outfile:
         for _, row in df.iterrows():
@@ -86,7 +92,7 @@ def df_to_bed(in_file: str, out_file: str):
 
 
 def find_missing_sample_ids():
-    """Get sample ids that are in the STIX databse but are not in the original deletions VCF file"""
+    """Gets sample ids that are in the STIX databse but are not in the original deletions VCF file"""
     sample_ids = set()
     for file in os.listdir(PROCESSED_STIX_DIR):
         with open(f"{PROCESSED_STIX_DIR}/{file}") as f:
@@ -102,7 +108,7 @@ def find_missing_sample_ids():
 
 
 def find_missing_processed_svs():
-    """Get SVs that are in the original deletions VCF that have not yet been run through the pipeline"""
+    """Gets SVs that are in the original deletions VCF that have not yet been run through the pipeline"""
     processed_sv_ids = set(
         [file.strip(".csv") for file in os.listdir(PROCESSED_SVS_DIR)]
     )
@@ -112,6 +118,7 @@ def find_missing_processed_svs():
 
 
 def get_num_intersecting_genes():
+    """Gets number of genes that intersect with at least 1 SV, and number of SVs that each gene intersects with."""
     df = pd.read_csv(
         "low_cov_grch37/intersect_num_overlap.csv", header=None, delimiter="\t"
     )
@@ -125,6 +132,7 @@ def get_num_intersecting_genes():
 
 
 def get_num_new_svs():
+    """Gets number of new SVs created by splitting multi-modal SVs into multiple single-modal SVs."""
     df = get_sv_stats_df()
     df = df[df["num_samples"] > 0]
     mode_data = [df[df["num_modes"] == i + 1] for i in range(3)]
@@ -134,6 +142,7 @@ def get_num_new_svs():
 
 
 def get_sample_sequencing_centers():
+    """Get a dataframe mapping sample_id to sequencing center(s)."""
     # data obtained from https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/20130502.phase3.sequence.index
     df = pd.read_csv(
         "1kgp/20130502.phase3.sequence.index", sep="\t", low_memory=False
@@ -145,6 +154,7 @@ def get_sample_sequencing_centers():
 
 
 def extract_data_from_deletions_df():
+    """Extracts sample ids and splits deletions into separate files by chromosome. Makes SV lookup more efficient if the SV chromosome is known."""
     deletions_df = get_deletions_df()
 
     sample_ids = set(deletions_df.columns[11:-1])
@@ -164,6 +174,7 @@ def extract_data_from_deletions_df():
 
 
 def get_insert_sizes(get_files: bool = False):
+    """Get mean insert sizes for all samples in 1kgp. If get_files is True, will download mapped files from BAS files."""
     if get_files:
         samples_df = pd.read_csv("1kgp/bam_bas_files.tsv", sep="\t")
         pattern = r"data\/.*\/alignment\/.*\.mapped\.ILLUMINA\.bwa\..+\.low_coverage\.\d+\.bam\.bas"
@@ -198,6 +209,7 @@ def get_insert_sizes(get_files: bool = False):
 
 
 def get_mean_coverage():
+    """Get mean coverage for all samples in 1kgp."""
     df = get_sv_stats_df()
     df = df[df["num_modes"] > 1]
     coverage_df = pd.DataFrame(columns=["sv_id", "num_samples", "coverage"])
@@ -228,6 +240,7 @@ def get_mean_coverage():
 
 
 def get_insert_size_diff():
+    """Get the mean difference between insert sizes obtained from mapped files and insert sizes scraped from metadata."""
     df = pd.read_csv(
         "1kgp/insert_sizes_scraped.csv",
         dtype={"sample_id": str, "mean_insert_size": int},
@@ -254,6 +267,7 @@ def get_insert_size_diff():
 
 
 def calculate_posteriors(alpha):
+    """Calculate the posterior probabilities and variances for each mode given alpha parameters."""
     p = alpha / np.sum(alpha)
     sum_alpha_post = np.sum(alpha)
     var = (alpha * (sum_alpha_post - alpha)) / (
@@ -263,6 +277,7 @@ def calculate_posteriors(alpha):
 
 
 def calculate_ci(p, var, n):
+    """Calculate the 95% confidence interval for the difference in means between the two most probable modes."""
     # Calculate the difference in means between the two most probable modes
     posterior_mu_sorted_indices = np.argsort(p)
     posterior_mu_sorted = p[posterior_mu_sorted_indices]
@@ -279,6 +294,7 @@ def calculate_ci(p, var, n):
 
 
 def calculate_posteriors_from_trials(outcomes):
+    """Calculate the posterior probabilities and variances for each mode given a list of outcomes."""
     counts = Counter(outcomes)
     alpha = np.array([1, 1, 1]) + np.array([counts[1], counts[2], counts[3]])
     return calculate_posteriors(alpha)
@@ -290,6 +306,7 @@ Handle errors that may arise when running the pipeline on all SVs
 
 
 def get_unprocessed_svs():
+    """Get SVs that have not yet been processed."""
     df = get_deletions_df()
     svs = set(
         [
@@ -311,6 +328,7 @@ def get_unprocessed_svs():
 
 
 def get_med_low_confidence_svs():
+    """Get SVs that have medium or low confidence."""
     df = get_sv_stats_converge_df()
     grouped = df.groupby("id")
     # get how many times we saw each id in df
@@ -327,6 +345,7 @@ Analyze SVs that have been run
 
 
 def write_sv_stats_collapsed(stem: str = "1kgp"):
+    """Collapse sv_stats_converge.csv to sv_stats_collapsed.csv by picking the most common result for each SV."""
     df = get_sv_stats_converge_df(stem)
     svs_n_modes = pd.read_csv(f"{stem}/svs_n_modes.csv")
     svs_n_modes.rename(
@@ -370,6 +389,7 @@ def write_sv_stats_collapsed(stem: str = "1kgp"):
 
 
 def write_ancestry_dissimilarity(stem: str = "1kgp"):
+    """Calculate the dissimilarity in ancestry between modes for each SV."""
     df = get_sv_stats_collapsed_df()
     confidence = pd.read_csv(f"{stem}/svs_n_modes.csv")
     confidence.rename(
@@ -430,6 +450,7 @@ def write_ancestry_dissimilarity(stem: str = "1kgp"):
 
 
 def get_n_modes(stem: str = "1kgp"):
+    """Get the number of modes and confidence for each SV."""
     sv_df = pd.DataFrame(
         columns=["sv_id", "num_modes", "confidence", "num_modes_2"]
     )
@@ -476,6 +497,7 @@ def get_n_modes(stem: str = "1kgp"):
 
 
 def get_sv_outliers(sv_rows, threshold: float):
+    """Get outlier samples for a given SV."""
     n = len(sv_rows)
     outlier_counts = defaultdict(lambda: 0)
     for i, row in sv_rows.iterrows():
@@ -495,6 +517,7 @@ def get_sv_outliers(sv_rows, threshold: float):
 
 
 def get_outliers(stem: str = "1kgp", threshold: float = 0.9):
+    """Get outlier samples for each SV and write to a file."""
     n_modes_df = pd.read_csv(f"{stem}/svs_n_modes.csv")
     n_modes_df = n_modes_df[n_modes_df["num_modes"] > 1]
     df = get_sv_stats_converge_df()
@@ -509,6 +532,7 @@ def get_outliers(stem: str = "1kgp", threshold: float = 0.9):
 
 
 def get_consensus_svs(stem: str = "1kgp"):
+    """Get consensus SVs by averaging the start/stop/length of each mode across all runs of the SV."""
     df = get_sv_stats_converge_df()
     svs_n_modes = pd.read_csv(f"{stem}/svs_n_modes.csv")
     sv_ids = svs_n_modes["sv_id"].unique()
@@ -559,6 +583,7 @@ def get_consensus_svs(stem: str = "1kgp"):
 
 
 def get_new_gene_intersections():
+    """Get new gene intersections created by splitting multi-modal SVs into multiple single-modal SVs."""
     og_intersections = set()  # (sv_id, gene_id)
     with open("1kgp/original_gene_intersections.bed", "r") as f:
         for line in f:
@@ -595,6 +620,7 @@ def get_new_gene_intersections():
 
 
 def outlier_gene_intersections():
+    """Get SVs that are both outliers and have new gene intersections."""
     svs_with_new_genes = set()
     with open("1kgp/new_gene_intersections.bed", "r") as f:
         for line in f:
@@ -612,6 +638,7 @@ def outlier_gene_intersections():
 
 
 def high_confidence_gene_intersections():
+    """Get SVs that are both high confidence and have new gene intersections."""
     svs_with_new_genes = set()
     with open("1kgp/new_gene_intersections.bed", "r") as f:
         for line in f:
@@ -631,6 +658,7 @@ def high_confidence_gene_intersections():
 
 
 def recalculate_afs():
+    """Recalculate allele frequencies based on genotypes in deletions_df and compare to allele frequencies in sv_stats_collapsed_df."""
     df = get_deletions_df().head(1000)
     results_df = get_sv_stats_collapsed_df()
     sample_ids = get_sample_ids()
@@ -662,6 +690,7 @@ def recalculate_afs():
 
 
 def compare_short_long_reads():
+    """Compare the number of modes and confidence between short read and long read analyses."""
     sr_df = pd.read_csv("1kgp/svs_n_modes.csv")
     sr_df = sr_df[sr_df["confidence"] != "inconclusive"]
     sr_df = sr_df.rename(
@@ -696,6 +725,7 @@ def compare_short_long_reads():
 
 
 def write_post_processed_files(stem: str = "1kgp"):
+    """Write all post-processed files after running the dirichlet process with short or long reads."""
     get_n_modes(stem)
     print("wrote svs_n_modes.csv")
     if stem == "long_reads":
@@ -713,6 +743,7 @@ def write_post_processed_files(stem: str = "1kgp"):
 
 
 def get_sv_chr(sv_id: str):
+    """Get the chromosome, start, and stop for a given sv_id."""
     df = get_deletions_df()
     row = df[df["id"] == sv_id]
     chr, start, stop = (
