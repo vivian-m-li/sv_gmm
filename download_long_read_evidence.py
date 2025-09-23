@@ -353,7 +353,7 @@ def download_long_read_evidence_inner(
         pool.join()
 
 
-@break_after(hours=3, minutes=30)
+@break_after(hours=70, minutes=0)
 def download_long_read_evidence_synchronous(
     long_read_samples,
     sample_sv_lookup,

@@ -313,7 +313,7 @@ def generate_data_r(case: str, svlen: int):
     return data_cleaned
 
 
-@break_after(hours=35, minutes=55)
+@break_after(hours=31, minutes=55)
 def r_accuracy_test(
     n_samples: int,
     svlen: int,
