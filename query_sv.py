@@ -154,17 +154,22 @@ def query_stix_bash(
                 )  # remove partial file
 
 
-def write_processed_output(output_file: str, processed_output_file: str):
+def write_processed_output(
+    output_file: str,
+    processed_output_file: str,
+    l_col: str = "l_start",
+    r_col: str = "r_end",
+) -> Dict[str, np.ndarray[float]]:
     df = txt_to_df(output_file)
 
     grouped = df.groupby("file_id")
     squiggle_data = {}
     processed_stix_output = []
     for _, group in grouped:
-        l_starts = group["l_start"].tolist()
-        r_ends = group["r_end"].tolist()
+        ls = group["l_col"].tolist()
+        rs = group["r_col"].tolist()
         sample_id = group["sample_id"].iloc[0]
-        sv_evidence = [item for pair in zip(l_starts, r_ends) for item in pair]
+        sv_evidence = [item for pair in zip(ls, rs) for item in pair]
 
         squiggle_data[sample_id] = np.array(sv_evidence)
         sv_evidence = [sample_id] + sv_evidence
