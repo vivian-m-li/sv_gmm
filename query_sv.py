@@ -166,8 +166,8 @@ def write_processed_output(
     squiggle_data = {}
     processed_stix_output = []
     for _, group in grouped:
-        ls = group["l_col"].tolist()
-        rs = group["r_col"].tolist()
+        ls = group[l_col].tolist()
+        rs = group[r_col].tolist()
         sample_id = group["sample_id"].iloc[0]
         sv_evidence = [item for pair in zip(ls, rs) for item in pair]
 
