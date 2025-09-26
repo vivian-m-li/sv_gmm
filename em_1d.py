@@ -684,7 +684,12 @@ def assign_values_to_modes(
 
 
 def run_gmm(
-    x: Union[List[int], np.ndarray], *, plot: bool = False, pr: bool = False
+    x: Union[List[int], np.ndarray],
+    *,
+    L: int,
+    R: int,
+    plot: bool = False,
+    pr: bool = False,
 ) -> Optional[EstimatedGMM1D]:
     """
     Runs the GMM estimation process to determine the number of structural variants in a DNA reading frame.
