@@ -48,3 +48,74 @@ Decide if the points are most likely to fit a 1, 2, or 3 mode distribution. Runs
 #### Length of SVs For Each Mode
 
 <img width="500" alt="SV Lengths" src="https://github.com/user-attachments/assets/d50976f6-5989-41f7-85af-8706c194c25a">
+
+---
+
+## Synthetic Data Workflow
+
+Synthetic data is generated to test the accuracy of SVeperator and GATK-ClusterBatch with increasing reciprocal overlap, _r_ for five different test cases. The `run_synthetic_data.sh` sbatch script on Fiji runs the `r_accuracy_test` function in `synthetic_tests.py`, varying the sample size and sv length.
+
+```
+n_samples_values=(10 21 66 206 313)
+svlen_values=(51 167 802 3377 17352)
+for n_samples in "${n_samples_values[@]}"; do
+  for svlen in "${svlen_values[@]}"; do
+    echo "Running with n_samples=$n_samples and svlen=$svlen"
+    start_time=$(date +%s)
+    python3 "$HOME/sv/sv_gmm/synthetic_tests.py" "$n_samples" "$svlen"
+    end_time=$(date +%s)
+    elapsed_time=$((end_time - start_time))
+    echo "Completed n_samples=$n_samples and svlen=$svlen in $elapsed_time seconds"
+  done
+done
+```
+
+Noise is added to generated data to replicate short-read data, and results are saved in the synthetic_data directory by sample size. The results for a given sample size and sv length can be plotted with the `plot_reciprocal_overlap_all` function in `viz.py`.
+
+## 1kG Data Processing
+
+The data used for this project originates from the 1000 Genomes Project's original 2504 samples. All data is found in the `/scratch/Shares/layer/stix/indices/` directory on fiji. A pre-built [STIX](https://github.com/ryanlayer/stix) index is used to query genomic regions for short and long reads (by sample) that serve as evidence for the SV of interest. Low-coverage short read, high-coverage short read, and long-read data are all available. The deletions that were present in the initial 1kG analysis are found in `1kgp/1kg_hg38_deletions.vcf` or `1kgp/deletions_df.csv`.
+
+### Low-coverage short-reads
+
+Low-coverage data is supported by not used in the main analysis. Depending on the reference genome, the appropriate STIX index is in the `1kg_hg37_low_cov` or `1kg_hg38_low_cov` directory.
+
+### High-coverage short-reads
+
+High-coverage data is found in the `1kg_high_coverage_vivian` directory.
+To run the analysis for a single SV, run `python query_sv.py` with the -id or -l and -r arguments.
+To run the pipeline on the entire dataset, run `python run_svs_until_converge.py`. The dirichlet process is run for each SV until "convergence" (we have high confidence in the outcome or 100 trials). A new file is written into the `processed_svs_converge` directory, and the files are concatenated into one large file (`sv_stats_converge.csv`) at the end of the function. The process is parallelized and runs on fiji.
+
+### Long-reads
+
+Long-read data is found in the `LR_vivian` directory. Once the data has been pre-processed, run `python run_lr_until_converge.py` to run the dirichlet process.
+
+### Post-Processing & Figures
+
+After writing the `sv_stats_converge.csv` file, run the `write_post_processed_files` function in `helper.py` to generate several other files useful in downstream analysis.
+
+- `svs_n_modes.csv`: number of modes and confidence predicted for each SV with evidence in STIX
+- `sr_lr_merged.csv` (for long reads only): compares the number of modes and the confidence for each SV outcome between short and long read results
+- `consensus_svs.csv`: consensus SVs by averaging the start/stop/length of each mode across all runs of the SV
+- `sv_stats_collapsed.csv`: SV stats with 1 row for each SV based on the most common SV clustering
+- `outliers.csv`: outliers identified based on a threshold
+- `ancestry_dissimilarity.csv`: bray curtis dissimilarity calculated between clusters for SVs split into 2+ clusters
+- `new_gene_intersections.bed` (needs a working build of bedtools): new gene intersections resulting from the split SVs
+
+### Flowchart Figure
+
+To create the flowchart figure, we need:
+
+- the number of total deletions (from `deletions_df.csv`)
+- the number of SVs with no or too little evidence in STIX (<= 10 samples)
+  - no evidence: `deletions_df.shape[0] - svs_n_modes.shape[0]`
+  - little evidence: `svs_n_modes[svs_n_modes["confidence"] == "inconclusive"].shape[0]`
+  - total number: `deletions_df.shape[0] - svs_n_modes[svs_n_modes["confidence"] != "inconclusive"].shape[0]`
+- the number of SVs with an outcome
+  - `svs_n_modes[svs_n_modes["confidence"] != "inconclusive"].shape[0]`
+- the number of high confidence, medium confidence, and low confidence SVs
+  - ex: `svs_n_modes[svs_n_modes["confidence"] == "low"].shape[0]`
+- the predicted number of clusters depending on confidence
+  - ex: `Counter(svs_n_modes[svs_n_modes["confidence"] == "high"]["num_modes"])`
+- the second most likely number of clusters (in low confidence situation)
+  - `Counter(svs_n_modes[svs_n_modes["confidence"] == "low"]["num_modes_2"])`
