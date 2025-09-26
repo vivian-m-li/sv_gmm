@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.stats import multivariate_normal
 from sklearn.cluster import KMeans
+from helper import reciprocal_overlap
 from gmm_types import GMM2D, EstimatedGMM2D
 from typing import Tuple, List, Optional
 
@@ -12,10 +13,8 @@ GMM/EM helper functions
 """
 
 
-def calc_hinge_loss(num_samples: int, mu: List[np.ndarray]) -> float:
-    """Adds a penalty to the log-likelihood to prevent cluster centroids from getting too close to each other, accounting for sequencing noise."""
-    # TODO: instead of using centroids, consider using reciprocal overlap to penalize clusters that overlap too much
-
+def calc_hinge_loss_d(num_samples: int, mu: List[np.ndarray]) -> float:
+    """Adds a penalty to the log-likelihood to prevent cluster centroids from getting too close to each other (decreasing d), accounting for sequencing noise."""
     # c - alpha * d(mu_i, mu_j)
     # alpha is the slope
     # 0 at d(mu_i, mu_j) = 141, which is 2 SD
@@ -35,11 +34,40 @@ def calc_hinge_loss(num_samples: int, mu: List[np.ndarray]) -> float:
     return hinge_loss
 
 
+def get_sv_from_mu(mu: np.ndarray, L: int, R: int) -> Tuple[int, int]:
+    """Converts the mu value (length, L-coordinate) to the SV coordinates (L, R)."""
+    svlen = R - L
+    sv_L = int(mu[1] + L)
+    sv_R = int(sv_L + (svlen + mu[0]))
+    return sv_L, sv_R
+
+
+def calc_hinge_loss(
+    num_samples: int, mu: List[np.ndarray], L: int, R: int
+) -> float:
+    """Adds a penalty to the log-likelihood to prevent high reciprocal overlap and avoid over-clustering."""
+    hinge_loss = 0
+    num_modes = len(mu)
+    if num_modes > 1:
+        for i in range(num_modes):
+            for j in range(i + 1, num_modes):
+                sv1, sv2 = get_sv_from_mu(mu[i], L, R), get_sv_from_mu(
+                    mu[j], L, R
+                )
+                r = reciprocal_overlap(sv1, sv2)
+                r_scaled = (1 - r) * 100
+                penalty = (95 * np.log(num_samples)) * (np.exp(-0.2 * r_scaled))
+                hinge_loss += penalty
+    return hinge_loss
+
+
 def calc_log_likelihood(
     x: np.ndarray,
     mu: List[np.ndarray],
     cov: List[np.ndarray],
     p: np.ndarray,
+    L: int,
+    R: int,
 ) -> float:
     """Calculates the log-likelihood of the data fitting the GMM."""
     num_modes = len(mu)
@@ -59,7 +87,8 @@ def calc_log_likelihood(
         logL += np.log(likelihood_i)
 
     if INCLUDE_HINGE_LOSS:
-        logL -= calc_hinge_loss(len(x), mu)
+        hinge_loss = calc_hinge_loss(len(x), mu, L, R)
+        logL -= hinge_loss
     return logL
 
 
@@ -77,6 +106,8 @@ def calc_aic(
 def init_em(
     x: np.ndarray,
     num_modes: int,
+    L: int,
+    R: int,
 ) -> Tuple[int, np.ndarray, List[np.ndarray], np.ndarray, np.ndarray]:
     """
     Initializes the expectation-maximization algorithm using k-means clustering on the data.
@@ -104,7 +135,7 @@ def init_em(
     n = len(x)  # sample size
 
     # initial log-likelihood
-    logL.append(calc_log_likelihood(x, mu, cov, p))
+    logL.append(calc_log_likelihood(x, mu, cov, p, L, R))
 
     return n, mu, cov, p, logL
 
@@ -135,6 +166,8 @@ def em(
     mu: List[np.ndarray],
     cov: List[np.ndarray],
     p: np.ndarray,
+    L: int,
+    R: int,
 ) -> GMM2D:
     """Performs one iteration of the expectation-maximization algorithm."""
     # Expectation step: calculate the posterior probabilities
@@ -159,13 +192,15 @@ def em(
     p = nk / n
 
     # update likelihood
-    logL = calc_log_likelihood(x, mu, cov, p)
+    logL = calc_log_likelihood(x, mu, cov, p, L, R)
     return GMM2D(mu, cov, p, logL)
 
 
 def run_em(
     x: np.ndarray,  # data
     num_modes: int,
+    L: int,
+    R: int,
     plot: bool = False,
 ) -> Tuple[List[GMM2D], int]:
     """
@@ -175,7 +210,7 @@ def run_em(
     """
     all_params: List[GMM2D] = []
 
-    n, mu, cov, p, logL = init_em(x, num_modes)  # initialize parameters
+    n, mu, cov, p, logL = init_em(x, num_modes, L, R)  # initialize parameters
     all_params.append(GMM2D(mu, cov, p, logL[0]))
 
     # only need to estimate mean and covariance matrix if we have 1 mode
@@ -186,7 +221,7 @@ def run_em(
     i = 0
     while i < max_iterations:
         prev_gmm = all_params[-1]
-        gmm = em(x, num_modes, n, prev_gmm.mu, prev_gmm.cov, prev_gmm.p)
+        gmm = em(x, num_modes, n, prev_gmm.mu, prev_gmm.cov, prev_gmm.p, L, R)
         logL.append(gmm.logL)
         all_params.append(gmm)
 
@@ -218,7 +253,12 @@ def assign_values_to_modes(
 
 
 def run_gmm(
-    x: np.ndarray[Tuple[float, int]], *, plot: bool = False, pr: bool = False
+    x: np.ndarray[Tuple[float, int]],
+    *,
+    L,
+    R,
+    plot: bool = False,
+    pr: bool = False
 ) -> Optional[EstimatedGMM2D]:
     """
     Runs the GMM estimation process to determine the number of structural variants in a DNA reading frame.
@@ -252,14 +292,14 @@ def run_gmm(
     outliers = []
     aic_vals = []
     if len(x) <= 10:  # small number of samples detected
-        opt_params, num_iterations = run_em(x, 1, plot)
+        opt_params, num_iterations = run_em(x, 1, L, R, plot)
         num_iterations_final = num_iterations
         num_sv = 1
     else:
         all_params = []
         iterations = []
         for num_modes in range(1, 4):
-            params, num_iterations = run_em(x, num_modes, plot)
+            params, num_iterations = run_em(x, num_modes, L, R, plot)
             aic = calc_aic(
                 params[-1].logL, num_modes, params[-1].mu, params[-1].cov
             )

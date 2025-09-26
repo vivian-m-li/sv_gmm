@@ -160,6 +160,11 @@ def write_processed_output(
     l_col: str = "l_start",
     r_col: str = "r_end",
 ) -> Dict[str, np.ndarray[float]]:
+    """
+    Parses the raw stix output (from the patched -g version) into pairs of coordinates for each sample. Each pair represents the start/stop of the deletion.
+    For short reads, use l_start and r_end since the breakpoints are calculated from the clustering of paired-end reads.
+    For long reads, use l_end and r_start to calculate the deletion. All long reads returned from stix are split reads, so the l_start and r_end coordinates capture the entire read length (not just the deletion).
+    """
     df = txt_to_df(output_file)
 
     grouped = df.groupby("file_id")

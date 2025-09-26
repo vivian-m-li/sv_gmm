@@ -500,7 +500,7 @@ def process_data(
                 )
             )
             # scale this by the SV coordinates so that the points are closer together
-            points.append((b - (R - L), mean_l - L))
+            points.append((b - (R - L), mean_l - L))  # (length, L-coordinate)
 
     return np.array(points), sv_evidence
 
@@ -564,7 +564,7 @@ def run_viz_gmm(
         elif gmm_model == "1d_L":
             points = points[:, 1]
 
-    gmm = gmm_func(points, plot=plot, pr=False)
+    gmm = gmm_func(points, L=L, R=R, plot=plot, pr=False)
 
     if not synthetic_data:
         populate_sample_info(

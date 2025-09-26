@@ -300,6 +300,23 @@ def calculate_posteriors_from_trials(outcomes):
     return calculate_posteriors(alpha)
 
 
+def reciprocal_overlap(sv1, sv2):
+    """
+    Calculates the reciprocal overlap between two structural variants.
+    r = min(% overlap sv 1, % overlap sv 2)
+    """
+    start1, end1 = sv1
+    start2, end2 = sv2
+    overlap_start = max(start1, start2)
+    overlap_end = min(end1, end2)
+    if overlap_start >= overlap_end:
+        return 0.0
+    overlap_length = overlap_end - overlap_start
+    sv1_length = end1 - start1
+    sv2_length = end2 - start2
+    return min(overlap_length / sv1_length, overlap_length / sv2_length)
+
+
 """
 Handle errors that may arise when running the pipeline on all SVs
 """
