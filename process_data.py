@@ -484,7 +484,7 @@ def process_data(
             # taking the mean of the coordinates will average out noise in the reads
             mean_l = int(np.mean([paired_end[0] for paired_end in paired_ends]))
             mean_r = int(np.mean([paired_end[1] for paired_end in paired_ends]))
-            # here, the intercept is just the length of the segment between the paired-end reads.
+            # here, the intercept is just the length of the segment between the paired-end reads
             # subtract the insert size to get the length of the supposed deletion.
             b = (
                 mean_r - mean_l - insert_size_lookup[sample_id]

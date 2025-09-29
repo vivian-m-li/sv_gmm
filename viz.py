@@ -74,7 +74,7 @@ def get_evidence_by_mode(
                 data_by_mode.append((x + L))  # L-coordinate
             else:
                 data_by_mode.append(
-                    (x[0] + R, x[1] + L)
+                    (x[0] + (R - L), x[1] + L)
                 )  # (length, L-coordinate)
         data.append(data_by_mode)
     evidence_by_mode = [[] for _ in range(len(data))]
@@ -82,12 +82,12 @@ def get_evidence_by_mode(
         for i, mode in enumerate(data):
             try:
                 if gmm_model == "1d_len":
-                    mode_data = evidence.start_y  # length
+                    mode_data = evidence.intercept  # length
                 elif gmm_model == "1d_L":
                     mode_data = evidence.mean_l  # L-coordinate
                 else:
                     mode_data = (
-                        evidence.start_y,
+                        evidence.intercept,
                         evidence.mean_l,
                     )  # (length, L-coordinate)
                 if (
@@ -2228,4 +2228,4 @@ def plot_cipos():
 # plot_synthetic_data_figure()
 # plot_af_delta_histogram()
 # compare_sv_ancestry_by_mode(by="population")
-# plot_reciprocal_overlap_all()
+# plot_reciprocal_overlap_all(sample_size=21, svlen=167)

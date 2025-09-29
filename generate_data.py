@@ -145,3 +145,9 @@ def generate_synthetic_sv_data(
         return gmm, evidence_by_mode
 
     return None, []
+
+
+if __name__ == "__main__":
+    generate_synthetic_sv_data(
+        1, [(100000, 100500), (100100, 100450)], n_samples=11
+    )

@@ -63,7 +63,8 @@ def get_len_L(evidence_by_mode: List[List[Evidence]]):
                 ]
             )
             starts.append(mean_l)
-            lens.append(mean_length)
+            if not np.isnan(mean_length):
+                lens.append(mean_length)
         lengths.append(int(np.mean(lens)))
         Ls.append(int(np.mean(starts)))
     return lengths, Ls
