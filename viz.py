@@ -1521,6 +1521,10 @@ def plot_reciprocal_overlap_all(sample_size=66, svlen=802):
         title="Model",
         title_fontsize=14,
     )
+    plt.suptitle(
+        f"Reciprocal Overlap vs. Accuracy, n={sample_size}, svlen={svlen}",
+        fontsize=20,
+    )
     plt.tight_layout()
     plt.savefig("plots/reciprocal_overlap_accuracy.pdf", bbox_inches="tight")
     plt.show()
@@ -1935,6 +1939,56 @@ def plot_synthetic_data_figure():
     plt.show()
 
 
+def synthetic_data_n_length_heatmap():
+    """Plots a heatmap showing the minimum reciprocal overlap (r) at which accuracy drops to below 50% of the maximum accuracy."""
+    files = os.listdir("synthetic_data")
+    data = {}
+    for file in files:
+        if not re.match(r"resultsn=\d+\.csv", file):
+            continue
+
+        df = pd.read_csv(f"synthetic_data/{file}")
+        sample_size = int(file.split("n=")[1].split(".csv")[0])
+        df = df[(df["gmm_model"] == "2d") & (df["case"] == "B")]
+        for svlen in set(df["svlen"]):
+            right = Counter()
+            total = Counter()
+            df_len = df[df["svlen"] == svlen]
+            for _, row in df_len.iterrows():
+                overlap = row["r"]
+                total[overlap] += 1
+                if row["expected_num_modes"] == row["num_modes"]:
+                    right[overlap] += 1
+
+            overlaps = sorted(total.keys())
+            acc = [right[overlap] / total[overlap] for overlap in overlaps]
+            acc_at_0 = acc[0]
+            for a, r in zip(acc, overlaps):
+                if a < acc_at_0 / 2:
+                    data[(sample_size, row["svlen"])] = r
+                    break
+
+    n_samples = sorted(set([k[0] for k in data.keys()]))
+    svlens = sorted(set([k[1] for k in data.keys()]))
+    heatmap = np.zeros((len(svlens), len(n_samples)))
+    for i, svlen in enumerate(svlens):
+        for j, n in enumerate(n_samples):
+            heatmap[i, j] = data.get((n, svlen), np.nan)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    cax = ax.imshow(heatmap, cmap="viridis", aspect="auto", origin="lower")
+    ax.set_xticks(np.arange(len(n_samples)))
+    ax.set_yticks(np.arange(len(svlens)))
+    ax.set_xticklabels(n_samples)
+    ax.set_yticklabels(svlens)
+    ax.set_xlabel("Number of Samples", fontsize=14)
+    ax.set_ylabel("SV Length", fontsize=14)
+    fig.colorbar(cax, label="Reciprocal Overlap (r) for >=50% Max Accuracy")
+    plt.savefig(
+        "plots/synthetic_data_n_length_heatmap.pdf", bbox_inches="tight"
+    )
+    plt.show()
+
+
 def plot_seq_center_distribution():
     df = get_sv_stats_df()
     df = df[df["num_modes"] == 2]
@@ -2225,7 +2279,9 @@ def plot_cipos():
     plt.show()
 
 
-# plot_synthetic_data_figure()
-# plot_af_delta_histogram()
-# compare_sv_ancestry_by_mode(by="population")
-# plot_reciprocal_overlap_all(sample_size=21, svlen=167)
+if __name__ == "__main__":
+    # plot_synthetic_data_figure()
+    # plot_af_delta_histogram()
+    # compare_sv_ancestry_by_mode(by="population")
+    # plot_reciprocal_overlap_all(sample_size=21, svlen=51)
+    synthetic_data_n_length_heatmap()
