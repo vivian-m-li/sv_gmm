@@ -69,7 +69,7 @@ def get_evidence_by_mode(
         data_by_mode = []
         for x in mode:
             if gmm_model == "1d_len":
-                data_by_mode.append((x + R))  # length
+                data_by_mode.append((x + (R - L)))  # length
             elif gmm_model == "1d_L":
                 data_by_mode.append((x + L))  # L-coordinate
             else:
