@@ -314,8 +314,6 @@ def run_gmm(
         num_iterations_final = iterations[min_aic_idx]
         num_sv = len(opt_params[0].mu)
 
-    print(aic_vals)
-
     final_params = opt_params[-1]
 
     x_by_mode = assign_values_to_modes(
