@@ -87,8 +87,10 @@ def calc_log_likelihood(
         logL += np.log(likelihood_i)
 
     if INCLUDE_HINGE_LOSS:
+        hinge_loss_d = calc_hinge_loss_d(len(x), mu)
         hinge_loss = calc_hinge_loss(len(x), mu, L, R)
-        logL -= hinge_loss
+        # use both criteria to determine hinge loss - clusters need to be far apart in L-length space and have low reciprocal overlap
+        logL -= (0.5 * hinge_loss_d) + (0.5 * hinge_loss)
     return logL
 
 
@@ -311,6 +313,8 @@ def run_gmm(
         opt_params = all_params[min_aic_idx]
         num_iterations_final = iterations[min_aic_idx]
         num_sv = len(opt_params[0].mu)
+
+    print(aic_vals)
 
     final_params = opt_params[-1]
 
