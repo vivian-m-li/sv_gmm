@@ -2283,5 +2283,5 @@ if __name__ == "__main__":
     # plot_synthetic_data_figure()
     # plot_af_delta_histogram()
     # compare_sv_ancestry_by_mode(by="population")
-    # plot_reciprocal_overlap_all(sample_size=21, svlen=51)
+    # plot_reciprocal_overlap_all(sample_size=66, svlen=167)
     synthetic_data_n_length_heatmap()

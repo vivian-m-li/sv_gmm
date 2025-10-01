@@ -56,6 +56,7 @@ def calc_hinge_loss(
                 )
                 r = reciprocal_overlap(sv1, sv2)
                 r_scaled = (1 - r) * 100
+                # TODO: keep adjusting these parameters depending on the desired dropoff in accuracy
                 penalty = (95 * np.log(num_samples)) * (np.exp(-0.3 * r_scaled))
                 hinge_loss += penalty
     return hinge_loss
