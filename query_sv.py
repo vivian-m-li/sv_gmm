@@ -125,9 +125,15 @@ def query_stix_bash(
     output_dir: str,
     file_name: str,
     multi_files: bool,
+    long_reads: bool,
     scratch: bool,
 ):
-    bash_file = "query_stix_multifile.sh" if multi_files else "query_stix.sh"
+    bash_file = "query_stix.sh"
+    if multi_files:
+        bash_file = "query_stix_multifile.sh"
+    elif long_reads:
+        bash_file = "query_stix_lr.sh"
+
     if multi_files:
         output_file = f"{output_dir}/partial_outputs/{file_name}"
     else:
@@ -140,18 +146,18 @@ def query_stix_bash(
     )
 
     if multi_files:
+        # the query output from each shard was written to a different file, and we want to write them to the same file
         with open(f"{output_dir}/{file_name}.txt", "w") as out_file:
-            for i in range(8):
+            n_shards = 23 if long_reads else 8
+            for i in range(n_shards):
                 with open(
                     f"{output_dir}/partial_outputs/{file_name}_{i}.txt", "r"
                 ) as partial_file:
-                    out_file.write(
-                        partial_file.read()
-                    )  # write the partial file to the main file
+                    # write the partial file to the main file
+                    out_file.write(partial_file.read())
 
-                os.remove(
-                    f"{output_dir}/partial_outputs/{file_name}_{i}.txt"
-                )  # remove partial file
+                # remove partial file
+                os.remove(f"{output_dir}/partial_outputs/{file_name}_{i}.txt")
 
 
 def write_processed_output(
@@ -197,6 +203,7 @@ def query_stix(
     single_trial: bool = True,
     plot: bool = True,
     reference_genome: str = "grch38",  # or grch37
+    long_reads: bool = False,
     scratch: bool = False,
 ):
     if sv_id == "" and (l == "" or r == ""):
@@ -249,10 +256,19 @@ def query_stix(
         if not os.path.isfile(home_output_file):
             multi_files = reference_genome == "grch38"
             query_stix_bash(
-                l, r, output_file_dir, file_name, multi_files, scratch
+                l,
+                r,
+                output_file_dir,
+                file_name,
+                multi_files,
+                long_reads,
+                scratch,
             )
         squiggle_data = write_processed_output(
-            output_file, processed_output_file
+            output_file,
+            processed_output_file,
+            l_col="l_end" if long_reads else "l_start",
+            r_col="r_start" if long_reads else "r_end",
         )
 
         if scratch:

@@ -130,26 +130,33 @@ def load_vcf():
     df.to_csv(f"{FILE_DIR}/deletions_df.csv", index=False)
 
 
-def get_num_samples(row_index: int, row, lookup: Dict[int, int]):
+def get_num_samples(
+    row_index: int, row, lookup: Dict[int, int], long_reads: bool
+):
     start = giggle_format(str(row.chr), row.start)
     end = giggle_format(str(row.chr), row.stop)
     squiggle_data = query_stix(
-        l=start, r=end, run_gmm=False, plot=False, scratch=True
+        l=start,
+        r=end,
+        run_gmm=False,
+        plot=False,
+        scratch=True,
+        long_reads=long_reads,
     )
     if len(squiggle_data) > 0:
         insert_size_lookup = get_insert_size_lookup()
-        intercepts, _ = process_data(
+        points, _ = process_data(
             squiggle_data,
             file_name=None,
             L=row.start,
             R=row.stop,
             insert_size_lookup=insert_size_lookup,
         )
-        lookup[row_index] = len(intercepts)
+        lookup[row_index] = len(points)
 
 
-@break_after(hours=23, minutes=55)  # break before the job is cancelled
-def get_num_sv():
+@break_after(hours=47, minutes=55)  # break before the job is cancelled
+def get_num_sv(long_reads: bool = False):
     filename = f"{FILE_DIR}/deletions_df.csv"
     df = pd.read_csv(filename, low_memory=False)
 
@@ -169,7 +176,7 @@ def get_num_sv():
         for i, row in df.iterrows():
             if (str(row.chr), row.start, row.stop) in processed_svs:
                 continue
-            args.append((i, row, lookup))
+            args.append((i, row, lookup, long_reads))
 
         p.starmap(get_num_samples, args)
         p.close()
@@ -182,9 +189,9 @@ def get_num_sv():
 
 
 def main():
-    if not os.path.isfile(f"{FILE_DIR}/deletions_df.csv"):
-        load_vcf()
-    # get_num_sv()
+    # if not os.path.isfile(f"{FILE_DIR}/deletions_df.csv"):
+    #     load_vcf()
+    get_num_sv(long_reads=True)
 
 
 if __name__ == "__main__":
