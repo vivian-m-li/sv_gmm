@@ -21,7 +21,8 @@ PROCESSED_FILE_DIR = "processed_stix_output"
 PLOT_DIR = "plots"
 
 
-def txt_to_df(filename: str):
+def txt_to_df(filename: str, long_reads: bool) -> pd.DataFrame:
+    """Parses the raw stix output into a dataframe."""
     column_names = [
         "file_id",
         "sample_id",
@@ -37,6 +38,8 @@ def txt_to_df(filename: str):
     df["sample_id"] = df["sample_id"].str.extract(
         r"/([^/]+)\.bed\.gz", expand=False
     )
+    if long_reads: # format is slightly different
+        df["sample_id"] = df["sample_id"].str.extract(r"^([^\.]+)")
     return df
 
 
@@ -124,17 +127,17 @@ def query_stix_bash(
     r: int,
     output_dir: str,
     file_name: str,
-    multi_files: bool,
+    multi_files: bool, # if using grch38 reference, the STIX index and db are split into shards
     long_reads: bool,
     scratch: bool,
 ):
     bash_file = "query_stix.sh"
-    if multi_files:
-        bash_file = "query_stix_multifile.sh"
-    elif long_reads:
+    if long_reads:
         bash_file = "query_stix_lr.sh"
+    elif multi_files:
+        bash_file = "query_stix_multifile.sh"
 
-    if multi_files:
+    if multi_files or long_reads:
         output_file = f"{output_dir}/partial_outputs/{file_name}"
     else:
         output_file = f"{output_dir}/{file_name}"
@@ -145,7 +148,7 @@ def query_stix_bash(
         text=True,
     )
 
-    if multi_files:
+    if multi_files or long_reads:
         # the query output from each shard was written to a different file, and we want to write them to the same file
         with open(f"{output_dir}/{file_name}.txt", "w") as out_file:
             n_shards = 23 if long_reads else 8
@@ -163,6 +166,7 @@ def query_stix_bash(
 def write_processed_output(
     output_file: str,
     processed_output_file: str,
+    long_reads: bool,
     l_col: str = "l_start",
     r_col: str = "r_end",
 ) -> Dict[str, np.ndarray[float]]:
@@ -171,7 +175,7 @@ def write_processed_output(
     For short reads, use l_start and r_end since the breakpoints are calculated from the clustering of paired-end reads.
     For long reads, use l_end and r_start to calculate the deletion. All long reads returned from stix are split reads, so the l_start and r_end coordinates capture the entire read length (not just the deletion).
     """
-    df = txt_to_df(output_file)
+    df = txt_to_df(output_file, long_reads)
 
     grouped = df.groupby("file_id")
     squiggle_data = {}
@@ -267,6 +271,7 @@ def query_stix(
         squiggle_data = write_processed_output(
             output_file,
             processed_output_file,
+            long_reads,
             l_col="l_end" if long_reads else "l_start",
             r_col="r_start" if long_reads else "r_end",
         )
@@ -357,6 +362,22 @@ def main():
         const=True,
     )
     parser.add_argument(
+        "-s",
+        type=bool,
+        help="Use scratch directory for intermediate files",
+        default=False,
+        nargs="?",
+        const=True,
+    )
+    parser.add_argument(
+        "-lr",
+        type=bool,
+        help="Cluster using long-read data instead of the default short-reads",
+        default=False,
+        nargs="?",
+        const=True,
+    )
+    parser.add_argument(
         "-ref", type=str, help="Reference genome", default="grch38"
     )
 
@@ -367,6 +388,8 @@ def main():
     sv_id = args.id or ""
     p = args.p
     d = args.d
+    s = args.s
+    lr = args.lr
     reference_genome = "grch38" if args.ref != "grch37" else args.ref
     query_stix(
         l=l,
@@ -376,6 +399,8 @@ def main():
         single_trial=not d,
         plot=p,
         reference_genome=reference_genome,
+        long_reads=lr,
+        scratch=s,
     )
 
 

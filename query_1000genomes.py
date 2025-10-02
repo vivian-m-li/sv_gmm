@@ -191,7 +191,7 @@ def get_num_sv(long_reads: bool = False):
 def main():
     # if not os.path.isfile(f"{FILE_DIR}/deletions_df.csv"):
     #     load_vcf()
-    get_num_sv(long_reads=True)
+    get_num_sv(True)
 
 
 if __name__ == "__main__":
