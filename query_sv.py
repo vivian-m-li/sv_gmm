@@ -38,7 +38,7 @@ def txt_to_df(filename: str, long_reads: bool) -> pd.DataFrame:
     df["sample_id"] = df["sample_id"].str.extract(
         r"/([^/]+)\.bed\.gz", expand=False
     )
-    if long_reads: # format is slightly different
+    if long_reads:  # format is slightly different
         df["sample_id"] = df["sample_id"].str.extract(r"^([^\.]+)")
     return df
 
@@ -127,7 +127,7 @@ def query_stix_bash(
     r: int,
     output_dir: str,
     file_name: str,
-    multi_files: bool, # if using grch38 reference, the STIX index and db are split into shards
+    multi_files: bool,  # if using grch38 reference, the STIX index and db are split into shards
     long_reads: bool,
     scratch: bool,
 ):

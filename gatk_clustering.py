@@ -6,6 +6,7 @@ import csv
 import pandas as pd
 from synthetic_tests import generate_data_r
 from generate_data import generate_synthetic_sv_data
+from timeout import break_after
 from typing import Optional
 
 
@@ -149,6 +150,7 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, results):
     results.append([case, r, svs, n_samples, weights, output_file])
 
 
+@break_after(hours=31, minutes=55)
 def gatk_cluster(n_samples: int, svlen: int, test_case: Optional[str] = None):
     """Parallelized synthetic data tests with varying r and (optional) cluster weights. Each set of parameters is repeated 50 times. Run with the bash script run_gatk_clustering.sh to test different sample sizes and sv lengths."""
     # generate synthetic data
