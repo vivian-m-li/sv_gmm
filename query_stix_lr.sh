@@ -18,7 +18,7 @@ fi
 for i in {0..22}
 do
   idx=$(printf "%02d" "$i")
-  $STIX_BUILD -i "03.1.giggle_idx_$idx" -d "03.1.stix_idx_$idx.db" -s 150 -t DEL -l "$l" -r "$r" -g > "${output_file}_${idx}.txt"
+  $STIX_BUILD -i "03.1.giggle_idx_$idx" -d "03.1.stix_idx_$idx.db" -s 150 -t DEL -l "$l" -r "$r" -g > "${output_file}_${i}.txt"
 done
 
 cd "$CURRENT_DIR"
