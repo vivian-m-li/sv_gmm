@@ -9,7 +9,7 @@ from scipy.spatial.distance import braycurtis
 from collections import defaultdict, Counter
 from gmm_types import Evidence, SVStat, SVInfoGMM, SUPERPOPULATIONS
 from dataclasses import fields
-from typing import List
+from typing import List, Optional
 
 PROCESSED_STIX_DIR = "processed_stix_output"
 PROCESSED_SVS_DIR = "processed_svs"
@@ -81,9 +81,15 @@ def calc_af(n_homozygous, n_heterozygous, population_size):
     return ((n_homozygous * 2) + n_heterozygous) / (population_size * 2)
 
 
-def df_to_bed(in_file: str, out_file: str):
-    """Converts a csv to a bed file to be used with bedtools"""
-    df = pd.read_csv(in_file)
+def df_to_bed(
+    *,
+    out_file: str,
+    in_file: Optional[str] = None,
+    in_df: Optional[pd.DataFrame] = None,
+):
+    """Converts a csv to a bed file to be used with bedtools. Requires the dataframe to have columns: chr, start, end, sv_id, id."""
+    assert in_file or in_df is not None, "Must provide either in_file or in_df"
+    df = in_df if in_df is not None else pd.read_csv(in_file)
     with open(out_file, "w") as outfile:
         for _, row in df.iterrows():
             outfile.write(
@@ -608,7 +614,9 @@ def get_new_gene_intersections():
             sv_id, gene_id = row[3], row[7]
             og_intersections.add((sv_id, gene_id))
 
-    df_to_bed("1kgp/consensus_svs.csv", "1kgp/consensus_svs.bed")
+    df_to_bed(
+        in_file="1kgp/consensus_svs.csv", out_file="1kgp/consensus_svs.bed"
+    )
     subprocess.run(
         ["bash", "bed_intersect.sh"]
         + [  # noqa503
@@ -739,6 +747,30 @@ def compare_short_long_reads():
     )
     # consensus_df = merged[~merged["consensus"].isna()] # get all rows where the consensus is not NaN
     merged.to_csv("1kgp/sr_lr_merged.csv", index=False)
+
+
+def prune_false_positives():
+    """Prune false positive SVs by checking for nearby SVs in the region of interest."""
+    # for each SV, get the region -/+ the slop (? TODO: verify this)
+    #   use bedtools to intersect the region with the svs in deletions_df to find any that might overlap
+    #   check if one of the clusters corresponds to this overlapping SV, if so
+
+    # OR: see if consensus_svs are overlapping with > 1 SV; should have only 1 match
+    lookup = get_sv_lookup()
+    lookup["sv_id"] = lookup["id"].astype(str)
+    lookup.rename(columns={"stop": "end"}, inplace=True)
+    bed_file = "1kgp/sv_lookup.bed"
+    df_to_bed(in_df=lookup, out_file=bed_file)
+    subprocess.run(
+        ["bash", "bed_intersect.sh"]
+        + [
+            bed_file,
+            "1kgp/consensus_svs.bed",
+            "1kgp/sv_lookup_intersect.bed",
+        ],
+        capture_output=True,
+        text=True,
+    )
 
 
 def write_post_processed_files(stem: str = "1kgp"):
