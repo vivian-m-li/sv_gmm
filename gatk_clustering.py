@@ -9,8 +9,8 @@ from generate_data import generate_synthetic_sv_data
 from timeout import break_after
 from typing import Optional
 
-PLOIDY_TABLE = "synthetic_data/data/ploidy_table.tsv"
-REFERENCE_FILE = "synthetic_data/data/reference.fasta"
+PLOIDY_TABLE = "synthetic_data/generated_files/ploidy_table.tsv"
+REFERENCE_FILE = "synthetic_data/generated_files/reference.fasta"
 
 
 def process_gatk_output(filename: str):
