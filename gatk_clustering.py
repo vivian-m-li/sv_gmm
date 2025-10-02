@@ -9,6 +9,9 @@ from generate_data import generate_synthetic_sv_data
 from timeout import break_after
 from typing import Optional
 
+PLOIDY_TABLE = "synthetic_data/data/ploidy_table.tsv"
+REFERENCE_FILE = "synthetic_data/data/reference.fasta"
+
 
 def process_gatk_output(filename: str):
     """Parse GATK SVCluster output VCF to determine number of clusters
@@ -142,7 +145,8 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, results):
     # run GATK's SVCluster on the generated vcf
     output_file = f"synthetic_data/clustered/{run_id}.vcf"
     subprocess.run(
-        ["bash", "gatk_svcluster.sh"] + [filename, output_file],
+        ["bash", "gatk_svcluster.sh"]
+        + [filename, output_file, PLOIDY_TABLE, REFERENCE_FILE],
         capture_output=True,
         text=True,
     )
@@ -178,7 +182,6 @@ def gatk_cluster(n_samples: int, svlen: int, test_case: Optional[str] = None):
 
         write_csv(
             results,
-            write_new_file=False,
             fixed_n_samples=n_samples,
             fixed_svlen=svlen,
         )
