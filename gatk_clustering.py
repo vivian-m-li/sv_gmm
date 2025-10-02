@@ -70,6 +70,7 @@ def write_csv(
     fixed_svlen: Optional[int] = None,
 ):
     file = f"synthetic_data/results{'' if fixed_n_samples is None else 'n=' + str(fixed_n_samples)}.csv"
+    # append to existing file generated in synthetic_tests.py
     with open(
         file,
         mode="a",
@@ -129,10 +130,10 @@ def write_csv(
 
 
 def gatk_cluster_inner(case, r, svs, weights, n_samples, results):
-    """Generates synthetic data and runs the GMM on it. Appends the results to the multiprocessing-managed list to be written to a CSV later."""
+    """Generates synthetic data and runs the GMM on it. Appends the results to the multiprocessing-managed list to be written to a CSV later. File I/O is done on scratch."""
     # generates synthetic data and writes to a vcf file
     run_id = uuid.uuid4()
-    filename = f"synthetic_data/data/{case}_r{r}_svlen{svs[0][1] - svs[0][0]}_n{n_samples}_{run_id}.vcf"
+    filename = f"/scratch/Users/vili4418/synthetic_data/data/{case}_r{r}_svlen{svs[0][1] - svs[0][0]}_n{n_samples}_{run_id}.vcf"
     generate_synthetic_sv_data(
         1,
         svs,
@@ -143,7 +144,9 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, results):
     )
 
     # run GATK's SVCluster on the generated vcf
-    output_file = f"synthetic_data/clustered/{run_id}.vcf"
+    output_file = (
+        f"/scratch/Users/vili4418/synthetic_data/clustered/{run_id}.vcf"
+    )
     subprocess.run(
         ["bash", "gatk_svcluster.sh"]
         + [filename, output_file, PLOIDY_TABLE, REFERENCE_FILE],
@@ -173,7 +176,7 @@ def gatk_cluster(n_samples: int, svlen: int, test_case: Optional[str] = None):
         for case, r, svs in data:
             weights = [[1.0 / len(svs) for _ in range(len(svs))]]
             for weight in weights:
-                for _ in range(50):
+                for _ in range(10):
                     args.append((case, r, svs, weight, n_samples, results))
 
         p.starmap(gatk_cluster_inner, args)
@@ -186,8 +189,19 @@ def gatk_cluster(n_samples: int, svlen: int, test_case: Optional[str] = None):
             fixed_svlen=svlen,
         )
 
+        # remove all synthetic data files
+        subprocess.run(
+            [
+                "rm",
+                "-r",
+                "/scratch/Users/vili4418/synthetic_data/data/*",
+                "/scratch/Users/vili4418/synthetic_data/clustered/*",
+            ]
+        )
+
 
 if __name__ == "__main__":
     n_samples = int(sys.argv[1])
     svlen = int(sys.argv[2]) if len(sys.argv) > 2 else 802
-    gatk_cluster(n_samples=n_samples, svlen=svlen)
+    test_case = sys.argv[3] if len(sys.argv) > 3 else None
+    gatk_cluster(n_samples=n_samples, svlen=svlen, test_case=test_case)
