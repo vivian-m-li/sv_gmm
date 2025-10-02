@@ -256,7 +256,7 @@ def generate_data_r(case: str, svlen: int):
     data = []
     match case:
         case "A":
-            data.append([case, None, [[SV1_L, SV1_L + svlen]]])
+            data.append([case, 0, [[SV1_L, SV1_L + svlen]]])
         case "B":
             # two nested SVs
             for r in np.arange(0.05, 1.05, 0.05):

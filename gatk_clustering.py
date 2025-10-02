@@ -133,7 +133,7 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, results):
     """Generates synthetic data and runs the GMM on it. Appends the results to the multiprocessing-managed list to be written to a CSV later. File I/O is done on scratch."""
     # generates synthetic data and writes to a vcf file
     run_id = uuid.uuid4()
-    filename = f"/scratch/Users/vili4418/synthetic_data/data/{case}_r{r}_svlen{svs[0][1] - svs[0][0]}_n{n_samples}_{run_id}.vcf"
+    filename = f"/scratch/Users/vili4418/synthetic_data/data/{case}_r{str(r)}_svlen{str(svs[0][1] - svs[0][0])}_n{n_samples}_{run_id}.vcf"
     generate_synthetic_sv_data(
         1,
         svs,
