@@ -7,7 +7,7 @@ reference_file=$4
 GATK_BUILD="/Users/vili4418/sv/gatk-4.6.2.0/gatk"
 
 # use gatk to cluster the SVs 
-gatk SVCluster \
+$GATK_BUILD SVCluster \
   -V $input_file \
   -O $output_file \
   --ploidy-table $ploidy_table \

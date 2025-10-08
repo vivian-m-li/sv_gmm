@@ -9,8 +9,8 @@ from generate_data import generate_synthetic_sv_data
 from timeout import break_after
 from typing import Optional
 
-PLOIDY_TABLE = "synthetic_data/generated_files/ploidy_table.tsv"
-REFERENCE_FILE = "synthetic_data/generated_files/reference.fasta"
+PLOIDY_TABLE = "/Users/vili4418/sv/sv_gmm/synthetic_data/generated_files/ploidy_table.tsv"
+REFERENCE_FILE = "/Users/vili4418/sv/sv_gmm/synthetic_data/generated_files/reference.fasta"
 
 
 def process_gatk_output(filename: str):
@@ -142,6 +142,7 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, results):
         run_gmm=False,
         vcf_filename=filename,
     )
+    # TODO: average read coordinates per sample?
 
     # run GATK's SVCluster on the generated vcf
     output_file = (
@@ -153,11 +154,10 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, results):
         capture_output=True,
         text=True,
     )
-
     results.append([case, r, svs, n_samples, weights, output_file])
 
 
-@break_after(hours=31, minutes=55)
+@break_after(hours=17, minutes=55)
 def gatk_cluster(n_samples: int, svlen: int, test_case: Optional[str] = None):
     """Parallelized synthetic data tests with varying r and (optional) cluster weights. Each set of parameters is repeated 50 times. Run with the bash script run_gatk_clustering.sh to test different sample sizes and sv lengths."""
     # generate synthetic data
@@ -176,7 +176,7 @@ def gatk_cluster(n_samples: int, svlen: int, test_case: Optional[str] = None):
         for case, r, svs in data:
             weights = [[1.0 / len(svs) for _ in range(len(svs))]]
             for weight in weights:
-                for _ in range(10):
+                for _ in range(50):
                     args.append((case, r, svs, weight, n_samples, results))
 
         p.starmap(gatk_cluster_inner, args)

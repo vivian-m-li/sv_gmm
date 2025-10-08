@@ -155,7 +155,7 @@ def get_num_samples(
         lookup[row_index] = len(points)
 
 
-@break_after(hours=47, minutes=55)  # break before the job is cancelled
+@break_after(hours=167, minutes=55)  # break before the job is cancelled
 def get_num_sv(long_reads: bool = False):
     filename = f"{FILE_DIR}/deletions_df.csv"
     df = pd.read_csv(filename, low_memory=False)
