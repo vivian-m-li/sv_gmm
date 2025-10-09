@@ -76,6 +76,17 @@ def get_svlen(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
     return all_stats
 
 
+def remove_gatk_rows():
+    """Removes synthetic tests run with GATK from each results file."""
+    files = os.listdir("synthetic_data")
+    for file in files:
+        if not file.startswith("results") or not file.endswith(".csv"):
+            continue
+        df = pd.read_csv(f"synthetic_data/{file}")
+        df = df[df["gmm_model"] != "gatk"]
+        df.to_csv(f"synthetic_data/{file}", index=False)
+
+
 def calc_af(n_homozygous, n_heterozygous, population_size):
     """Calculate allele frequency from number of homozygous and heterozygous individuals."""
     return ((n_homozygous * 2) + n_heterozygous) / (population_size * 2)
@@ -804,4 +815,5 @@ def get_sv_chr(sv_id: str):
 
 
 if __name__ == "__main__":
-    write_post_processed_files("long_reads")
+    # write_post_processed_files("long_reads")
+    remove_gatk_rows()
