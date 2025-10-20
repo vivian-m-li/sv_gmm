@@ -16,16 +16,18 @@ Generate data for GATK SVCluster pipeline
 def data_to_vcf(
     evidence, insert_size_lookup: Dict[str, int], vcf_filename: str
 ):
-    """Writes the synthetic data to a VCF file to be used for the GATK SVCluster pipeline.
-    Each breakpoint is represented as a single BND record."""
+    """
+    Writes the synthetic data to a VCF file to be used for the GATK SVCluster pipeline.
+    Each record represents one deletion event defined by paired-end read evidence.
+    """
     reads_df = pd.DataFrame(columns=["sample_id", "L", "R", "mean_insert_size"])
     for sample_id, values in evidence.items():
         mean_insert_size = insert_size_lookup[sample_id]
         for read_L, read_R in zip(values[::2], values[1::2]):
             reads_df.loc[len(reads_df)] = [
                 sample_id,
-                read_L,
-                read_R,
+                min(read_L, read_R),  # enforce L < R
+                max(read_L, read_R),
                 mean_insert_size,
             ]
 
@@ -33,28 +35,22 @@ def data_to_vcf(
     chrom = "1"
     for i, row in reads_df.iterrows():
         variant_id = f"{row['sample_id']}_{i + 1}"
-        sv_type = "BND"
-        L, R = row["L"], row["R"]
+        sv_type = "DEL"
+        ref = "N"
+        alt = "<DEL>"  # symbolic alt allele for deletions
 
-        # ensure proper ordering
-        if L > R:
-            L, R = R, L
-
-        # single breakend record - points from left position to right position
-        # ALT format for BND: N[chr:pos[ means forward strand connection
-        # Strand information: STRANDS=++ means both breakends on forward strand
-        alt = f"N[{chrom}:{R}["
+        # INFO field per VCF 4.2 structural variant conventions
         info = (
+            f"END={int(row['R'])};"
             f"SVTYPE={sv_type};"
             f"SAMPLE={row['sample_id']};"
             f"MEAN_INSERT={row['mean_insert_size']};"
-            f"ALGORITHMS=PESR;"
-            f"END={L};"  # END must equal POS for BND records
-            f"CHR2={chrom};"
-            f"END2={R};"  # Position of the mate breakend
-            f"STRANDS=++"  # Both breakends on forward strand
+            f"ALGORITHMS=PESR"
         )
-        vcf_records.append([chrom, L, variant_id, "N", alt, ".", "PASS", info])
+
+        vcf_records.append(
+            [chrom, int(row["L"]), variant_id, ref, alt, ".", "PASS", info]
+        )
 
     vcf_df = pd.DataFrame(
         vcf_records,
@@ -64,8 +60,8 @@ def data_to_vcf(
 
     # write VCF
     with open(vcf_filename, "w") as f:
-        # headers
         f.write("##fileformat=VCFv4.2\n")
+        f.write('##ALT=<ID=DEL,Description="Deletion">\n')
         f.write(
             '##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant">\n'
         )
@@ -80,18 +76,6 @@ def data_to_vcf(
         )
         f.write(
             '##INFO=<ID=ALGORITHMS,Number=.,Type=String,Description="Algorithms that discovered this variant">\n'
-        )
-        f.write(
-            '##INFO=<ID=CHR2,Number=1,Type=String,Description="Chromosome for the second breakend">\n'
-        )
-        f.write(
-            '##INFO=<ID=CHR2,Number=1,Type=String,Description="Chromosome for the second breakend">\n'
-        )
-        f.write(
-            '##INFO=<ID=END2,Number=1,Type=Integer,Description="End position of the second breakend">\n'
-        )
-        f.write(
-            '##INFO=<ID=STRANDS,Number=1,Type=String,Description="Breakpoint strandedness [++,+-,-+,--]">\n'
         )
         f.write("#" + "\t".join(vcf_df.columns) + "\n")
         vcf_df.to_csv(f, sep="\t", index=False, header=False)

@@ -767,6 +767,7 @@ def prune_false_positives():
     #   check if one of the clusters corresponds to this overlapping SV, if so
 
     # OR: see if consensus_svs are overlapping with > 1 SV; should have only 1 match
+    # this method doesn't work because some SVs are large and will overlap with multiple SVs
     lookup = get_sv_lookup()
     lookup["sv_id"] = lookup["id"].astype(str)
     lookup.rename(columns={"stop": "end"}, inplace=True)

@@ -59,7 +59,7 @@ def run_dirichlet_wrapper(
         )
 
 
-@break_after(hours=11, minutes=55)
+@break_after(hours=23, minutes=45)
 def run_svs_until_convergence(run_subset: bool = False):
     deletions_df = get_deletions_df()
     sample_ids = set(get_sample_ids())

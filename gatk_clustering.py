@@ -3,14 +3,19 @@ import uuid
 import subprocess
 import multiprocessing
 import csv
+import pysam
 import pandas as pd
 from synthetic_tests import generate_data_r
 from generate_data import generate_synthetic_sv_data
 from timeout import break_after
 from typing import Optional
 
-PLOIDY_TABLE = "/Users/vili4418/sv/sv_gmm/synthetic_data/generated_files/ploidy_table.tsv"
-REFERENCE_FILE = "/Users/vili4418/sv/sv_gmm/synthetic_data/generated_files/reference.fasta"
+PLOIDY_TABLE = (
+    "/Users/vili4418/sv/sv_gmm/synthetic_data/generated_files/ploidy_table.tsv"
+)
+REFERENCE_FILE = (
+    "/Users/vili4418/sv/sv_gmm/synthetic_data/generated_files/reference.fasta"
+)
 
 
 def process_gatk_output(filename: str):
@@ -18,45 +23,31 @@ def process_gatk_output(filename: str):
     and extract their positions (L) and lengths."""
     Ls = []
     lengths = []
+    vcf = pysam.VariantFile(filename)
+    for record in vcf.fetch():
+        pos = record.pos  # left breakpoint
+        info = record.info
 
-    with open(filename, "r") as f:
-        for line in f:
-            # skip hearder lines
-            if line.startswith("#"):
-                continue
+        # skip non-deletion SVs
+        svtype = info.get("SVTYPE", None)
+        if svtype != "DEL":
+            continue
 
-            # parse vcf file fields
-            fields = line.strip().split("\t")
-            if len(fields) < 8:
-                continue
+        # END marks the right breakpoint
+        if "END" in info:
+            end = info["END"]
+        else:
+            # fallback: attempt to parse ALT
+            end = pos
+            if record.alts and ":" in record.alts[0]:
+                try:
+                    end_str = record.alts[0].split(":")[1].rstrip("><")
+                    end = int(end_str)
+                except ValueError:
+                    pass
 
-            pos = int(fields[1])  # this is L (left breakpoint)
-            info = fields[7]
-
-            # parse INFO field to get END2 (right breakpoint)
-            info_dict = {}
-            for item in info.split(";"):
-                if "=" in item:
-                    key, value = item.split("=", 1)
-                    info_dict[key] = value
-
-            # get the right breakpoint position
-            if "END2" in info_dict:
-                end2 = int(info_dict["END2"])
-                length = abs(end2 - pos)
-            else:
-                # fallback: try to parse from ALT field
-                alt = fields[4]
-                # ALT format: N]chr:pos] or N[chr:pos[
-                if ":" in alt:
-                    end2_str = alt.split(":")[1].rstrip("][")
-                    end2 = int(end2_str)
-                    length = abs(end2 - pos)
-                else:
-                    length = 0
-
-            Ls.append(pos)
-            lengths.append(length)
+        Ls.append(pos)
+        lengths.append(abs(end - pos))
 
     num_clusters = len(Ls)
     return num_clusters, Ls, lengths
@@ -99,7 +90,13 @@ def write_csv(
             weights,
             gatk_output_file,
         ) in all_results:
-            n_clusters, lengths, Ls = process_gatk_output(gatk_output_file)
+            try:
+                n_clusters, lengths, Ls = process_gatk_output(gatk_output_file)
+            except FileNotFoundError:
+                print(
+                    f"File not found: {gatk_output_file}, case={case}, rs={rs}, svs={svs}, n_samples={n_samples}"
+                )
+                continue
             if type(rs) is tuple:
                 r, r2 = rs
             else:
@@ -148,9 +145,9 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, results):
     output_file = (
         f"/scratch/Users/vili4418/synthetic_data/clustered/{run_id}.vcf"
     )
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: F841
         ["bash", "gatk_svcluster.sh"]
-        + [filename, output_file, PLOIDY_TABLE, REFERENCE_FILE],
+        + [filename, output_file, PLOIDY_TABLE, REFERENCE_FILE],  # noqa: W503
         capture_output=True,
         text=True,
     )
@@ -174,7 +171,8 @@ def gatk_cluster(n_samples: int, svlen: int, test_case: Optional[str] = None):
         data = generate_data_r(test_case, svlen)
 
     with multiprocessing.Manager() as manager:
-        p = multiprocessing.Pool(10) # assign more cores to the job than the pool size
+        # assign more cores to the job than the pool size
+        p = multiprocessing.Pool(10)
         results = manager.list()
         args = []
         for case, r, svs in data:
