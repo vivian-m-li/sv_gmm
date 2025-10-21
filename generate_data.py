@@ -19,6 +19,7 @@ def data_to_vcf(
     """
     Writes the synthetic data to a VCF file to be used for the GATK SVCluster pipeline.
     Each record represents one deletion event defined by paired-end read evidence.
+    Deletion events are calculated from the average L and R positions of each read pair for each sample.
     """
     reads_df = pd.DataFrame(columns=["sample_id", "L", "R", "mean_insert_size"])
     for sample_id, values in evidence.items():
@@ -33,6 +34,14 @@ def data_to_vcf(
 
     vcf_records = []
     chrom = "1"
+    # cluster rows by sample_id
+    # take the average L and (R - mean_insert_size) for each read pair as the deletion coordinates
+    reads_df = reads_df.groupby("sample_id").agg(
+        {"L": "mean",
+         "R": "mean",
+         "mean_insert_size": "first"}
+    ).reset_index()
+
     for i, row in reads_df.iterrows():
         variant_id = f"{row['sample_id']}_{i + 1}"
         sv_type = "DEL"
@@ -41,10 +50,9 @@ def data_to_vcf(
 
         # INFO field per VCF 4.2 structural variant conventions
         info = (
-            f"END={int(row['R'])};"
+            f"END={int(row['R'] - row['mean_insert_size'])};"
             f"SVTYPE={sv_type};"
             f"SAMPLE={row['sample_id']};"
-            f"MEAN_INSERT={row['mean_insert_size']};"
             f"ALGORITHMS=PESR"
         )
 
@@ -70,9 +78,6 @@ def data_to_vcf(
         )
         f.write(
             '##INFO=<ID=SAMPLE,Number=1,Type=String,Description="Sample ID">\n'
-        )
-        f.write(
-            '##INFO=<ID=MEAN_INSERT,Number=1,Type=Float,Description="Mean insert size for sample">\n'
         )
         f.write(
             '##INFO=<ID=ALGORITHMS,Number=.,Type=String,Description="Algorithms that discovered this variant">\n'
