@@ -54,8 +54,8 @@ def reverse_giggle_format(l: str, r: str):  # noqa741
     return chr, start, stop
 
 
-def lookup_sv_position(sv_id: str):
-    lookup = pd.read_csv("1kgp/sv_lookup.csv")
+def lookup_sv_position(sv_id: str, stem: str = "1kgp"):
+    lookup = pd.read_csv(f"{stem}/sv_lookup.csv")
     row = lookup[lookup["id"] == sv_id]
     if row.empty:
         raise ValueError(f"SV ID {sv_id} not found in lookup table.")
@@ -213,8 +213,12 @@ def query_stix(
     if sv_id == "" and (l == "" or r == ""):
         raise ValueError("Missing SV position or ID")
 
+    file_root = "1kgp"
+    if reference_genome == "grch37":
+        file_root = "grch37"
+
     if sv_id != "":
-        chr, start, stop = lookup_sv_position(sv_id)
+        chr, start, stop = lookup_sv_position(sv_id, file_root)
         l = giggle_format(chr, start)  # noqa741
         r = giggle_format(chr, stop)
     else:
@@ -236,10 +240,6 @@ def query_stix(
     for directory in [output_file_dir, processed_file_dir, plot_dir]:
         if not os.path.exists(directory):
             os.mkdir(directory)
-
-    file_root = "1kgp"
-    if reference_genome == "grch37":
-        file_root = "low_cov_grch37"
 
     # set up the correct file paths in case scratch is True
     file_name = f"{l}_{r}"
@@ -320,6 +320,7 @@ def query_stix(
                     "R": stop,
                     "plot": plot,
                     "plot_bokeh": False,
+                    "stem": file_root,
                 },
             )
 

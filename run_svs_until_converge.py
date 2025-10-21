@@ -27,7 +27,7 @@ def run_dirichlet_wrapper(
     stem: str,
 ):
     sv_id = row["id"]
-    squiggle_data, num_samples = get_raw_data(row, sample_set)
+    squiggle_data, num_samples = get_raw_data(row, sample_set, stem)
 
     if len(squiggle_data) == 0:
         gmms, alphas, posterior_distributions = [(None, [])], [], []
@@ -61,7 +61,7 @@ def run_dirichlet_wrapper(
         )
 
 
-@break_after(hours=23, minutes=30)
+@break_after(hours=22, minutes=00)
 def run_svs_until_convergence(stem: str, run_subset: bool = False):
     deletions_df = get_deletions_df(stem)
     sample_ids = set(get_sample_ids(stem))

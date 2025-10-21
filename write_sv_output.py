@@ -95,7 +95,7 @@ def init_sv_stat_row(
 
 
 def get_raw_data(
-    row, sample_set: Set[str]
+    row, sample_set: Set[str], stem: str = "1kgp"
 ) -> Tuple[Dict[str, np.ndarray[float]], int]:
     """Gets the samples and evidence for an SV. Filters out samples that are homozygous for the reference allele."""
     start = giggle_format(str(row["chr"]), row["start"])
@@ -103,6 +103,7 @@ def get_raw_data(
     squiggle_data = query_stix(
         l=start,
         r=end,
+        reference_genome="grch38" if stem == "1kgp" else "grch37",
         run_gmm=False,
         filter_reference=False,
     )
