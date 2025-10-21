@@ -125,7 +125,10 @@ def find_missing_sample_ids():
 
 
 def find_missing_processed_svs():
-    """Gets SVs that are in the original deletions VCF that have not yet been run through the pipeline"""
+    """
+    DEPRECATED: new processed_svs_dir is processed_svs_converge
+    Gets SVs that are in the original deletions VCF that have not yet been run through the pipeline.
+    """
     processed_sv_ids = set(
         [file.strip(".csv") for file in os.listdir(PROCESSED_SVS_DIR)]
     )

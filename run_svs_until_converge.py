@@ -10,7 +10,7 @@ from write_sv_output import (
     concat_multi_processed_sv_files,
 )
 from run_dirichlet import run_dirichlet
-from helper import get_deletions_df, get_sample_ids
+from helper import get_deletions_df, get_sample_ids, write_post_processed_files
 from typing import Set, Dict
 from timeout import break_after
 
@@ -24,6 +24,7 @@ def run_dirichlet_wrapper(
     row: Dict,
     population_size: int,
     sample_set: Set[int],
+    stem: str,
 ):
     sv_id = row["id"]
     squiggle_data, num_samples = get_raw_data(row, sample_set)
@@ -40,6 +41,7 @@ def run_dirichlet_wrapper(
                 "R": row["stop"],
                 "plot": False,
                 "plot_bokeh": False,
+  		        "stem": stem,
             },
         )
 
@@ -59,10 +61,10 @@ def run_dirichlet_wrapper(
         )
 
 
-@break_after(hours=23, minutes=45)
-def run_svs_until_convergence(run_subset: bool = False):
-    deletions_df = get_deletions_df()
-    sample_ids = set(get_sample_ids())
+@break_after(hours=23, minutes=30)
+def run_svs_until_convergence(stem: str, run_subset: bool = False):
+    deletions_df = get_deletions_df(stem)
+    sample_ids = set(get_sample_ids(stem))
     population_size = len(sample_ids)
 
     svs_to_run = set()
@@ -79,15 +81,21 @@ def run_svs_until_convergence(run_subset: bool = False):
             if run_subset:
                 if row["id"] not in svs_to_run:
                     continue
-            args.append((row.to_dict(), population_size, sample_ids))
+            args.append((row.to_dict(), population_size, sample_ids, stem))
         p.starmap(run_dirichlet_wrapper, args)
         p.close()
         p.join()
 
 
-def run_svs():
+def run_svs(*, ref_genome: str = "grch38"):
     start = time.time()
-    run_svs_until_convergence()
+
+    if ref_genome == "grch37":
+        stem = "grch37"
+    elif ref_genome == "grch38":
+        stem = "1kgp"
+
+    run_svs_until_convergence(stem)
 
     # move files from scratch to home dir (even after timeout)
     for file in os.listdir(SCRATCH_FILE_DIR):
@@ -95,10 +103,11 @@ def run_svs():
             os.path.join(SCRATCH_FILE_DIR, file), os.path.join(FILE_DIR, file)
         )
 
-    concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME)
+    concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME, stem)
+    write_post_processed_files(stem)
     end = time.time()
     print(f"Completed in {end - start}")
 
 
 if __name__ == "__main__":
-    run_svs()
+    run_svs(ref_genome="grch37")

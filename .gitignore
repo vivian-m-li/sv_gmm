@@ -7,12 +7,13 @@ gnomad_svs
 samples
 hs37d5.fa.gz
 1kgp
-low_cov_grch37
+grch37
 processed_svs
 processed_svs_converge
 synthetic_data*
 *.ipynb
 profile
 long_reads
-sr_*
-lr_*
+sr*
+lr*
+data_dump

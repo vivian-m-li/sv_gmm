@@ -536,6 +536,7 @@ def run_viz_gmm(
     insert_size_lookup: Optional[Dict[str, int]] = None,
     min_pairs: int = 5,
     sv_id: Optional[str] = None,
+    stem: str = "1kgp",
 ):
     """Runs the GMM pipeline and visualizes the results."""
     if insert_size_lookup is None:
@@ -568,7 +569,7 @@ def run_viz_gmm(
 
     if not synthetic_data:
         populate_sample_info(
-            sv_evidence, chr, L, R
+            sv_evidence, chr, L, R, stem=stem,
         )  # mutates sv_evidence with ancestry data and homo/heterozygous for each sample
     evidence_by_mode = get_evidence_by_mode(
         gmm, sv_evidence, L, R, gmm_model=gmm_model

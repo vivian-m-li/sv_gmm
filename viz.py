@@ -973,12 +973,14 @@ def populate_sample_info(
     chr: str,
     L: int,
     R: int,
+    *,
+    stem: str,
 ) -> None:
     """
     Populates each sample with its sex, population, and superpopulation information
     """
-    ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
-    deletions_df = pd.read_csv(f"1kgp/deletions_by_chr/chr{chr}.csv")
+    ancestry_df = pd.read_csv(f"{stem}/ancestry.tsv", delimiter="\t")
+    deletions_df = pd.read_csv(f"{stem}/deletions_by_chr/chr{chr}.csv")
     deletions_row = deletions_df[
         (deletions_df["start"] == L) & (deletions_df["stop"] == R)
     ].iloc[0]
