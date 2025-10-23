@@ -3,6 +3,7 @@ input_file=$1
 output_file=$2
 ploidy_table=$3
 reference_file=$4
+gatk_alg=$5
 
 GATK_BUILD="/Users/vili4418/sv/gatk-4.6.2.0/gatk"
 
@@ -24,7 +25,8 @@ $GATK_BUILD SVCluster \
   -V $input_file \
   -O $output_file \
   --ploidy-table $ploidy_table_temp \
-  -R $reference_file_temp
+  -R $reference_file_temp \
+  --algorithm $gatk_alg
 
 # remove all temporary files
 rm $ploidy_table_temp

@@ -4,6 +4,7 @@ import subprocess
 import multiprocessing
 import csv
 import pysam
+import argparse
 import pandas as pd
 from synthetic_tests import generate_data_r
 from generate_data import generate_synthetic_sv_data
@@ -88,6 +89,7 @@ def write_csv(
             svs,
             n_samples,
             weights,
+            gatk_alg,
             gatk_output_file,
         ) in all_results:
             try:
@@ -107,7 +109,7 @@ def write_csv(
                     "case": case,
                     "r": r,
                     "r2": r2,
-                    "gmm_model": "gatk",
+                    "gmm_model": f"gatk_{gatk_alg}",
                     "expected_num_modes": len(svs),
                     "expected_lengths": [sv[1] - sv[0] for sv in svs],
                     "expected_Ls": [sv[0] for sv in svs],
@@ -125,7 +127,7 @@ def write_csv(
     df.to_csv(file, index=False)
 
 
-def gatk_cluster_inner(case, r, svs, weights, n_samples, results):
+def gatk_cluster_inner(case, r, svs, weights, n_samples, gatk_alg, results):
     """Generates synthetic data and runs the GMM on it. Appends the results to the multiprocessing-managed list to be written to a CSV later. File I/O is done on scratch."""
     # generates synthetic data and writes to a vcf file
     run_id = uuid.uuid4()
@@ -146,7 +148,13 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, results):
     )
     result = subprocess.run(  # noqa: F841
         ["bash", "gatk_svcluster.sh"]
-        + [filename, output_file, PLOIDY_TABLE, REFERENCE_FILE],  # noqa: W503
+        + [
+            filename,
+            output_file,
+            PLOIDY_TABLE,
+            REFERENCE_FILE,
+            gatk_alg,
+        ],  # noqa: W503
         capture_output=True,
         text=True,
     )
@@ -155,11 +163,16 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, results):
     # print(result.stdout)
     # print(result.stderr)
 
-    results.append([case, r, svs, n_samples, weights, output_file])
+    results.append([case, r, svs, n_samples, weights, gatk_alg, output_file])
 
 
 @break_after(hours=25, minutes=55)
-def gatk_cluster(n_samples: int, svlen: int, test_case: Optional[str] = None):
+def gatk_cluster(
+    n_samples: int,
+    svlen: int,
+    test_case: Optional[str] = None,
+    gatk_alg: Optional[str] = None,
+):
     """Parallelized synthetic data tests with varying r and (optional) cluster weights. Each set of parameters is repeated 50 times. Run with the bash script run_gatk_clustering.sh to test different sample sizes and sv lengths."""
     # generate synthetic data
     if test_case is None:
@@ -178,7 +191,9 @@ def gatk_cluster(n_samples: int, svlen: int, test_case: Optional[str] = None):
             weights = [[1.0 / len(svs) for _ in range(len(svs))]]
             for weight in weights:
                 for _ in range(10):
-                    args.append((case, r, svs, weight, n_samples, results))
+                    args.append(
+                        (case, r, svs, weight, n_samples, gatk_alg, results)
+                    )
 
         # add a chunk size; each worker will be given 10 tasks to run
         p.starmap(gatk_cluster_inner, args, chunksize=10)
@@ -192,8 +207,48 @@ def gatk_cluster(n_samples: int, svlen: int, test_case: Optional[str] = None):
         )
 
 
+def main():
+    parser = argparse.ArgumentParser(
+        description="Runs GATK SVCluster on synthetic data."
+    )
+    parser.add_argument(
+        "-n",
+        type=int,
+        help="Number of samples to generate",
+        default=30,
+        nargs="?",
+    )
+    parser.add_argument(
+        "-l",
+        type=int,
+        help="Length of the default SV generated",
+        default=802,
+        nargs="?",
+    )
+    parser.add_argument(
+        "-c",
+        type=str,
+        help="Test case to run (A, B, C, D)",
+        default=None,
+        nargs="?",
+    )
+
+    # Default value: SINGLE_LINKAGE. Possible values: {DEFRAGMENT_CNV, SINGLE_LINKAGE, MAX_CLIQUE}
+    parser.add_argument(
+        "-g",
+        type=str,
+        help="GATK SVCluster algorithm to use",
+        default="SINGLE_LINKAGE",
+        nargs="?",
+    )
+    args = parser.parse_args()
+    gatk_cluster(
+        n_samples=args.n,
+        svlen=args.l,
+        test_case=args.c,
+        gatk_alg=args.g,
+    )
+
+
 if __name__ == "__main__":
-    n_samples = int(sys.argv[1])
-    svlen = int(sys.argv[2]) if len(sys.argv) > 2 else 802
-    test_case = sys.argv[3] if len(sys.argv) > 3 else None
-    gatk_cluster(n_samples=n_samples, svlen=svlen, test_case=test_case)
+    main()
