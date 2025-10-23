@@ -79,7 +79,10 @@ def load_squiggle_data(filename: str, rewrite_file: bool = False):
             pattern = r"[\S]*([A-Z][A-Z]\d\d\d\d\d)"
             match = re.match(pattern, row[0])
             if match is None:
-                raise ValueError("Invalid sample ID")
+                print("Invalid sample ID:", row[0])
+                # instead of raising an error, continue
+                # raise ValueError("Invalid sample ID")
+                continue
             sample_id = match.group(1)
             evidence = np.array([int(float(x)) for x in row[1:]])
             if len(evidence) > 0:

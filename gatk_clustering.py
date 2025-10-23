@@ -166,7 +166,7 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, gatk_alg, results):
     results.append([case, r, svs, n_samples, weights, gatk_alg, output_file])
 
 
-@break_after(hours=25, minutes=55)
+@break_after(hours=71, minutes=55)
 def gatk_cluster(
     n_samples: int,
     svlen: int,
