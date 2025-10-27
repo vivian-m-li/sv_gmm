@@ -20,7 +20,7 @@ SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
 OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
 
-def run_dirichlet_wrapper(
+def run_dirichlet_inner(
     row: Dict,
     population_size: int,
     sample_set: Set[int],
@@ -59,6 +59,18 @@ def run_dirichlet_wrapper(
         write_posterior_distributions(
             sv_id, alphas, posterior_distributions, SCRATCH_FILE_DIR
         )
+
+
+def run_dirichlet_wrapper(
+    row: Dict,
+    population_size: int,
+    sample_set: Set[int],
+    stem: str,
+):
+    try:
+        run_dirichlet_inner(row, population_size, sample_set, stem)
+    except Exception as e:
+        print(f"Error processing SV {row['id']}: {e}")
 
 
 @break_after(hours=22, minutes=00)
@@ -103,7 +115,9 @@ def run_svs(*, ref_genome: str = "grch38"):
             os.path.join(SCRATCH_FILE_DIR, file), os.path.join(FILE_DIR, file)
         )
 
+    print("Concatenating multi-processed SV files...")
     concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME, stem)
+    print("Writing post-processed files...")
     write_post_processed_files(stem)
     end = time.time()
     print(f"Completed in {end - start}")

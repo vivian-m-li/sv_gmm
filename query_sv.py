@@ -84,9 +84,17 @@ def load_squiggle_data(filename: str, rewrite_file: bool = False):
                 # raise ValueError("Invalid sample ID")
                 continue
             sample_id = match.group(1)
-            evidence = np.array([int(float(x)) for x in row[1:]])
+            evidence = []
+            for i in range(1, len(row), 2):
+                try:
+                    start, end = int(float(row[i])), int(float(row[i + 1]))
+                    evidence.extend([start, end])
+                except ValueError:
+                    # skip this pair if either is nan
+                    continue
+                
             if len(evidence) > 0:
-                squiggle_data[row[0]] = evidence
+                squiggle_data[sample_id] = evidence
 
     # write squiggle data
     if rewrite_file:
@@ -251,9 +259,9 @@ def query_stix(
     home_output_file = f"{FILE_DIR}/{file_name}.txt"
     home_processed_output_file = f"{PROCESSED_FILE_DIR}/{file_name}.csv"
 
-    if reference_genome == "grch37" and not scratch:
-        output_file = f"{file_root}/{output_file}"
-        processed_output_file = f"{file_root}/{processed_output_file}"
+    # if reference_genome == "grch37" and not scratch:
+    #     output_file = f"{file_root}/{output_file}"
+    #     processed_output_file = f"{file_root}/{processed_output_file}"
 
     # check if this sv has already been queried for and processed in the home directory
     if os.path.isfile(home_processed_output_file):
