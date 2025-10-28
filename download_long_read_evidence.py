@@ -52,7 +52,8 @@ def get_svs_by_sample():
 
 def get_sample_sv_reads():
     lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
-    files = os.listdir("data_dump/lr_stix_output/")  # one file for each sv
+    dir = "data_dump/lr_stix_output/"
+    files = os.listdir(dir)  # one file for each sv
     df = pd.DataFrame(
         columns=[
             "sample_id",
@@ -67,7 +68,7 @@ def get_sample_sv_reads():
 
     for i, file in enumerate(files):
         print(f"File {i}/{len(files)}", end="\r")
-        stix_output = txt_to_df(file, True)
+        stix_output = txt_to_df(os.path.join(dir, file), True)
         for _, row in stix_output.iterrows():
             sample_id = row["sample_id"]
             sv_id = file.strip(".txt")
