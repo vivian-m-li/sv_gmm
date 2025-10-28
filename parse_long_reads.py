@@ -8,8 +8,8 @@ import pysam
 import pandas as pd
 from bs4 import BeautifulSoup
 from helper import get_sv_lookup, get_sv_stats_collapsed_df, reciprocal_overlap
-from typing import List, Dict, Tuple
-from collections import defaultdict, Optional
+from typing import List, Dict, Tuple, Optional
+from collections import defaultdict
 
 SCRATCH_DIR = "/scratch/Users/vili4418/"
 
