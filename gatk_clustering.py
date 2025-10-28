@@ -1,4 +1,3 @@
-import sys
 import uuid
 import subprocess
 import multiprocessing
@@ -148,13 +147,13 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, gatk_alg, results):
     )
     result = subprocess.run(  # noqa: F841
         ["bash", "gatk_svcluster.sh"]
-        + [
+        + [  # noqa: W503
             filename,
             output_file,
             PLOIDY_TABLE,
             REFERENCE_FILE,
             gatk_alg,
-        ],  # noqa: W503
+        ],
         capture_output=True,
         text=True,
     )

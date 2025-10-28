@@ -12,9 +12,9 @@ from parse_long_reads import (
     read_cigars_from_file,
     remove_bam_file,
 )
-from query_sv import load_squiggle_data, txt_to_df
+from query_sv import load_squiggle_data
 from timeout import break_after
-from typing import List
+from typing import List, Optional
 
 SCRATCH_DIR = "/scratch/Users/vili4418"
 
@@ -34,7 +34,7 @@ def find_failing_sv():
 
 
 def get_svs_by_sample():
-    """Creates a lookup table of samples and the SVs that are 0/1, 1/0, or 1/1. Standalone function."""
+    """Creates a lookup table of samples and the svs they don't have the reference allele for. Standalone function."""
     df = pd.read_csv("long_reads/long_read_samples.csv")
     deletions_df = pd.read_csv("1kgp/deletions_df.csv")
 
@@ -48,63 +48,6 @@ def get_svs_by_sample():
                     row["id"],
                 ]
     lookup_df.to_csv("long_reads/sample_sv_lookup.csv", index=False)
-
-
-def get_sample_sv_reads():
-    lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
-    files = os.listdir("data_dump/lr_stix_output/")  # one file for each sv
-    df = pd.DataFrame(
-        columns=[
-            "sample_id",
-            "sv_id",
-            "chr",
-            "l_start",
-            "l_end",
-            "r_start",
-            "r_end",
-        ]
-    )
-
-    for i, file in enumerate(files):
-        print(f"File {i}/{len(files)}", end="\r")
-        stix_output = txt_to_df(file, True)
-        for _, row in stix_output.iterrows():
-            sample_id = row["sample_id"]
-            sv_id = file.strip(".txt")
-
-            # check that lookup has this sample_id, sv_id pair
-            if (
-                lookup[
-                    (lookup["sample_id"] == sample_id)
-                    & (lookup["sv_id"] == sv_id)
-                ].shape[0]
-                == 0
-            ):
-                continue
-
-            # check that this row does not exist already in the df
-            if (
-                df[
-                    (df["sample_id"] == sample_id)
-                    & (df["sv_id"] == sv_id)
-                    & (df["l_start"] == row["l_start"])
-                    & (df["l_end"] == row["l_end"])
-                ].shape[0]
-                > 0
-            ):
-                continue
-
-            df.loc[len(df)] = [
-                sample_id,
-                sv_id,
-                row["l_chr"],
-                row["l_start"],
-                row["l_end"],
-                row["r_start"],
-                row["r_end"],
-            ]
-
-    df.to_csv("long_reads/sample_sv_reads.csv", index=False)
 
 
 def get_samples_to_redo():
@@ -176,11 +119,9 @@ def process_sample_evidence_inner(
     sv_id: str,
     sample_id: str,
     cram_file: str,
+    queue: Optional[mp.Queue],
 ):
-    """
-    For each sv id for a given sample, download the bam file for the sv region, extract cigar strings, and write to evidence file.
-    cram_file can be either the downloaded cram file path or an http link to the cram file.
-    """
+    """For each sv id for a given sample, download the bam file, extract cigar strings, and write to evidence file."""
     # add a tolerance of 500 bp on either side of the sv start/stop
     region, start, stop, sv_len = get_sv_region(sv_id, 500)
     output_file = get_bam_file(
@@ -202,7 +143,13 @@ def process_sample_evidence_inner(
         row.extend([deletion["start"], deletion["stop"]])
 
     file_name = os.path.join(SCRATCH_DIR, f"long_reads/evidence/{sv_id}.csv")
-    write_to_evidence_file(file_name, row)
+
+    # not used in the synchronous version
+    if queue is None:
+        write_to_evidence_file(file_name, row)
+    else:
+        # put the csv row in the queue to be written
+        queue.put((file_name, row))
 
     remove_bam_file(output_file, scratch=True)
 
@@ -211,6 +158,7 @@ def process_sample_evidence(
     sample_id: str,
     cram_file: str,
     sv_ids: List[str],
+    queue: Optional[mp.Queue],
     with_mp: bool = False,
 ):
     """Parallelizes the processing function for each sv in sv_ids after the cram file has been downloaded for a sample."""
@@ -220,13 +168,13 @@ def process_sample_evidence(
             pool = mp.Pool(cpu_count)
             args = []
             for sv_id in sv_ids:
-                args.append((sv_id, sample_id, cram_file))
+                args.append((sv_id, sample_id, cram_file, None))
             pool.starmap(process_sample_evidence_inner, args)
             pool.close()
             pool.join()
     else:
         for sv_id in sv_ids:
-            process_sample_evidence_inner(sv_id, sample_id, cram_file)
+            process_sample_evidence_inner(sv_id, sample_id, cram_file, queue)
 
 
 def remove_cram_file(file):
@@ -235,8 +183,7 @@ def remove_cram_file(file):
 
 
 def download_sample_evidence(
-    sample_row: pd.Series,
-    sv_ids: List[str],
+    sample_row: pd.Series, sv_ids: List[str], queue: Optional[mp.Queue] = None
 ):
     """Download the cram file for a sample, process it for each sv, and then remove the cram file."""
     start = time.time()
@@ -257,7 +204,7 @@ def download_sample_evidence(
         )
         download_end = time.time()
         print(
-            f"Downloaded cram file for {sample_id} in ",
+            "Downloaded cram file in ",
             int((download_end - download_start) / 60),
             "minutes",
         )
@@ -274,7 +221,7 @@ def download_sample_evidence(
         )
 
     # parallelized function to process the sample evidence for each sv
-    process_sample_evidence(sample_id, output_file, sv_ids, with_mp=True)
+    process_sample_evidence(sample_id, output_file, sv_ids, queue, with_mp=True)
 
     # remove the cram file at the end
     remove_cram_file(output_file)
@@ -288,25 +235,6 @@ def download_sample_evidence(
         "minutes",
     )
     sys.stdout.flush()
-
-
-def download_sample_evidence_http(
-    sample_row: pd.Series,
-    sv_ids: List[str],
-):
-    # compare if this function is faster than downloading via wget
-
-    # parallelize the download and processing of each sv for the sample, but only 4 at a time
-    with mp.Manager():
-        pool = mp.Pool(4)
-        args = []
-        for sv_id in sv_ids:
-            args.append(
-                (sv_id, sample_row["sample_id"], sample_row["cram_file"])
-            )
-        pool.starmap(process_sample_evidence_inner, args)
-        pool.close()
-        pool.join()
 
 
 @break_after(hours=335, minutes=30)  # takes about 14 days to run all SVs
@@ -341,8 +269,92 @@ def download_sv_subset():
     move_evidence_files(sv_ids, to_scratch=False)
 
 
-@break_after(hours=4, minutes=0)
-def download_long_read_evidence(
+def worker(sample_row: pd.Series, sv_ids: List[str], queue: mp.Queue):
+    download_sample_evidence(sample_row, sv_ids, queue)
+
+
+def listener(queue):
+    """Listens for messages on the queue and writes to the file"""
+    try:
+        while True:
+            m = queue.get()
+            if m == "kill":
+                break
+
+            file_name, row = m
+            if os.path.exists(file_name):  # append to existing file
+                f = open(file_name, "a")
+            else:  # file does not exist
+                f = open(file_name, "w")
+            csv_writer = csv.writer(f)
+            csv_writer.writerow(row)
+            f.close()
+    except Exception as e:
+        print(f"Listener error: {e}")
+        return
+
+
+def download_long_read_evidence_inner(
+    long_read_samples,
+    sample_sv_lookup,
+    redo_samples,
+):
+    """
+    Parallelized version of downloading long read evidence using multiprocessing.
+    Requires a queue to write to the same evidence files from different processes.
+    Don't use this function -- use the synchronous version instead.
+    Downloading multiple cram files at the same time uses too many resources from the cluster.
+    """
+    if redo_samples:
+        samples_to_redo = get_samples_to_redo()
+        long_read_samples = long_read_samples[
+            long_read_samples["sample_id"].isin(samples_to_redo)
+        ]
+
+    with mp.Manager() as manager:
+        cpu_count = mp.cpu_count()
+        pool = mp.Pool(cpu_count)
+        queue = manager.Queue()
+
+        # put listener to work
+        pool.apply_async(listener, (queue,))
+
+        # fire off jobs
+        jobs = []
+        start = time.time()
+        for _, row in long_read_samples.iterrows():
+            sv_ids = sample_sv_lookup[
+                sample_sv_lookup["sample_id"] == row["sample_id"]
+            ]["sv_id"].values
+            svs_to_process = []
+
+            for sv_id in sv_ids:
+                if redo_samples or not is_sample_processed(
+                    sv_id, row["sample_id"]
+                ):
+                    svs_to_process.append(sv_id)
+
+            if len(svs_to_process) == 0:
+                print(
+                    f"Sample {row['sample_id']} already processed for all SVs"
+                )
+                continue
+
+            job = pool.apply_async(worker, (row, svs_to_process, queue))
+            jobs.append(job)
+
+        print("Time to prepare jobs:", (time.time() - start) / 60, "minutes")
+
+        for job in jobs:
+            job.get()
+
+        queue.put("kill")
+        pool.close()
+        pool.join()
+
+
+@break_after(hours=70, minutes=0)
+def download_long_read_evidence_synchronous(
     long_read_samples,
     sample_sv_lookup,
     redo_samples,
@@ -372,10 +384,9 @@ def download_long_read_evidence(
             continue
 
         download_sample_evidence(row, svs_to_process)
-        # download_sample_evidence_http(row, svs_to_process)
 
 
-def download_long_read_evidence_wrapper(
+def download_long_read_evidence(
     *,
     move_files: bool = True,
     redo_samples: bool = False,
@@ -387,10 +398,17 @@ def download_long_read_evidence_wrapper(
     sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
     long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
 
-    # TEMP: test with only one sample
-    long_read_samples = long_read_samples[
-        long_read_samples["sample_id"] == "NA19657"
-    ]
+    # skip samples that have already been completed
+    # completed_samples = get_completed_samples()
+    # long_read_samples = long_read_samples[
+    #     ~long_read_samples["sample_id"].isin(completed_samples)
+    # ]
+
+    # skip these samples because they keep failing
+    # samples_to_redo = get_samples_to_redo()
+    # long_read_samples = long_read_samples[
+    #     ~long_read_samples["sample_id"].isin(samples_to_redo)
+    # ]
 
     # sv ids to process
     all_sv_ids = set(sample_sv_lookup["sv_id"].unique())
@@ -400,7 +418,7 @@ def download_long_read_evidence_wrapper(
         move_evidence_files(all_sv_ids, to_scratch=True)
 
     # run the multiprocessing code
-    download_long_read_evidence(
+    download_long_read_evidence_synchronous(
         long_read_samples, sample_sv_lookup, redo_samples
     )
 
@@ -415,7 +433,7 @@ def download_long_read_evidence_wrapper(
 if __name__ == "__main__":
     start = time.time()
 
-    download_long_read_evidence_wrapper(move_files=True, redo_samples=False)
+    download_long_read_evidence(move_files=True, redo_samples=False)
 
     end = time.time()
     print("Time taken:", (end - start) / 60, "minutes")

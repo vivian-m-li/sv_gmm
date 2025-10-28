@@ -92,7 +92,7 @@ def load_squiggle_data(filename: str, rewrite_file: bool = False):
                 except ValueError:
                     # skip this pair if either is nan
                     continue
-                
+
             if len(evidence) > 0:
                 squiggle_data[sample_id] = evidence
 

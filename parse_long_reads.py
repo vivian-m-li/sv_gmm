@@ -144,7 +144,7 @@ def write_sample_long_read_evidence(
 
 
 def get_sv_region(sv_id: str, tolerance: int) -> Tuple[str, int, int, int]:
-    """For a given SV, returns the frame (chr:start-stop) to extract reads from."""
+    """For a given SV, returns the frame (chr:start-stop, with a tolerance) to extract reads from. The actual start, stop, and sv_len values (without an added tolerance) are also returned."""
     sv_lookup = get_sv_lookup()
     row = sv_lookup[sv_lookup["id"] == sv_id]
     start = row["start"].values[0]
@@ -244,8 +244,9 @@ def read_cigars_from_file(bam_file: str, sv: Tuple[int, int]) -> List[dict]:
         # keep the cigarstring only if it ends with a soft clip (indicating a deletion in the split read)
         if not cigar_string.endswith("S"):
             continue
-        
-        del_len = read.cigartuples[-1][1] # length of the soft clip
+
+        del_len = read.cigartuples[-1][1]  # length of the soft clip
+        # reference_end aligns with the end of the aligned portion of the read (including soft clips)
         deletion = (read.reference_end - del_len, read.reference_end)
 
         # keep the deletion if it has at least 25% reciprocal overlap with the SV of interest
@@ -258,7 +259,7 @@ def read_cigars_from_file(bam_file: str, sv: Tuple[int, int]) -> List[dict]:
                     "length": del_len,
                 }
             )
-        
+
         # # calculate the position of the deletion
         # ref_pos = read.reference_start
         # for op, length in read.cigartuples:
@@ -293,7 +294,6 @@ def write_all_long_read_evidence():
         sv_row = sv_lookup[sv_lookup["id"] == sv_id]
         start = sv_row["start"].values[0]
         stop = sv_row["stop"].values[0]
-        svlen = stop - start
 
         try:
             deletions = read_cigars_from_file(
