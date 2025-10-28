@@ -7,7 +7,7 @@ import subprocess
 import pysam
 import pandas as pd
 from bs4 import BeautifulSoup
-from helper import get_sv_lookup, get_sv_stats_collapsed_df
+from helper import get_sv_lookup, get_sv_stats_collapsed_df, reciprocal_overlap
 from typing import List, Dict, Tuple
 from collections import defaultdict
 
@@ -220,7 +220,7 @@ def filter_evidence_all():
         filter_evidence(sv_id, start, stop, svlen)
 
 
-def read_cigars_from_file(bam_file: str, start: int, stop: int, svlen: int):
+def read_cigars_from_file(bam_file: str, sv: Tuple[int, int]) -> List[dict]:
     """For a given bam file (sample-specific, filtered by SV region), read the cigar strings to identify deletions that match the given SV size."""
     try:
         # open the sample's bam file (corresponding to an SV region), read the cigar strings that
@@ -241,36 +241,38 @@ def read_cigars_from_file(bam_file: str, start: int, stop: int, svlen: int):
         # a string representing how the read aligns to the reference sequence
         cigar_string = read.cigarstring
 
-        # D indicates there's a deletion in this region
-        if not cigar_string or "D" not in cigar_string:
+        # keep the cigarstring only if it ends with a soft clip (indicating a deletion in the split read)
+        if not cigar_string.endswith("S"):
             continue
+        
+        del_len = read.cigartuples[-1][1] # length of the soft clip
+        deletion = (read.reference_end - del_len, read.reference_end)
 
-        # look for all deletions in this cigar string
-        ref_pos = read.reference_start
-        for op, length in read.cigartuples:
-            # operations that "consume" the reference sequence
-            if op in [0, 2, 3, 7, 8]:  # M, D, N, =, X
-                ref_pos += length
-
-            # skip non-deletions
-            if op != 2:
-                continue
-
-            # ignore deletions that are too far away from the actual SV
-            if ref_pos < (start - svlen) or ref_pos > (stop + svlen):
-                continue
-
-            # ignore deletions that are too small/large
-            if length < svlen * 0.5 or length > svlen * 2:
-                continue
-
+        # keep the deletion if it has at least 25% reciprocal overlap with the SV of interest
+        r = reciprocal_overlap(deletion, sv)
+        if r >= 0.25:
             deletions.append(
                 {
-                    "start": ref_pos,
-                    "stop": ref_pos + length,
-                    "length": length,
+                    "start": deletion[0],
+                    "stop": deletion[1],
+                    "length": del_len,
                 }
             )
+        
+        # # calculate the position of the deletion
+        # ref_pos = read.reference_start
+        # for op, length in read.cigartuples:
+        #     # operations that "consume" the reference sequence
+        #     if op in [0, 2, 3, 7, 8]:  # M, D, N, =, X
+        #         ref_pos += length
+
+        #     deletions.append(
+        #         {
+        #             "start": ref_pos,
+        #             "stop": ref_pos + length,
+        #             "length": length,
+        #         }
+        #     )
 
     return deletions
 
@@ -295,7 +297,7 @@ def write_all_long_read_evidence():
 
         try:
             deletions = read_cigars_from_file(
-                os.path.join("long_reads/reads", file), start, stop, svlen
+                os.path.join("long_reads/reads", file), start, stop
             )
         except (ValueError, OSError):
             remove_bam_file(file)
@@ -348,9 +350,7 @@ def get_long_read_svs(
 
         # process the sample - get the deletions from the cigar string
         # possible ValueError
-        deletions[sample_id] = read_cigars_from_file(
-            output_file, start, stop, sv_len
-        )
+        deletions[sample_id] = read_cigars_from_file(output_file, start, stop)
 
         # write evidence to file and remove bam file
         write_sample_long_read_evidence(sv_id, sample_id, deletions[sample_id])

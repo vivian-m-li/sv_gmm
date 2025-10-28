@@ -9,7 +9,7 @@ from scipy.spatial.distance import braycurtis
 from collections import defaultdict, Counter
 from gmm_types import Evidence, SVStat, SVInfoGMM, SUPERPOPULATIONS
 from dataclasses import fields
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 PROCESSED_STIX_DIR = "processed_stix_output"
 PROCESSED_SVS_DIR = "processed_svs"
@@ -320,7 +320,7 @@ def calculate_posteriors_from_trials(outcomes):
     return calculate_posteriors(alpha)
 
 
-def reciprocal_overlap(sv1, sv2):
+def reciprocal_overlap(sv1: Tuple[int, int], sv2: Tuple[int, int]) -> float:
     """
     Calculates the reciprocal overlap between two structural variants.
     r = min(% overlap sv 1, % overlap sv 2)
