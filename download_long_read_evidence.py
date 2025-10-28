@@ -12,11 +12,12 @@ from parse_long_reads import (
     read_cigars_from_file,
     remove_bam_file,
 )
-from query_sv import load_squiggle_data, txt_to_df
+from query_sv import load_squiggle_data, txt_to_df, giggle_format
 from timeout import break_after
 from typing import List
 
 SCRATCH_DIR = "/scratch/Users/vili4418"
+STIX_DATA_DIR = "/Users/vili4418/sv/sv_gmm/data_dump/lr_stix_output/"
 
 
 def find_failing_sv():
@@ -51,6 +52,10 @@ def get_svs_by_sample():
 
 
 def get_sample_sv_reads():
+    """
+    Creates a lookup table of samples and the SVs that have long read evidence from stix output.
+    WARNING: This function takes a long time to run. This lookup is done when processing each sample's evidence.
+    """
     lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
     dir = "data_dump/lr_stix_output/"
     files = os.listdir(dir)  # one file for each sv
@@ -68,6 +73,8 @@ def get_sample_sv_reads():
 
     for i, file in enumerate(files):
         print(f"File {i}/{len(files)}", end="\r")
+        sys.stdout.flush()
+
         stix_output = txt_to_df(os.path.join(dir, file), True)
         for _, row in stix_output.iterrows():
             sample_id = row["sample_id"]
@@ -179,33 +186,51 @@ def process_sample_evidence_inner(
     cram_file: str,
 ):
     """
-    For each sv id for a given sample, download the bam file for the sv region, extract cigar strings, and write to evidence file.
+    For each sv id for a given sample, download the bam file for the sv region, extract cigar strings, and write to evidence file. Processes all of the stix reads for one sample/sv id pair at a time to avoid writing to the same file in parallel.
     cram_file can be either the downloaded cram file path or an http link to the cram file.
     """
-    # add a tolerance of 500 bp on either side of the sv start/stop
-    region, start, stop, sv_len = get_sv_region(sv_id, 500)
-    output_file = get_bam_file(
-        sv_id,
-        sample_id,
-        region=region,
-        cram_file=cram_file,
-        scratch=True,
-    )
+    # use the stix read coordinates to subset the bam file
+    _, sv_chr, sv_start, sv_stop, _ = get_sv_region(sv_id, 0)
 
-    try:
-        evidence = read_cigars_from_file(output_file, start, stop, sv_len)
-    except Exception:
-        print(f"Redo sample {sv_id}-{sample_id}")
-        return
+    # get the reads for this sample and sv id
+    stix_output_file = os.path.join(
+        STIX_DATA_DIR,
+        f"{giggle_format(sv_chr, sv_start)}_{giggle_format(sv_chr, sv_stop)}.txt",
+    )
+    stix_output = txt_to_df(stix_output_file, True)
+    reads = stix_output[stix_output["sample_id"] == sample_id]
 
     row = [sample_id]
-    for deletion in evidence:
-        row.extend([deletion["start"], deletion["stop"]])
+    for _, row in reads.iterrows():
+        read_coords = (row["l_start"], row["l_end"])
+        read_start, read_stop = read_coords
+        bam_region = f"chr{sv_chr}:{read_start}-{read_stop}"
+        output_file = get_bam_file(
+            sv_id,
+            sample_id,
+            region=bam_region,
+            cram_file=cram_file,
+            scratch=True,
+        )
+
+        try:
+            # this should only output one or 0 deletions that matches the stix read coords
+            evidence = read_cigars_from_file(
+                output_file, (sv_start, sv_stop), read_coords
+            )
+        except Exception:
+            print(f"Redo sample {sv_id}-{sample_id}, read coords {read_coords}")
+            remove_bam_file(output_file, scratch=True)
+            continue
+
+        if len(evidence) > 0:
+            row.extend([evidence[0]["start"], evidence[0]["stop"]])
+
+        remove_bam_file(output_file, scratch=True)
 
     file_name = os.path.join(SCRATCH_DIR, f"long_reads/evidence/{sv_id}.csv")
-    write_to_evidence_file(file_name, row)
-
-    remove_bam_file(output_file, scratch=True)
+    if len(row) > 1:  # found evidence for at least one read
+        write_to_evidence_file(file_name, row)
 
 
 def process_sample_evidence(
@@ -342,7 +367,7 @@ def download_sv_subset():
     move_evidence_files(sv_ids, to_scratch=False)
 
 
-@break_after(hours=4, minutes=0)
+@break_after(hours=3, minutes=30)
 def download_long_read_evidence(
     long_read_samples,
     sample_sv_lookup,
@@ -363,7 +388,6 @@ def download_long_read_evidence(
             sample_sv_lookup["sample_id"] == row["sample_id"]
         ]["sv_id"].values
         svs_to_process = []
-
         for sv_id in sv_ids:
             if redo_samples or not is_sample_processed(sv_id, row["sample_id"]):
                 svs_to_process.append(sv_id)

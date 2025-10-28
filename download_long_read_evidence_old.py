@@ -123,7 +123,7 @@ def process_sample_evidence_inner(
 ):
     """For each sv id for a given sample, download the bam file, extract cigar strings, and write to evidence file."""
     # add a tolerance of 500 bp on either side of the sv start/stop
-    region, start, stop, sv_len = get_sv_region(sv_id, 500)
+    region, _, start, stop, sv_len = get_sv_region(sv_id, 500)
     output_file = get_bam_file(
         sv_id,
         sample_id,

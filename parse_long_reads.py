@@ -9,7 +9,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from helper import get_sv_lookup, get_sv_stats_collapsed_df, reciprocal_overlap
 from typing import List, Dict, Tuple
-from collections import defaultdict
+from collections import defaultdict, Optional
 
 SCRATCH_DIR = "/scratch/Users/vili4418/"
 
@@ -147,11 +147,12 @@ def get_sv_region(sv_id: str, tolerance: int) -> Tuple[str, int, int, int]:
     """For a given SV, returns the frame (chr:start-stop, with a tolerance) to extract reads from. The actual start, stop, and sv_len values (without an added tolerance) are also returned."""
     sv_lookup = get_sv_lookup()
     row = sv_lookup[sv_lookup["id"] == sv_id]
+    chr = row["chr"].values[0]
     start = row["start"].values[0]
     stop = row["stop"].values[0]
-    region = f"chr{row['chr'].values[0]}:{start - tolerance}-{stop + tolerance}"
+    region = f"chr{chr}:{start - tolerance}-{stop + tolerance}"
     sv_len = stop - start
-    return region, start, stop, sv_len
+    return region, chr, start, stop, sv_len
 
 
 def get_processed_samples(sv_id: str) -> Dict[str, List[dict]]:
@@ -220,7 +221,11 @@ def filter_evidence_all():
         filter_evidence(sv_id, start, stop, svlen)
 
 
-def read_cigars_from_file(bam_file: str, sv: Tuple[int, int]) -> List[dict]:
+def read_cigars_from_file(
+    bam_file: str,
+    sv: Tuple[int, int],
+    stix_read: Optional[Tuple[int, int]] = None,
+) -> List[dict]:
     """For a given bam file (sample-specific, filtered by SV region), read the cigar strings to identify deletions that match the given SV size."""
     try:
         # open the sample's bam file (corresponding to an SV region), read the cigar strings that
@@ -236,6 +241,10 @@ def read_cigars_from_file(bam_file: str, sv: Tuple[int, int]) -> List[dict]:
     for read in bam.fetch():
         # check if the read has been mapped to a reference sequence
         if read.is_unmapped:
+            continue
+
+        # ignore reads that don't match the given read coordinates (if provided)
+        if stix_read is not None and read.reference_start != stix_read[0]:
             continue
 
         # a string representing how the read aligns to the reference sequence
@@ -259,6 +268,10 @@ def read_cigars_from_file(bam_file: str, sv: Tuple[int, int]) -> List[dict]:
                     "length": del_len,
                 }
             )
+
+        # there should only be one read per bam file that corresponds with the stix output
+        if stix_read is not None:
+            break
 
         # # calculate the position of the deletion
         # ref_pos = read.reference_start
@@ -297,7 +310,7 @@ def write_all_long_read_evidence():
 
         try:
             deletions = read_cigars_from_file(
-                os.path.join("long_reads/reads", file), start, stop
+                os.path.join("long_reads/reads", file), (start, stop)
             )
         except (ValueError, OSError):
             remove_bam_file(file)
@@ -321,7 +334,7 @@ def get_long_read_svs(
     Writes the evidence and removes the bam file.
     """
 
-    region, start, stop, sv_len = get_sv_region(sv_id, tolerance)
+    region, _, start, stop, _ = get_sv_region(sv_id, tolerance)
     long_reads = pd.read_csv("long_reads/long_read_samples.csv")
 
     # get samples that have been processed for this SV already
@@ -350,7 +363,7 @@ def get_long_read_svs(
 
         # process the sample - get the deletions from the cigar string
         # possible ValueError
-        deletions[sample_id] = read_cigars_from_file(output_file, start, stop)
+        deletions[sample_id] = read_cigars_from_file(output_file, (start, stop))
 
         # write evidence to file and remove bam file
         write_sample_long_read_evidence(sv_id, sample_id, deletions[sample_id])
