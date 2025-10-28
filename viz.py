@@ -457,6 +457,8 @@ def plot_2d_coords(
     ax_main,
     evidence_by_mode: List[List[Evidence]],
     *,
+    L: int,
+    R: int,
     axis1: str,
     axis2: str,
     add_error_bars: bool = False,
@@ -527,7 +529,7 @@ def plot_2d_coords(
         x = np.array(x)
         num_evidence = np.array(num_evidence)
 
-        gmm_iters, _ = run_em(x, 1)
+        gmm_iters, _ = run_em(x, 1, L, R)
         gmm = gmm_iters[-1]
 
         # plot 2D data
@@ -645,6 +647,8 @@ def plot_single_sv(
     evidence_by_mode: List[List[Evidence]],
     *,
     sv_id: str = "",
+    L: int,
+    R: int,
     axis1: str,
     axis2: str,
     add_error_bars: bool = False,
@@ -658,6 +662,8 @@ def plot_single_sv(
     plot_2d_coords(
         ax2,
         evidence_by_mode,
+        L=L,
+        R=R,
         axis1=axis1,
         axis2=axis2,
         add_error_bars=add_error_bars,

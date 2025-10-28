@@ -206,6 +206,8 @@ def run_dirichlet(
         # show the last L-len plot
         plot_2d_coords(
             gmms[-1][1],
+            L=L,
+            R=R,
             axis1="L",
             axis2="Length",
             add_error_bars=False,

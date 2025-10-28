@@ -320,6 +320,7 @@ def query_stix(
                 plot=plot,
                 plot_bokeh=False,
                 sv_id=sv_id,
+                stem=file_root,
             )
         else:
             run_dirichlet(

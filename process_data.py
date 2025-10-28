@@ -473,7 +473,7 @@ def process_data(
     points = []
 
     for sample_id, r in squiggle_data.items():
-        reads = r.copy()  # of the format [l1, r1, l2, r2, ...]
+        reads = np.array(r.copy())  # of the format [l1, r1, l2, r2, ...]
         reads = reads[(reads != 0) & (~np.isnan(reads))]
         paired_ends = [
             [reads[i], reads[i + 1]] for i in range(0, len(reads), 2)
@@ -578,6 +578,8 @@ def run_viz_gmm(
         plot_single_sv(
             evidence_by_mode,
             sv_id=sv_id,
+            L=L,
+            R=R,
             axis1="L",
             axis2="Length",
             add_error_bars=False,
