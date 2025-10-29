@@ -763,29 +763,55 @@ def compare_short_long_reads():
     merged.to_csv("1kgp/sr_lr_merged.csv", index=False)
 
 
-def prune_false_positives():
-    """Prune false positive SVs by checking for nearby SVs in the region of interest."""
-    # for each SV, get the region -/+ the slop (? TODO: verify this)
-    #   use bedtools to intersect the region with the svs in deletions_df to find any that might overlap
-    #   check if one of the clusters corresponds to this overlapping SV, if so
-
-    # OR: see if consensus_svs are overlapping with > 1 SV; should have only 1 match
-    # this method doesn't work because some SVs are large and will overlap with multiple SVs
+def get_overlapping_clustered_svs():
+    """Checks for overlaps between clustered SVs and the original SV breakpoints."""
     lookup = get_sv_lookup()
     lookup["sv_id"] = lookup["id"].astype(str)
     lookup.rename(columns={"stop": "end"}, inplace=True)
     bed_file = "1kgp/sv_lookup.bed"
     df_to_bed(in_df=lookup, out_file=bed_file)
+
+    output_bed_file = "1kgp/sv_lookup_intersect.bed"
     subprocess.run(
         ["bash", "bed_intersect.sh"]
         + [
             bed_file,
             "1kgp/consensus_svs.bed",
-            "1kgp/sv_lookup_intersect.bed",
+            output_bed_file,
         ],
         capture_output=True,
         text=True,
     )
+
+    df = pd.read_csv(
+        output_bed_file,
+        delimiter="\t",
+        names=[
+            "sv1_chr",
+            "sv1_l",
+            "sv1_r",
+            "sv1_id",
+            "sv1_id_dup",
+            "sv2_chr",
+            "sv2_l",
+            "sv2_r",
+            "sv2_id",
+            "sv2_svid",
+        ],
+    )
+
+    # check for 25% reciprocal overlap between svs
+    df["r"] = df.apply(
+        lambda row: reciprocal_overlap(
+            (row.sv1_l, row["sv1_r"]), (row["sv2_l"], row["sv2_r"])
+        ),
+        axis=1,
+    )
+
+    overlaps = df[(df["r"] >= 0.25) & (df["sv1_id"] != df["sv2_id"])]
+    print(overlaps[["sv1_id", "sv2_id", "r"]])
+
+    df.to_csv("1kgp/sv_lookup_intersect.csv", index=False)
 
 
 def write_post_processed_files(stem: str = "1kgp"):
