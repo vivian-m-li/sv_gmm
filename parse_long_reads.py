@@ -100,7 +100,7 @@ def get_bam_file(
     indexed_output_file = f"{output_file}.bai"
 
     # check that both the file and indexed file exist
-    if not os.path.exists(output_file) and not os.path.exists(
+    if not os.path.exists(output_file) or not os.path.exists(
         indexed_output_file
     ):
         subprocess.run(
@@ -266,9 +266,10 @@ def read_cigars_from_file(
                     "start": deletion[0],
                     "stop": deletion[1],
                     "length": del_len,
+                    "r": r,
                 }
             )
-
+        
         # there should only be one read per bam file that corresponds with the stix output
         if stix_read is not None:
             break

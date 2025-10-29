@@ -20,6 +20,25 @@ SCRATCH_DIR = "/scratch/Users/vili4418"
 STIX_DATA_DIR = "/Users/vili4418/sv/sv_gmm/data_dump/lr_stix_output/"
 
 
+def get_completed_samples():
+    file = "long_reads/completed_samples.txt"
+    samples = []
+    with open(file, "r") as f:
+        for line in f.readlines():
+            sample_id = line.strip()
+            if sample_id == "":
+                continue
+            samples.append(sample_id)
+    return samples
+
+
+def write_completed_sample(sample_id: str):
+    """Writes the completed sample id to the completed samples file."""
+    file = "long_reads/completed_samples.txt"
+    with open(file, "a") as f:
+        f.write(f"{sample_id}\n")
+
+
 def find_failing_sv():
     """Finds the svs that are failing to be processed by attempting to load them with load_squiggle_data."""
     error_file = "long_reads/svs_to_redo.txt"
@@ -200,10 +219,12 @@ def process_sample_evidence_inner(
     stix_output = txt_to_df(stix_output_file, True)
     reads = stix_output[stix_output["sample_id"] == sample_id]
 
-    row = [sample_id]
+    deletions = [sample_id]
+    seen_reads = set()
     for _, row in reads.iterrows():
-        read_coords = (row["l_start"], row["l_end"])
-        read_start, read_stop = read_coords
+        read_start, read_stop = row["l_start"], row["l_end"]
+        if read_start in seen_reads: # read start is used to identify unique reads
+            continue
         bam_region = f"chr{sv_chr}:{read_start}-{read_stop}"
         output_file = get_bam_file(
             sv_id,
@@ -216,21 +237,22 @@ def process_sample_evidence_inner(
         try:
             # this should only output one or 0 deletions that matches the stix read coords
             evidence = read_cigars_from_file(
-                output_file, (sv_start, sv_stop), read_coords
+                output_file, (sv_start, sv_stop), (read_start, read_stop)
             )
-        except Exception:
-            print(f"Redo sample {sv_id}-{sample_id}, read coords {read_coords}")
+        except Exception as e:
+            print(f"Redo sample {sv_id}-{sample_id}, read coords {(read_start, read_stop)}. Error={e}")
             remove_bam_file(output_file, scratch=True)
             continue
 
         if len(evidence) > 0:
-            row.extend([evidence[0]["start"], evidence[0]["stop"]])
+            deletions.extend([evidence[0]["start"], evidence[0]["stop"]])
 
+        seen_reads.add(read_start)
         remove_bam_file(output_file, scratch=True)
 
     file_name = os.path.join(SCRATCH_DIR, f"long_reads/evidence/{sv_id}.csv")
-    if len(row) > 1:  # found evidence for at least one read
-        write_to_evidence_file(file_name, row)
+    if len(deletions) > 1:  # found evidence for at least one read
+        write_to_evidence_file(file_name, deletions)
 
 
 def process_sample_evidence(
@@ -268,13 +290,13 @@ def download_sample_evidence(
     start = time.time()
 
     sample_id = sample_row["sample_id"]
-    print(f"Processing sample {sample_id}")
+    print(f"Processing sample {sample_id}", flush=True)
 
     # download the cram file and the indexed cram file
     output_file = os.path.join(
         SCRATCH_DIR, sample_row["cram_file"].split("/")[-1]
     )
-    if not os.path.exists(sample_row["cram_file"]):
+    if not os.path.exists(output_file):
         download_start = time.time()
         subprocess.run(
             ["wget", "-O", output_file, sample_row["cram_file"]],
@@ -286,13 +308,15 @@ def download_sample_evidence(
             f"Downloaded cram file for {sample_id} in ",
             int((download_end - download_start) / 60),
             "minutes",
+            flush=True,
         )
-    if not os.path.exists(sample_row["indexed_cram_file"]):
+    indexed_file = f"{output_file}.crai"
+    if not os.path.exists(indexed_file):
         subprocess.run(
             [
                 "wget",
                 "-O",
-                f"{output_file}.crai",
+                indexed_file,
                 sample_row["indexed_cram_file"],
             ],
             capture_output=True,
@@ -314,13 +338,15 @@ def download_sample_evidence(
         "minutes",
     )
     sys.stdout.flush()
+    write_completed_sample(sample_id)
 
 
 def download_sample_evidence_http(
     sample_row: pd.Series,
     sv_ids: List[str],
 ):
-    # compare if this function is faster than downloading via wget
+    """Uses samtools to intersect the bam file from the https link. Takes much longer than downloading the cram file for each sample since fewer processes can run in parallel."""
+    start = time.time()
 
     # parallelize the download and processing of each sv for the sample, but only 4 at a time
     with mp.Manager():
@@ -333,6 +359,16 @@ def download_sample_evidence_http(
         pool.starmap(process_sample_evidence_inner, args)
         pool.close()
         pool.join()
+
+    end = time.time()
+    print(
+        "Finished processing sample",
+        sample_row["sample_id"],
+        "in ",
+        int((end - start) / 60),
+        "minutes",
+    )
+    sys.stdout.flush()
 
 
 @break_after(hours=335, minutes=30)  # takes about 14 days to run all SVs
@@ -367,7 +403,7 @@ def download_sv_subset():
     move_evidence_files(sv_ids, to_scratch=False)
 
 
-@break_after(hours=3, minutes=30)
+@break_after(hours=46, minutes=0)
 def download_long_read_evidence(
     long_read_samples,
     sample_sv_lookup,
@@ -397,7 +433,6 @@ def download_long_read_evidence(
             continue
 
         download_sample_evidence(row, svs_to_process)
-        # download_sample_evidence_http(row, svs_to_process)
 
 
 def download_long_read_evidence_wrapper(
@@ -411,10 +446,10 @@ def download_long_read_evidence_wrapper(
     # it would take too long to process all svs for all samples
     sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
     long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
+    completed_samples = get_completed_samples()
 
-    # TEMP: test with only one sample
     long_read_samples = long_read_samples[
-        long_read_samples["sample_id"] == "NA19657"
+        ~long_read_samples["sample_id"].isin(completed_samples)
     ]
 
     # sv ids to process
@@ -438,6 +473,9 @@ def download_long_read_evidence_wrapper(
 
 
 if __name__ == "__main__":
+    # for testing purposes
+    # process_sample_evidence_inner("HGSV_204941", "NA19657", "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1KG_ONT_VIENNA/hg38/NA19657.hg38.cram")
+
     start = time.time()
 
     download_long_read_evidence_wrapper(move_files=True, redo_samples=False)
