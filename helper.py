@@ -867,7 +867,7 @@ def write_post_processed_files(stem: str = "1kgp"):
 
 def get_sv_chr(sv_id: str):
     """Get the chromosome, start, and stop for a given sv_id."""
-    df = get_deletions_df()
+    df = get_sv_lookup()
     row = df[df["id"] == sv_id]
     chr, start, stop = (
         row["chr"].values[0],
@@ -887,11 +887,13 @@ def get_bam_files(sv_id: str):
     df = df.merge(long_read_samples, on="sample_id")
 
     # get bam files
-    os.mkdir(f"long_reads/bam_files/{sv_id}")
+    file_dir = f"long_reads/bam_files/{sv_id}"
+    if not os.path.exists(file_dir):
+        os.mkdir(file_dir)
     chr, start, stop = get_sv_chr(sv_id)
-    region = f"{chr}:{start}-{stop}"
+    region = f"chr{chr}:{start}-{stop}"
     for _, row in df.iterrows():
-        output_file = f"long_reads/bam_files/{sv_id}/{row['sample_id']}.bam"
+        output_file = f"{file_dir}/{row['sample_id']}.bam"
         subprocess.run(
             ["bash", "get_cigar.sh"] + [row["cram_file"], region, output_file],
             capture_output=True,
@@ -907,4 +909,5 @@ def get_bam_files(sv_id: str):
 
 if __name__ == "__main__":
     # write_post_processed_files("long_reads")
-    remove_gatk_rows()
+    # remove_gatk_rows()
+    get_bam_files("HGSV_168463")	
