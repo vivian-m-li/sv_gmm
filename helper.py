@@ -875,6 +875,34 @@ def get_sv_chr(sv_id: str):
         row["stop"].values[0],
     )
     print(chr, start, stop)
+    return chr, start, stop
+
+
+def get_bam_files(sv_id: str):
+    """Get BAM files for all samples that have the given SV."""
+    # get samples with the given sv_id
+    df = pd.read_csv("long_reads/sample_sv_lookup.csv")
+    df = df[df["sv_id"] == sv_id]
+    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
+    df = df.merge(long_read_samples, on="sample_id")
+
+    # get bam files
+    os.mkdir(f"long_reads/bam_files/{sv_id}")
+    chr, start, stop = get_sv_chr(sv_id)
+    region = f"{chr}:{start}-{stop}"
+    for _, row in df.iterrows():
+        output_file = f"long_reads/bam_files/{sv_id}/{row['sample_id']}.bam"
+        subprocess.run(
+            ["bash", "get_cigar.sh"] + [row["cram_file"], region, output_file],
+            capture_output=True,
+            text=True,
+        )
+
+    # remove all indexed cram files
+    files = os.listdir()
+    for file in files:
+        if file.endswith(".cram.crai"):
+            os.remove(file)
 
 
 if __name__ == "__main__":
