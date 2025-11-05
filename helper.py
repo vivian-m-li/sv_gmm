@@ -51,6 +51,19 @@ def get_sv_lookup(stem: str = "1kgp"):
     return pd.read_csv(f"{stem}/sv_lookup.csv")
 
 
+def get_sv_chr(sv_id: str):
+    """Get the chromosome, start, and stop for a given sv_id."""
+    df = get_sv_lookup()
+    row = df[df["id"] == sv_id]
+    chr, start, stop = (
+        row["chr"].values[0],
+        row["start"].values[0],
+        row["stop"].values[0],
+    )
+    print(sv_id, chr, start, stop)
+    return chr, start, stop
+
+
 def get_svlen(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
     """Calculates the mean length/start/stop for each mode of an SV."""
     all_stats = []
@@ -901,19 +914,6 @@ def write_post_processed_files(stem: str = "1kgp"):
     write_ancestry_dissimilarity(stem)
     print("wrote ancestry_dissimilarity.csv")
     # get_new_gene_intersections() # need bedtools to run this
-
-
-def get_sv_chr(sv_id: str):
-    """Get the chromosome, start, and stop for a given sv_id."""
-    df = get_sv_lookup()
-    row = df[df["id"] == sv_id]
-    chr, start, stop = (
-        row["chr"].values[0],
-        row["start"].values[0],
-        row["stop"].values[0],
-    )
-    print(chr, start, stop)
-    return chr, start, stop
 
 
 if __name__ == "__main__":
