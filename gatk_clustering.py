@@ -6,7 +6,7 @@ import pysam
 import argparse
 import pandas as pd
 from synthetic_tests import generate_data_r
-from generate_data import generate_synthetic_sv_data
+from generate_data import generate_synthetic_sv_data, generate_synthetic_sv_vcf
 from timeout import break_after
 from typing import Optional
 
@@ -126,12 +126,43 @@ def write_csv(
     df.to_csv(file, index=False)
 
 
-def gatk_cluster_inner(case, r, svs, weights, n_samples, gatk_alg, results):
-    """Generates synthetic data and runs the GMM on it. Appends the results to the multiprocessing-managed list to be written to a CSV later. File I/O is done on scratch."""
+def gatk_cluster_reads(case, r, svs, weights, n_samples, gatk_alg, results):
+    """Generates synthetic short-read data and runs gatk's SVCluster method on it. Appends the results to the multiprocessing-managed list to be written to a CSV later. File I/O is done on scratch."""
     # generates synthetic data and writes to a vcf file
     run_id = uuid.uuid4()
     r_str = ",".join([str(x) for x in r]) if type(r) is tuple else str(r)
     filename = f"/scratch/Users/vili4418/synthetic_data/data/{case}_r{r_str}_svlen{str(svs[0][1] - svs[0][0])}_n{n_samples}_{run_id}.vcf"
+    generate_synthetic_sv_vcf(
+        1,
+        svs,
+        vcf_filename=filename,
+    )
+
+    # run GATK's SVCluster on the generated vcf
+    output_file = (
+        f"/scratch/Users/vili4418/synthetic_data/clustered/{run_id}.vcf"
+    )
+    result = subprocess.run(  # noqa: F841
+        ["bash", "gatk_svcluster.sh"]
+        + [  # noqa: W503
+            filename,
+            output_file,
+            PLOIDY_TABLE,
+            REFERENCE_FILE,
+            gatk_alg,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    results.append([case, r, svs, n_samples, weights, gatk_alg, output_file])
+
+
+def gatk_cluster_inner(case, r, svs, weights, n_samples, gatk_alg, results):
+    """Generates synthetic SVs and runs gatk's SVCluster method on it. Appends the results to the multiprocessing-managed list to be written to a CSV later. File I/O is done on scratch."""
+    # generates synthetic data and writes to a vcf file
+    run_id = uuid.uuid4()
+    r_str = ",".join([str(x) for x in r]) if type(r) is tuple else str(r)
+    filename = f"/scratch/Users/vili4418/synthetic_data/data/{case}_r{r_str}_svlen{str(svs[0][1] - svs[0][0])}.vcf"
     generate_synthetic_sv_data(
         1,
         svs,
@@ -165,7 +196,7 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, gatk_alg, results):
     results.append([case, r, svs, n_samples, weights, gatk_alg, output_file])
 
 
-@break_after(hours=71, minutes=55)
+@break_after(hours=11, minutes=55)
 def gatk_cluster(
     n_samples: int,
     svlen: int,
@@ -189,10 +220,10 @@ def gatk_cluster(
         for case, r, svs in data:
             weights = [[1.0 / len(svs) for _ in range(len(svs))]]
             for weight in weights:
-                for _ in range(10):
-                    args.append(
-                        (case, r, svs, weight, n_samples, gatk_alg, results)
-                    )
+                # for _ in range(10):
+                args.append(
+                    (case, r, svs, weight, n_samples, gatk_alg, results)
+                )
 
         # add a chunk size; each worker will be given 10 tasks to run
         p.starmap(gatk_cluster_inner, args, chunksize=10)
@@ -201,7 +232,7 @@ def gatk_cluster(
 
         write_csv(
             results,
-            fixed_n_samples=n_samples,
+            fixed_n_samples=None,
             fixed_svlen=svlen,
         )
 

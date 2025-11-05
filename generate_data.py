@@ -36,11 +36,11 @@ def data_to_vcf(
     chrom = "1"
     # cluster rows by sample_id
     # take the average L and (R - mean_insert_size) for each read pair as the deletion coordinates
-    reads_df = reads_df.groupby("sample_id").agg(
-        {"L": "mean",
-         "R": "mean",
-         "mean_insert_size": "first"}
-    ).reset_index()
+    reads_df = (
+        reads_df.groupby("sample_id")
+        .agg({"L": "mean", "R": "mean", "mean_insert_size": "first"})
+        .reset_index()
+    )
 
     for i, row in reads_df.iterrows():
         variant_id = f"{row['sample_id']}_{i + 1}"
@@ -241,6 +241,51 @@ def get_random_insert_size(df):
     return df.sample().insert_size.values[0]
 
 
+def generate_synthetic_sv_vcf(
+    chr: int,  # chromosome number (does not support X/Y), as a str
+    svs: List[Tuple[int, int]],
+    *,
+    vcf_filename: str,  # writes the data to the file
+):  # List of (start, stop) for each SV):
+    """Writes 'called' SVs into VCF format."""
+
+    vcf_records = []
+    chrom = str(chr)
+    for i, (start, stop) in enumerate(svs):
+        variant_id = f"SV_{i + 1}"
+        sv_type = "DEL"
+        ref = "N"
+        alt = "<DEL>"
+        info = f"END={stop};" f"SVTYPE={sv_type};" f"ALGORITHMS=PESR"
+        vcf_records.append(
+            [chrom, start, variant_id, ref, alt, ".", "PASS", info]
+        )
+
+    vcf_df = pd.DataFrame(
+        vcf_records,
+        columns=["CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"],
+    )
+    vcf_df = vcf_df.sort_values(by=["CHROM", "POS"]).reset_index(drop=True)
+
+    # write VCF
+    with open(vcf_filename, "w") as f:
+        f.write("##fileformat=VCFv4.2\n")
+        f.write('##ALT=<ID=DEL,Description="Deletion">\n')
+        f.write(
+            '##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant">\n'
+        )
+        f.write(
+            '##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">\n'
+        )
+        f.write(
+            '##INFO=<ID=ALGORITHMS,Number=.,Type=String,Description="Algorithms that discovered this variant">\n'
+        )
+        f.write("#" + "\t".join(vcf_df.columns) + "\n")
+        vcf_df.to_csv(f, sep="\t", index=False, header=False)
+
+    return vcf_df
+
+
 def generate_synthetic_sv_data(
     chr: int,  # chromosome number (does not support X/Y), as a str
     svs: List[Tuple[int, int]],  # List of (start, stop) for each SV
@@ -253,7 +298,7 @@ def generate_synthetic_sv_data(
     plot_reads: bool = False,
     vcf_filename: str = False,  # writes the data to the file
 ):
-    """Generates synthetic SV data for testing purposes and runs the data through the SV analysis pipeline."""
+    """Generates synthetic short-read data for testing purposes and runs the data through the SV analysis pipeline."""
     num_svs = len(svs)
 
     # Decide how many samples we want in our population
