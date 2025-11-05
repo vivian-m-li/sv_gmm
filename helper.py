@@ -898,6 +898,18 @@ def get_all_bam_files():
         get_bam_files(sv_id)
 
 
+def write_samplot_files():
+    """Write samplot images for all SVs with 2+ modes."""
+    sv_ids = os.listdir("long_reads/bam_files")
+    for sv_id in sv_ids:
+        chr, start, stop = get_sv_chr(sv_id)
+        subprocess.run(
+            ["bash", "samplot_viz.sh"] + [sv_id, chr, str(start), str(stop)],
+            capture_output=True,
+            text=True,
+        )
+
+
 def write_post_processed_files(stem: str = "1kgp"):
     """Write all post-processed files after running the dirichlet process with short or long reads."""
     get_n_modes(stem)
@@ -919,4 +931,4 @@ def write_post_processed_files(stem: str = "1kgp"):
 if __name__ == "__main__":
     # write_post_processed_files("long_reads")
     # remove_gatk_rows()
-    get_all_bam_files()
+    write_samplot_files()
