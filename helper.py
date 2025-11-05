@@ -60,7 +60,7 @@ def get_sv_chr(sv_id: str):
         row["start"].values[0],
         row["stop"].values[0],
     )
-    print(sv_id, chr, start, stop)
+    print(sv_id, chr, start, stop, flush=True)
     return chr, start, stop
 
 
