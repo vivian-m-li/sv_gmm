@@ -124,4 +124,4 @@ def run_svs(*, ref_genome: str = "grch38"):
 
 
 if __name__ == "__main__":
-    run_svs(ref_genome="grch37")
+    run_svs()
