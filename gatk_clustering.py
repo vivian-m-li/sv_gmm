@@ -286,5 +286,8 @@ def main():
 
 
 if __name__ == "__main__":
-    svs = [(100000, 102553), (100000 + 500, 102553 - 500)]
-    gatk_cluster_inner("B", 0.61, svs, [0.5, 0.5], 100, "SINGLE_LINKAGE", [])
+    # for testing
+    # svs = [(100000, 102553), (100000 + 500, 102553 - 500)]
+    # gatk_cluster_inner("B", 0.61, svs, [0.5, 0.5], 100, "SINGLE_LINKAGE", [])
+    
+    main()
