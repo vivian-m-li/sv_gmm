@@ -1485,9 +1485,13 @@ def plot_reciprocal_overlap(
     df = pd.read_csv(file)
     df = df[(df["case"] == case) & (df["svlen"] == svlen)]
 
-    colors = ["#bfdbf7", "#1f7a8c", "#022b3a"]
-    markers = ["o", "s", "D"]
-    for i, model in enumerate(GMM_MODELS):
+    # for comparing models in GMM_MODELS
+    # colors = ["#bfdbf7", "#1f7a8c", "#022b3a"]
+    # markers = ["o", "s", "D"]
+
+    colors = ["#022b3a", "#1f7a8c", "#bfdbf7"]
+    markers = ["s", "o", "D"]
+    for i, model in enumerate(["2d", "gatk_MAX_CLIQUE", "gatk_SINGLE_LINKAGE"]):
         model_df = df[df["gmm_model"] == model]
         right = Counter()
         total = Counter()
@@ -1535,6 +1539,58 @@ def plot_reciprocal_overlap_all(sample_size=66, svlen=802):
     )
     plt.tight_layout()
     plt.savefig("plots/reciprocal_overlap_accuracy.pdf", bbox_inches="tight")
+    plt.show()
+
+
+def plot_reciprocal_overlap_svlen(
+    case: str, sample_size: int, *, y_axis: str = "accuracy"
+):
+    file = f"synthetic_data/resultsn={sample_size}.csv"
+    df = pd.read_csv(file)
+    df = df[(df["case"] == case)]
+
+    models = ["2d", "gatk_MAX_CLIQUE", "gatk_SINGLE_LINKAGE"]
+    colors = ["#ffed00", "#ffce0b", "#f8ac30", "#f0853c", "#eb5c3f"]
+    fig, axs = plt.subplots(1, len(models), figsize=(5 * len(models), 5))
+
+    for model in models:
+        subset = df[df["gmm_model"] == model]
+        ax = axs[models.index(model)]
+        for i, svlen in enumerate(sorted(subset["svlen"].unique())):
+            svlen_df = subset[subset["svlen"] == svlen]
+            right = defaultdict(lambda: 0)
+            total = defaultdict(lambda: 0)
+            n_modes_counts = defaultdict(list)
+            for _, row in svlen_df.iterrows():
+                overlap = row["r"]
+                total[overlap] += 1
+                n_modes_counts[overlap].append(row["num_modes"])
+                if row["expected_num_modes"] == row["num_modes"]:
+                    right[overlap] += 1
+
+            overlaps = sorted(total.keys())
+            acc = [right[overlap] / total[overlap] for overlap in overlaps]
+            n_modes = [np.mean(n_modes_counts[overlap]) for overlap in overlaps]
+
+            y_vals = acc if y_axis == "accuracy" else n_modes
+            ax.plot(
+                overlaps,
+                y_vals,
+                marker="o",
+                color=colors[i],
+                label=f"svlen={svlen}",
+                linewidth=2,
+            )
+            ax.set_xlabel("Reciprocal Overlap (r)", fontsize=14)
+            ylabel = "Accuracy" if y_axis == "accuracy" else "Predicted # SVs"
+            ax.set_ylabel(ylabel, fontsize=14)
+            ax.set_title(model, fontsize=16)
+
+            if y_axis == "accuracy":
+                ax.set_ylim(-0.05, 1.1)
+
+    plt.legend(fontsize=12, title="SV Length", title_fontsize=14)
+    plt.tight_layout()
     plt.show()
 
 
@@ -2291,5 +2347,9 @@ if __name__ == "__main__":
     # plot_synthetic_data_figure()
     # plot_af_delta_histogram()
     # compare_sv_ancestry_by_mode(by="population")
-    # plot_reciprocal_overlap_all(sample_size=66, svlen=167)
-    synthetic_data_n_length_heatmap()
+    # plot_reciprocal_overlap_all(sample_size=313, svlen=167)
+    plot_reciprocal_overlap_svlen(case="B", sample_size=66, y_axis="n_modes")
+    # synthetic_data_n_length_heatmap()
+    # methods_figure_viz(
+    #     "synthetic_data/data/B_r0.5_svlen802_n66_fcd8b157-8b23-4c8d-9574-2e8994ceb2d7.vcf"
+    # )

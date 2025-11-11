@@ -41,7 +41,7 @@ def run_dirichlet_inner(
                 "R": row["stop"],
                 "plot": False,
                 "plot_bokeh": False,
-  		        "stem": stem,
+                "stem": stem,
             },
         )
 
