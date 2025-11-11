@@ -82,6 +82,11 @@ def write_csv(
             "weights",
         ]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
+
+        # write header if file is new
+        if out.tell() == 0:
+            csv_writer.writeheader()
+
         for (
             case,
             rs,
@@ -132,9 +137,12 @@ def gatk_cluster_reads(case, r, svs, weights, n_samples, gatk_alg, results):
     run_id = uuid.uuid4()
     r_str = ",".join([str(x) for x in r]) if type(r) is tuple else str(r)
     filename = f"/scratch/Users/vili4418/synthetic_data/data/{case}_r{r_str}_svlen{str(svs[0][1] - svs[0][0])}_n{n_samples}_{run_id}.vcf"
-    generate_synthetic_sv_vcf(
+    generate_synthetic_sv_data(
         1,
         svs,
+        n_samples=n_samples,
+        p=weights,
+        run_gmm=False,
         vcf_filename=filename,
     )
 
@@ -163,12 +171,9 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, gatk_alg, results):
     run_id = uuid.uuid4()
     r_str = ",".join([str(x) for x in r]) if type(r) is tuple else str(r)
     filename = f"/scratch/Users/vili4418/synthetic_data/data/{case}_r{r_str}_svlen{str(svs[0][1] - svs[0][0])}.vcf"
-    generate_synthetic_sv_data(
+    generate_synthetic_sv_vcf(
         1,
         svs,
-        n_samples=n_samples,
-        p=weights,
-        run_gmm=False,
         vcf_filename=filename,
     )
 
@@ -281,4 +286,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    svs = [(100000, 102553), (100000 + 500, 102553 - 500)]
+    gatk_cluster_inner("B", 0.61, svs, [0.5, 0.5], 100, "SINGLE_LINKAGE", [])
