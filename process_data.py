@@ -569,7 +569,11 @@ def run_viz_gmm(
 
     if not synthetic_data:
         populate_sample_info(
-            sv_evidence, chr, L, R, stem=stem,
+            sv_evidence,
+            chr,
+            L,
+            R,
+            stem=stem,
         )  # mutates sv_evidence with ancestry data and homo/heterozygous for each sample
     evidence_by_mode = get_evidence_by_mode(
         gmm, sv_evidence, L, R, gmm_model=gmm_model
