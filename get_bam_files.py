@@ -2,7 +2,7 @@ import os
 import subprocess
 import multiprocessing
 import pandas as pd
-from helper import get_sv_chr
+from helper import get_sv_chr, get_sv_lookup
 
 
 def get_bam_files(sv_id: str):
@@ -50,5 +50,45 @@ def get_all_bam_files():
             os.remove(file)
 
 
+def samplot_viz():
+    """Use samplot to visualize each bam file for all SVs with 2+ modes. Make sure to activate the conda env for samplot to work."""
+    filename = "long_reads/sv_bam_files.txt"
+    fiji_root = "vili4418@fiji.colorado.edu:/scratch/Users/vili4418/long_reads/bam_files/"
+    lookup = get_sv_lookup()
+    with open(filename, "r") as f:
+        lines = f.readlines()
+        for i, line in enumerate(lines):
+            sv_id = line.strip("\n")
+            print(f"Processing {sv_id}... ({i + 1}/{len(lines)})", end="\r")
+            dir = os.path.join(fiji_root, sv_id)
+
+            # download bam files from fiji
+            subprocess.run(
+                f"rsync -avz --progress {dir} long_reads/bam_files/",
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if not os.path.exists(f"long_reads/bam_files/{sv_id}"):
+                print(f"skipping... {sv_id} not found")
+                continue
+
+            # use samplot to visualize each bam file
+            row = lookup[lookup["id"] == sv_id].iloc[0]
+            subprocess.run(
+                ["bash", "samplot_viz.sh"]
+                + [sv_id, row["chr"], str(row["start"]), str(row["stop"])],
+                capture_output=True,
+                text=True,
+            )
+
+            # remove the downloaded bam files to save space
+            subprocess.run(
+                f"rm -r long_reads/bam_files/{sv_id}",
+                shell=True,
+            )
+
+
 if __name__ == "__main__":
-    get_all_bam_files()
+    # get_all_bam_files()
+    samplot_viz()
