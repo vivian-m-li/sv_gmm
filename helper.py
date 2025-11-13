@@ -808,7 +808,7 @@ def bed_to_df(bed_file: str, remove_dupes: bool = False) -> pd.DataFrame:
 
 def get_overlapping_clustered_svs():
     """Checks for overlaps between clustered SVs and the original SV breakpoints."""
-
+    overlap_threshold = 0.7
     if not os.path.exists("1kgp/sv_lookup_intersect.csv"):
         lookup = get_sv_lookup()
         lookup["sv_id"] = lookup["id"].astype(str)
@@ -833,7 +833,9 @@ def get_overlapping_clustered_svs():
     else:
         df = pd.read_csv("1kgp/sv_lookup_intersect.csv")
 
-    overlaps = df[(df["r"] >= 0.25) & (df["sv1_id"] != df["sv2_id"])]
+    overlaps = df[
+        (df["r"] >= overlap_threshold) & (df["sv1_id"] != df["sv2_id"])
+    ]
 
     # this gets all overlapping SVs - however, we want to check whether the original SVs were overlapping as well (pre-clustering)
     # print(
@@ -841,7 +843,7 @@ def get_overlapping_clustered_svs():
     # )
 
     og_overlaps = pd.read_csv("1kgp/og_svs_intersect.csv")
-    og_overlaps = og_overlaps[og_overlaps["r"] >= 0.25]
+    og_overlaps = og_overlaps[og_overlaps["r"] >= overlap_threshold]
     # only need sv ids to check for overlaps
     og_overlaps = og_overlaps[["sv1_id", "sv2_id"]]
 
@@ -857,7 +859,8 @@ def get_overlapping_clustered_svs():
     new_overlaps = new_overlaps[new_overlaps["_merge"] == "left_only"]
 
     # TODO: sv2 coordinates do not take into account the read length (i.e. SV is 450 bp longer than reference)
-    print(new_overlaps)
+    # there are 22 overlapping SVs (>= 0.7 reciprocal overlap)
+    print(new_overlaps.shape[0], new_overlaps)
 
 
 def write_samplot_files():
@@ -893,4 +896,5 @@ def write_post_processed_files(stem: str = "1kgp"):
 if __name__ == "__main__":
     # write_post_processed_files("long_reads")
     # remove_gatk_rows()
+    # get_overlapping_clustered_svs()
     write_samplot_files()

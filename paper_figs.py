@@ -1,8 +1,11 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from matplotlib.lines import Line2D
 from collections import Counter, defaultdict
 from helper import get_sv_stats_collapsed_df, get_sv_lookup
+from gmm_types import COLORS
 
 
 def load_synthetic_data_results(sample_size: int) -> pd.DataFrame:
@@ -63,6 +66,170 @@ def plot_reciprocal_overlap_svlen(
 
     plt.legend(fontsize=12, title="SV Length", title_fontsize=14)
     plt.tight_layout()
+    plt.show()
+
+
+def synthetic_data_fig():
+    """Synthetic data results comparison: my method vs. GATK clustering methods"""
+    cases = ["B", "C", "D"]
+    sample_size = 313
+    svlen = 802
+    df = load_synthetic_data_results(sample_size)
+    df = df[df["svlen"] == svlen]
+
+    models = ["2d", "gatk_MAX_CLIQUE", "gatk_SINGLE_LINKAGE"]
+    colors = ["#bfdbf7", "#1f7a8c", "#022b3a"]
+    markers = ["o", "s", "D"]
+
+    svs = [
+        [(100000, 100802), (100200, 100601)],
+        [(100000, 100802), (100401, 101203)],
+        [(100000, 100802), (100401, 101203), (100802, 101604)],
+    ]
+
+    fig, axs = plt.subplots(
+        2, len(cases), figsize=(15, 5), gridspec_kw={"height_ratios": [4, 1]}
+    )
+
+    for case in cases:
+        ax = axs[0, cases.index(case)]
+        subset = df[df["case"] == case]
+
+        for i, model in enumerate(models):
+            model_df = subset[subset["gmm_model"] == model]
+            right, total, false_positives = (
+                defaultdict(int),
+                defaultdict(int),
+                defaultdict(int),
+            )
+
+            for _, row in model_df.iterrows():
+                overlap = row["r"]
+                total[overlap] += 1
+                if row["expected_num_modes"] == row["num_modes"]:
+                    right[overlap] += 1
+                if row["num_modes"] > row["expected_num_modes"]:
+                    false_positives[overlap] += (
+                        row["num_modes"] - row["expected_num_modes"]
+                    )
+
+            overlaps = np.array(sorted(total.keys()))
+            acc = np.array([right[o] / total[o] for o in overlaps])
+            fps = np.array([false_positives[o] for o in overlaps])
+
+            # --- vertical offset per model (constant across the line) ---
+            base_offsets = np.linspace(-0.01, 0.01, len(models))
+            offset = base_offsets[i]
+
+            acc_shifted = np.clip(acc + offset, 0, 1.05)
+            fps_shifted = np.clip(fps + offset, -0.01, 1.05)
+
+            ax.plot(
+                overlaps,
+                acc_shifted,
+                marker=markers[i],
+                color=colors[i],
+                linewidth=2.3,
+                alpha=0.7,
+                label=f"{model} TP",
+            )
+            ax.plot(
+                overlaps + 0.01,
+                fps_shifted,
+                marker=markers[i],
+                markerfacecolor="none",
+                color=colors[i],
+                linestyle="--",
+                linewidth=1.5,
+                alpha=0.8,
+                label=f"{model} FP",
+            )
+
+        ax.set_xlabel("Reciprocal Overlap (r)", fontsize=13)
+        if case == "B":
+            ax.set_ylabel("True Positive/False Positive", fontsize=13)
+        ax.set_title(f"Case {case}", fontsize=15)
+        ax.set_ylim(-0.05, 1.05)
+
+        # draw the conceptual SVs (i.e. the patches representing the coordinate space)
+        case_svs = svs[cases.index(case)]
+        x_min = min([sv[0] for sv in case_svs]) - 100
+        x_max = max([sv[1] for sv in case_svs]) + 100
+        y_offset = 0
+        sub_ax = axs[1, cases.index(case)]
+        sub_ax.axis("off")
+        for i, (L, R) in enumerate(case_svs):
+            sub_ax.plot(
+                [x_min, L - 10],
+                [y_offset + 0.1, y_offset + 0.1],
+                color="black",
+                linewidth=2,
+            )
+            sub_ax.plot(
+                [R + 10, x_max],
+                [y_offset + 0.1, y_offset + 0.1],
+                color="black",
+                linewidth=2,
+            )
+            sub_ax.add_patch(
+                patches.Rectangle(
+                    (L, y_offset),
+                    R - L,
+                    0.2,
+                    color=COLORS[i],
+                )
+            )
+            y_offset += 0.25
+
+    model_handles = [
+        Line2D(
+            [0],
+            [0],
+            color=colors[i],
+            marker=markers[i],
+            lw=2.3,
+            label=models[i],
+        )
+        for i in range(len(models))
+    ]
+    style_handles = [
+        Line2D([0], [0], color="black", lw=2.3, label="True Positive (solid)"),
+        Line2D(
+            [0],
+            [0],
+            color="black",
+            lw=1.5,
+            ls="--",
+            label="False Positive (dashed)",
+        ),
+    ]
+
+    legend_handles = (
+        model_handles
+        + [Line2D([], [], color="gray", lw=0.8, label=" " * 50)]
+        + style_handles
+    )
+    legend_labels = (
+        [h.get_label() for h in model_handles]
+        + [""]
+        + [h.get_label() for h in style_handles]
+    )
+
+    axs[0, -1].legend(
+        legend_handles,
+        legend_labels,
+        fontsize=10,
+        title="Model / Line Style",
+        title_fontsize=11,
+        loc="upper right",
+        handlelength=2.5,
+        borderpad=1,
+        labelspacing=0.8,
+        frameon=True,
+    )
+
+    plt.tight_layout()
+    plt.savefig("plots/synthetic_data.pdf")
     plt.show()
 
 
@@ -155,6 +322,7 @@ def plot_sv_breakdown():
     ax2.legend(title="Confidence")
 
     plt.tight_layout()
+    plt.savefig("plots/sv_breakdown.pdf")
     plt.show()
 
 
@@ -162,5 +330,6 @@ if __name__ == "__main__":
     # methods_figure_viz(
     #     "synthetic_data/data/B_r0.5_svlen802_n66_fcd8b157-8b23-4c8d-9574-2e8994ceb2d7.vcf"
     # )
-    # plot_reciprocal_overlap_svlen(case="B", sample_size=66, y_axis="num_modes")
+    # plot_reciprocal_overlap_svlen(case="B", sample_size=66, y_axis="accuracy")
+    synthetic_data_fig()
     plot_sv_breakdown()
