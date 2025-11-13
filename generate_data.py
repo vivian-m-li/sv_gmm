@@ -82,6 +82,7 @@ def data_to_vcf(
         f.write(
             '##INFO=<ID=ALGORITHMS,Number=.,Type=String,Description="Algorithms that discovered this variant">\n'
         )
+        f.write("##contig=<ID=1,length=200000>\n")
         f.write("#" + "\t".join(vcf_df.columns) + "\n")
         vcf_df.to_csv(f, sep="\t", index=False, header=False)
 

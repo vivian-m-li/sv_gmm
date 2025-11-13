@@ -464,6 +464,8 @@ def plot_2d_coords(
     add_error_bars: bool = False,
     color_by: str = "mode",
     size_by="num_evidence",
+    show_mode_stats: bool = True,
+    show_1d_distributions: bool = True,
 ):
     scatter_cm = cm.get_cmap("tab20").colors + cm.get_cmap("tab20b").colors
     seq_center_df = get_sample_sequencing_centers()
@@ -525,6 +527,8 @@ def plot_2d_coords(
                 scatter_sizes.append(num_evidence[-1] * 40)
             elif size_by == "insert_size":
                 scatter_sizes.append(mean_insert_size)
+            else:
+                scatter_sizes.append(20)
 
         x = np.array(x)
         num_evidence = np.array(num_evidence)
@@ -554,17 +558,18 @@ def plot_2d_coords(
                 )
 
         # manually adjust x/y for each figure
-        ax_main.text(
-            gmm.mu[0][0],
-            gmm.mu[0][1],
-            f"n={len(mode)}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}",
-            # f"n={len(mode)}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}\nAvg. num reads/sample: {np.mean(num_evidence):.1f}\nMean insert size: {int(np.mean(mean_insert_sizes))}",
-            fontsize=10,
-            ha="center",
-            va="center",
-            bbox=dict(facecolor="white", alpha=0.7, edgecolor="none"),
-            zorder=10,
-        )
+        if show_mode_stats:
+            ax_main.text(
+                gmm.mu[0][0],
+                gmm.mu[0][1],
+                f"n={len(mode)}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}",
+                # f"n={len(mode)}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}\nAvg. num reads/sample: {np.mean(num_evidence):.1f}\nMean insert size: {int(np.mean(mean_insert_sizes))}",
+                fontsize=10,
+                ha="center",
+                va="center",
+                bbox=dict(facecolor="white", alpha=0.7, edgecolor="none"),
+                zorder=10,
+            )
 
         # plot the 2D gaussian distributions for each cluster
         eigenvalues, eigenvectors = np.linalg.eigh(gmm.cov[0])
@@ -586,21 +591,22 @@ def plot_2d_coords(
         mean_x, std_x = np.mean(x[:, 0]), np.std(x[:, 0])
         x_vals = np.linspace(mean_x - 3 * std_x, mean_x + 3 * std_x, 100)
         zorder = 10 - i
-        ax_xhist.plot(
-            x_vals,
-            norm.pdf(x_vals, mean_x, std_x),
-            color=COLORS[i],
-            linewidth=2,
-            alpha=0.8,
-            zorder=zorder,
-        )
-        ax_xhist.fill_between(
-            x_vals,
-            norm.pdf(x_vals, mean_x, std_x),
-            color=COLORS[i],
-            alpha=0.8,
-            zorder=zorder,
-        )
+        if show_1d_distributions:
+            ax_xhist.plot(
+                x_vals,
+                norm.pdf(x_vals, mean_x, std_x),
+                color=COLORS[i],
+                linewidth=2,
+                alpha=0.8,
+                zorder=zorder,
+            )
+            ax_xhist.fill_between(
+                x_vals,
+                norm.pdf(x_vals, mean_x, std_x),
+                color=COLORS[i],
+                alpha=0.8,
+                zorder=zorder,
+            )
         ax_xhist.axis("off")
         # set the zorder of the axes so the gaussians are plotted in the correct order
         ax_xhist.set_zorder(zorder - 1)
@@ -609,22 +615,23 @@ def plot_2d_coords(
         ax_yhist.set_zorder(zorder - 1)
         mean_y, std_y = np.mean(x[:, 1]), np.std(x[:, 1])
         y_vals = np.linspace(mean_y - 3 * std_y, mean_y + 3 * std_y, 100)
-        ax_yhist.plot(
-            norm.pdf(y_vals, mean_y, std_y),
-            y_vals,
-            color=COLORS[i],
-            linewidth=2,
-            alpha=0.8,
-            zorder=zorder,
-        )
-        ax_yhist.fill_betweenx(
-            y_vals,
-            0,
-            norm.pdf(y_vals, mean_y, std_y),
-            color=COLORS[i],
-            alpha=0.8,
-            zorder=zorder,
-        )
+        if show_1d_distributions:
+            ax_yhist.plot(
+                norm.pdf(y_vals, mean_y, std_y),
+                y_vals,
+                color=COLORS[i],
+                linewidth=2,
+                alpha=0.8,
+                zorder=zorder,
+            )
+            ax_yhist.fill_betweenx(
+                y_vals,
+                0,
+                norm.pdf(y_vals, mean_y, std_y),
+                color=COLORS[i],
+                alpha=0.8,
+                zorder=zorder,
+            )
         ax_yhist.axis("off")
 
     if axis1 != "length":

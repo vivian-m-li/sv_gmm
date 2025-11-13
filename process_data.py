@@ -525,10 +525,10 @@ def get_insert_size_lookup(stem: str = "1kgp") -> Dict[str, int]:
 def run_viz_gmm(
     squiggle_data: Dict[str, np.ndarray[float]],
     *,
-    file_name: str,
     chr: str,
     L: int,  # sv start
     R: int,  # sv stop
+    file_name: str = "",
     plot: bool = True,
     plot_bokeh: bool = False,  # these functions are deprecated
     synthetic_data: bool = False,

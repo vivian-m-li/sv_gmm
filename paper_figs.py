@@ -1,11 +1,93 @@
+import random
+import pysam
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
+from matplotlib.patches import Ellipse, Rectangle
 from matplotlib.lines import Line2D
 from collections import Counter, defaultdict
+from process_data import run_viz_gmm
+from viz import plot_2d_coords
 from helper import get_sv_stats_collapsed_df, get_sv_lookup
 from gmm_types import COLORS
+
+
+def plot_sv_coordinate_space(ax, n_svs, xcoords, svcoords, y, height, **kwargs):
+    """
+    Draws a capsule-like SV box using an ellipse for the ends and a rectangle in the middle.
+    x, y = bottom-left of the rectangle
+    width, height = dimensions of the total capsule
+    """
+    facecolor = kwargs.get("facecolor", "lightgrey")
+    edgecolor = kwargs.get("edgecolor", "black")
+    lw = kwargs.get("lw", 1)
+
+    if kwargs.get("r") is not None:
+        ellipse_r = kwargs.get("r")
+    else:
+        ellipse_r = 0.075 * (xcoords[1] - xcoords[0]) / n_svs
+    rect_start = xcoords[0] + ellipse_r
+    rect_end = xcoords[1] - ellipse_r
+
+    # plot this line so the boxes have something to attach to
+    ax.plot(
+        [xcoords[0], xcoords[1]],
+        [y + 0.1, y + 0.1],
+        alpha=0,
+        linewidth=2,
+    )
+
+    left_ellipse = Ellipse(
+        (rect_start, y + height / 2),
+        width=ellipse_r * 2,
+        height=height,
+        facecolor=facecolor,
+        edgecolor=edgecolor,
+        lw=lw,
+    )
+    right_ellipse = Ellipse(
+        (rect_end, y + height / 2),
+        width=ellipse_r * 2,
+        height=height,
+        facecolor=facecolor,
+        edgecolor=edgecolor,
+        lw=lw,
+    )
+    rect = Rectangle(
+        (rect_start, y),
+        rect_end - rect_start,
+        height,
+        facecolor=facecolor,
+        edgecolor="none",
+    )
+    top_border = Line2D(
+        [rect_start, rect_end],
+        [y + height, y + height],
+        color=edgecolor,
+        linewidth=lw,
+    )
+    bottom_border = Line2D(
+        [rect_start, rect_end],
+        [y, y],
+        color=edgecolor,
+        linewidth=lw,
+    )
+    ax.add_patch(left_ellipse)
+    ax.add_patch(right_ellipse)
+    ax.add_patch(rect)
+    ax.add_line(top_border)
+    ax.add_line(bottom_border)
+
+    sv_rect = Rectangle(
+        (svcoords[0], y),
+        svcoords[1] - svcoords[0],
+        height,
+        facecolor="#274c77",
+        edgecolor="none",
+    )
+    ax.add_patch(sv_rect)
+
+    return [left_ellipse, right_ellipse, rect, top_border, bottom_border]
 
 
 def load_synthetic_data_results(sample_size: int) -> pd.DataFrame:
@@ -159,25 +241,15 @@ def synthetic_data_fig():
         sub_ax = axs[1, cases.index(case)]
         sub_ax.axis("off")
         for i, (L, R) in enumerate(case_svs):
-            sub_ax.plot(
-                [x_min, L - 10],
-                [y_offset + 0.1, y_offset + 0.1],
-                color="black",
-                linewidth=2,
-            )
-            sub_ax.plot(
-                [R + 10, x_max],
-                [y_offset + 0.1, y_offset + 0.1],
-                color="black",
-                linewidth=2,
-            )
-            sub_ax.add_patch(
-                patches.Rectangle(
-                    (L, y_offset),
-                    R - L,
-                    0.2,
-                    color=COLORS[i],
-                )
+            plot_sv_coordinate_space(
+                sub_ax,
+                len(case_svs),
+                (x_min, x_max),
+                (L, R),
+                y_offset,
+                0.2,
+                edgecolor="black",
+                facecolor="lightgrey",
             )
             y_offset += 0.25
 
@@ -233,8 +305,222 @@ def synthetic_data_fig():
     plt.show()
 
 
+def methods_raw_reads(svs, reads):
+    """Figure 2a - Visualizes the reads in coordinate space."""
+    sv_avg = (np.mean([sv[0] for sv in svs]), np.mean([sv[1] for sv in svs]))
+
+    fig, ax = plt.subplots(figsize=(4, 3))
+
+    # plot reads
+    y_offset = 0.2
+    all_reads = list(reads.values())
+    random.shuffle(all_reads)
+    reads_plotted = []
+    n_reads_shown = 30
+    for i, sample_reads in enumerate(all_reads):
+        read = random.sample(sample_reads, 1)[0]
+        if i >= n_reads_shown:
+            reads_plotted.append(read)
+            continue
+        reads_plotted.append(read)
+        color = COLORS[1] if i == n_reads_shown - 1 else "#274c77"
+        ax.scatter(
+            [read[0], read[1]],
+            [y_offset, y_offset],
+            color=color,
+            s=10,
+        )
+        ax.plot(
+            [read[0], read[1]],
+            [y_offset, y_offset],
+            color=color,
+            alpha=0.9,
+        )
+        y_offset += 0.05
+
+    reads_min = min([read[0] for read in reads_plotted])
+    reads_max = max([read[1] for read in reads_plotted])
+    plot_sv_coordinate_space(
+        ax,
+        1,
+        xcoords=(reads_min - 100, reads_max + 100),
+        svcoords=sv_avg,
+        y=y_offset + 0.05,
+        height=0.1,
+        r=30,
+        edgecolor="black",
+        facecolor="lightgrey",
+    )
+
+    # draw a line with arrows on either end on the bottom
+    ax.annotate(
+        "",
+        xy=(reads_min - 50, 0.1),
+        xytext=(reads_max + 50, 0.1),
+        arrowprops=dict(arrowstyle="<->", color="black"),
+    )
+
+    # draw vertical dotted lines from the first read to the drawn axis
+    last_read = reads_plotted[n_reads_shown - 1]
+    ax.plot(
+        [last_read[0], last_read[0]],
+        [y_offset - 0.05, 0.1],
+        linestyle="dotted",
+        color=COLORS[1],
+        linewidth=2,
+    )
+    ax.plot(
+        [last_read[1], last_read[1]],
+        [y_offset - 0.05, 0.1],
+        linestyle="dotted",
+        color=COLORS[1],
+        linewidth=2,
+    )
+
+    # label the L/R of the read as L_i and R_i
+    ax.text(
+        last_read[0],
+        0,
+        "Lᵢ",
+        ha="center",
+        va="center",
+        color=COLORS[1],
+        fontsize=16,
+    )
+    ax.text(
+        last_read[1],
+        0,
+        "Rᵢ",
+        ha="center",
+        va="center",
+        color=COLORS[1],
+        fontsize=16,
+    )
+
+    ax.axis("off")
+    plt.tight_layout()
+    plt.savefig("plots/methodsa.png")
+    plt.savefig("plots/methodsa.pdf")
+    plt.show()
+
+    return reads_plotted
+
+
+def methods_lr(reads_plotted):
+    """Figure 2b - Visualizes the reads in length vs. read L position space."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+
+    L, R = 0, 0
+    read_i = reads_plotted[-1]
+    for read in reads_plotted:
+        read_L = read[0]
+        read_R = read[1]
+        if read_L == read_i[0] and read_R == read_i[1]:
+            ax.scatter(read_L, read_R, color=COLORS[1], s=30)
+            L, R = read_L, read_R
+        else:
+            ax.scatter(read_L, read_R, color="#274c77", s=10)
+
+    # label the L/R of the read as L_i and R_i
+    ax.text(
+        L,
+        -50,
+        "Lᵢ",
+        ha="center",
+        va="center",
+        color=COLORS[1],
+        fontsize=10,
+    )
+    ax.text(
+        -200,
+        R,
+        "Rᵢ",
+        # "Rᵢ - Lᵢ",
+        ha="center",
+        va="center",
+        color=COLORS[1],
+        fontsize=10,
+    )
+
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlabel("Read L", fontsize=16)
+    ax.set_ylabel("Read R", fontsize=16)
+    plt.tight_layout()
+    plt.savefig("plots/methodsb.png")
+    plt.savefig("plots/methodsb.pdf")
+    plt.show()
+
+
+def methods_clustered(svs, reads, insert_size_lookup):
+    """Figure 2c - Visualizes the clustered reads in length vs. read L position space."""
+
+    squiggle_data = {}
+    for sample_id, sample_reads in reads.items():
+        squiggle_data[sample_id] = []
+        for read in sample_reads:
+            squiggle_data[sample_id].extend(read)
+
+    sv_avg = (np.mean([sv[0] for sv in svs]), np.mean([sv[1] for sv in svs]))
+    gmm, evidence = run_viz_gmm(
+        squiggle_data,
+        chr="1",
+        L=sv_avg[0],
+        R=sv_avg[1],
+        plot=False,
+        synthetic_data=True,
+        min_pairs=2,
+        insert_size_lookup=insert_size_lookup,
+    )
+
+    fig, ax = plt.subplots(figsize=(4, 3))
+    plot_2d_coords(
+        ax,
+        evidence,
+        L=sv_avg[0],
+        R=sv_avg[1],
+        axis1="L",
+        axis2="R",
+        size_by="",
+        show_mode_stats=False,
+        show_1d_distributions=False,
+    )
+
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlabel("Read L", fontsize=16)
+    ax.set_ylabel("Read R", fontsize=16)
+    plt.tight_layout()
+    plt.savefig("plots/methodsc.png")
+    plt.savefig("plots/methodsc.pdf")
+    plt.show()
+
+
+def methods_figure_viz(svs, vcf_file: str):
+    """
+    Figure 2 - Generates all of the sub-figures for the methods visualization figure.
+    vcf_file is a vcf generated by the generate_synthetic_sv_data function in generate_data.py.
+    """
+    # parse vcf
+    reads = defaultdict(list)
+    mean_insert_sizes = {}
+    vcf = pysam.VariantFile(vcf_file)
+    for record in vcf.fetch():
+        info = record.info
+        sample_id = info["SAMPLE"]
+        start = record.pos
+        end = info["END2"]
+        mean_insert_size = info["MEAN_INSERT"]
+        reads[sample_id].append((start, end))
+        mean_insert_sizes[sample_id] = mean_insert_size
+
+    reads_plotted = methods_raw_reads(svs, reads)
+    methods_lr(reads_plotted)
+    methods_clustered(svs, reads, mean_insert_sizes)
+
+
 def plot_sv_breakdown():
-    """Figure 2 - horizontal bar charts of the breakdown of SVs by number of modes"""
+    """Figure 3 - horizontal bar charts of the breakdown of SVs by number of modes"""
     full_df = get_sv_stats_collapsed_df()
     full_df["num_samples_run"] = full_df["num_samples"] - (
         full_df["num_pruned"] + full_df["num_reference"]
@@ -327,9 +613,9 @@ def plot_sv_breakdown():
 
 
 if __name__ == "__main__":
-    # methods_figure_viz(
-    #     "synthetic_data/data/B_r0.5_svlen802_n66_fcd8b157-8b23-4c8d-9574-2e8994ceb2d7.vcf"
-    # )
-    # plot_reciprocal_overlap_svlen(case="B", sample_size=66, y_axis="accuracy")
-    synthetic_data_fig()
-    plot_sv_breakdown()
+    methods_figure_viz(
+        [(100000, 100802), (100060, 100741)],
+        "synthetic_data/data/B_r0.8500000000000001_svlen802_n66_fa6914bc-f836-4f50-8a14-5cc0b56a50c9.vcf",
+    )
+    # synthetic_data_fig()
+    # plot_sv_breakdown()
