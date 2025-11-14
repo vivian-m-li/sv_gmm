@@ -6,11 +6,7 @@ from bokeh.models import HoverTool, ColumnDataSource, NumeralTickFormatter
 from typing import Optional, List, Tuple, Dict
 from em import run_gmm
 from em_1d import run_gmm as run_gmm_1d
-from viz import (
-    populate_sample_info,
-    get_evidence_by_mode,
-    plot_single_sv,
-)
+from viz import populate_sample_info, get_evidence_by_mode, plot_single_sv
 from gmm_types import Evidence, Sample
 
 

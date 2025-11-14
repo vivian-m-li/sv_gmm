@@ -7,7 +7,7 @@ from matplotlib.patches import Ellipse, Rectangle
 from matplotlib.lines import Line2D
 from collections import Counter, defaultdict
 from process_data import run_viz_gmm
-from viz import plot_2d_coords
+from viz import plot_2d_coords, plot_single_sv
 from helper import get_sv_stats_collapsed_df, get_sv_lookup
 from gmm_types import COLORS
 
@@ -519,8 +519,14 @@ def methods_figure_viz(svs, vcf_file: str):
     methods_clustered(svs, reads, mean_insert_sizes)
 
 
+def plot_sv_short_long_reads():
+    # run gmm to get evidence by mode
+    # pass into plot_single_sv
+    pass
+
+
 def plot_sv_breakdown():
-    """Figure 3 - horizontal bar charts of the breakdown of SVs by number of modes"""
+    """Figure 4 - horizontal bar charts of the breakdown of SVs by number of modes"""
     full_df = get_sv_stats_collapsed_df()
     full_df["num_samples_run"] = full_df["num_samples"] - (
         full_df["num_pruned"] + full_df["num_reference"]
@@ -552,26 +558,6 @@ def plot_sv_breakdown():
             )
         )
 
-    # Plot left figure: horizontal bar chart of the number of SVs
-    fig, axs = plt.subplots(
-        1, 2, figsize=(12, 3), gridspec_kw={"width_ratios": [1, 2]}
-    )
-    ax1 = axs[0]
-    categories = ["Clustered", "Inconclusive", "No Evidence"]
-    ax1.barh(categories, n_svs[::-1], color="#274c77")
-    for i, (n, af) in enumerate(zip(n_svs[::-1], afs[::-1])):
-        ax1.text(
-            n - 500,
-            i,
-            f"AF = {af:.3f}",
-            va="center",
-            ha="right",
-            fontsize=10,
-            color="white",
-        )
-    ax1.set_xlabel("Number of SVs")
-    ax1.set_title("SV Breakdown by Evidence")
-
     # Filter out SVs with too little evidence
     df = df[(df["confidence"] != "inconclusive") & (df["num_samples_run"] > 10)]
     modes = []
@@ -583,39 +569,85 @@ def plot_sv_breakdown():
         confidence.append(Counter(modes_df["confidence"]))
         n_samples.append(np.mean(modes_df["num_samples_run"]))
 
+    colors = ["#7BB662", "#FFD301", "#E03C32"]
+
+    # Plot left figure: horizontal bar chart of the number of SVs
+    fig, axs = plt.subplots(
+        1, 2, figsize=(12, 3), gridspec_kw={"width_ratios": [1, 2]}
+    )
+    ax1 = axs[0]
+    categories = [
+        "Clustered\n(Enough Reads)",
+        "Inconclusive\n(Too Few Reads)",
+        "No Evidence",
+    ]
+    mode_labels = ["1", "2", "3"]
+    ax1.barh(categories, n_svs[::-1], color="#274c77")
+
+    # Make the clustered category a stacked bar chart based on the number of modes
+    clustered_modes = [modes[0], modes[1], modes[2]]  # 1 SV, 2 SVs, 3 SVs
+    bottom = 0
+    for i, (value, label) in enumerate(zip(clustered_modes, mode_labels)):
+        ax1.barh(
+            categories[0],
+            value,
+            left=bottom,
+            label=label,
+            color=colors[i],
+        )
+        bottom += value
+    ax1.legend(
+        title="SVs per Breakpoint Cluster",
+        loc="lower right",
+        ncol=3,
+    )
+    for i, (n, af) in enumerate(zip(n_svs[::-1], afs[::-1])):
+        ypos = i + 0.28 if i == 0 else i
+        ax1.text(
+            n + 500,
+            ypos,
+            f"AF = {af:.3f}",
+            va="center",
+            ha="left",
+            fontsize=10,
+        )
+    ax1.set_xlim(0, max(n_svs) + 15000)
+
     # Plot right figure: horizontal bar chart of the number of SVs by number of modes
     ax2 = axs[1]
-    mode_labels = ["1 Mode", "2 Modes", "3 Modes"]
     bottom = np.zeros(len(modes))
-    colors = {"high": "#7BB662", "medium": "#FFD301", "low": "#E03C32"}
-    for conf in ["high", "medium", "low"]:
+    for i, conf in enumerate(["high", "medium", "low"]):
         values = [confidence[i].get(conf, 0) for i in range(len(modes))]
         ax2.barh(
             mode_labels,
             values,
             left=bottom,
             label=conf.capitalize(),
-            color=colors[conf],
+            color=colors[i],
         )
         bottom += values
+    ax2.set_xscale("log", base=10)
+    ax2.set_xticks([10, 100, 1000, 10000])
+    ax2.get_xaxis().set_major_formatter(plt.ScalarFormatter())
     for i, n in enumerate(n_samples):
         pos_x = modes[i] if i == 0 else modes[i] + 100
         pos_y = i + 0.55 if i == 0 else i
         ha = "right" if i == 0 else "left"
         ax2.text(pos_x, pos_y, f"n = {n:.0f}", va="center", ha=ha, fontsize=10)
-    ax2.set_xlabel("Number of SVs")
-    ax2.set_title("SV Breakdown by Number of Modes")
-    ax2.legend(title="Confidence")
+    ax2.set_ylabel("SVs per Breakpoint Cluster", fontsize=12)
+    ax2.legend(title="Confidence", loc="upper right")
 
+    fig.text(0.3, 0.02, "Number of SVs per Category", fontsize=14)
     plt.tight_layout()
+    plt.subplots_adjust(left=0.11, bottom=0.19)
     plt.savefig("plots/sv_breakdown.pdf")
     plt.show()
 
 
 if __name__ == "__main__":
-    methods_figure_viz(
-        [(100000, 100802), (100060, 100741)],
-        "synthetic_data/data/B_r0.8500000000000001_svlen802_n66_fa6914bc-f836-4f50-8a14-5cc0b56a50c9.vcf",
-    )
+    # methods_figure_viz(
+    #     [(100000, 100802), (100060, 100741)],
+    #     "synthetic_data/data/B_r0.8500000000000001_svlen802_n66_fa6914bc-f836-4f50-8a14-5cc0b56a50c9.vcf",
+    # )
     # synthetic_data_fig()
-    # plot_sv_breakdown()
+    plot_sv_breakdown()
