@@ -10,6 +10,7 @@ from process_data import run_viz_gmm
 from viz import plot_2d_coords, plot_single_sv
 from helper import get_sv_stats_collapsed_df, get_sv_lookup
 from gmm_types import COLORS
+from matplotlib.gridspec import GridSpec
 
 
 def plot_sv_coordinate_space(ax, n_svs, xcoords, svcoords, y, height, **kwargs):
@@ -169,14 +170,36 @@ def synthetic_data_fig():
         [(100000, 100802), (100401, 101203), (100802, 101604)],
     ]
 
-    fig, axs = plt.subplots(
-        2, len(cases), figsize=(15, 5), gridspec_kw={"height_ratios": [4, 1]}
-    )
+    fig = plt.figure(figsize=(15, 6))
+    gs = GridSpec(3, len(cases), figure=fig, height_ratios=[1, 4, 1])
 
-    for case in cases:
-        ax = axs[0, cases.index(case)]
+    axs = []
+    # set up the grid of axes
+    for col in range(len(cases)):
+        if col < len(cases) - 1:
+            new_axes = [fig.add_subplot(gs[row, col]) for row in range(3)]
+        else:
+            gs_last_col = GridSpec(
+                2,
+                1,
+                figure=fig,
+                height_ratios=[5.12, 0.88],
+                left=0.7,
+                right=0.98,
+                hspace=0.23,
+            )
+            new_axes = [None]
+            new_axes.extend(
+                [fig.add_subplot(gs_last_col[row]) for row in range(2)]
+            )
+        axs.append(new_axes)
+
+    for col, case in enumerate(cases):
+        tpr_ax = axs[col][1]
+        fpr_ax = axs[col][2]
         subset = df[df["case"] == case]
 
+        all_overlaps, all_accs, all_fps = [], [], []
         for i, model in enumerate(models):
             model_df = subset[subset["gmm_model"] == model]
             right, total, false_positives = (
@@ -184,7 +207,6 @@ def synthetic_data_fig():
                 defaultdict(int),
                 defaultdict(int),
             )
-
             for _, row in model_df.iterrows():
                 overlap = row["r"]
                 total[overlap] += 1
@@ -198,52 +220,132 @@ def synthetic_data_fig():
             overlaps = np.array(sorted(total.keys()))
             acc = np.array([right[o] / total[o] for o in overlaps])
             fps = np.array([false_positives[o] for o in overlaps])
+            all_overlaps.append(overlaps)
+            all_accs.append(acc)
+            all_fps.append(fps)
 
-            # --- vertical offset per model (constant across the line) ---
-            base_offsets = np.linspace(-0.01, 0.01, len(models))
-            offset = base_offsets[i]
-
-            acc_shifted = np.clip(acc + offset, 0, 1.05)
-            fps_shifted = np.clip(fps + offset, -0.01, 1.05)
-
-            ax.plot(
+            # plot the lines without markers
+            tpr_ax.plot(
                 overlaps,
-                acc_shifted,
-                marker=markers[i],
+                acc,
                 color=colors[i],
-                linewidth=2.3,
-                alpha=0.7,
-                label=f"{model} TP",
-            )
-            ax.plot(
-                overlaps + 0.01,
-                fps_shifted,
-                marker=markers[i],
-                markerfacecolor="none",
-                color=colors[i],
-                linestyle="--",
-                linewidth=1.5,
                 alpha=0.8,
-                label=f"{model} FP",
+                label=model,
+            )
+            fpr_ax.plot(
+                overlaps,
+                fps,
+                color=colors[i],
+                alpha=0.8,
+                label=model,
             )
 
-        ax.set_xlabel("Reciprocal Overlap (r)", fontsize=13)
+        for i, model in enumerate(models):
+            # plot only select markers to avoid clutter
+            overlaps_subset = all_overlaps[i][i:][:: len(models)]
+            tpr_ax.scatter(
+                overlaps_subset,
+                all_accs[i][i:][:: len(models)],
+                marker=markers[i],
+                color=colors[i],
+                alpha=0.8,
+                zorder=3,
+            )
+
+            fpr_ax.scatter(
+                overlaps_subset,
+                all_fps[i][i:][:: len(models)],
+                marker=markers[i],
+                color=colors[i],
+                alpha=0.8,
+                zorder=3,
+            )
+
+        xlabel = "r1" if case == "D" else "r"
+        fpr_ax.set_xlabel(f"Reciprocal Overlap ({xlabel})", fontsize=13)
+        fpr_ax.set_ylim(-0.05, 0.05)
+        fpr_ax.set_yticks([0.0])
+        fpr_ax.set_yticklabels(["0.0"])
+
+        if case == "D":
+            # set the tpr y axis to 0, 1.5
+            # but tick marks only at 0.0, 0.2, ... 1.0
+            tpr_ax.set_ylim(-0.05, 1.5)
+            tpr_ax.set_yticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+            tpr_ax.set_yticklabels(["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"])
+        else:
+            tpr_ax.set_ylim(-0.05, 1.05)
+
         if case == "B":
-            ax.set_ylabel("True Positive/False Positive", fontsize=13)
-        ax.set_title(f"Case {case}", fontsize=15)
-        ax.set_ylim(-0.05, 1.05)
+            tpr_ax.set_ylabel("True Positive Rate (TPR)", fontsize=13)
+            fpr_ax.set_ylabel("FPR", fontsize=13)
 
         # draw the conceptual SVs (i.e. the patches representing the coordinate space)
-        case_svs = svs[cases.index(case)]
-        x_min = min([sv[0] for sv in case_svs]) - 100
-        x_max = max([sv[1] for sv in case_svs]) + 100
-        y_offset = 0
-        sub_ax = axs[1, cases.index(case)]
-        sub_ax.axis("off")
-        for i, (L, R) in enumerate(case_svs):
+        # manually add the drawn SVs to the last column (3 SV case)
+        if col < 2:
+            case_svs = svs[col]
+            x_min = min([sv[0] for sv in case_svs]) - 100
+            x_max = max([sv[1] for sv in case_svs]) + 100
+            y_offset = 0
+            sub_ax = axs[col][0]
+            sub_ax.axis("off")
+            for i, (L, R) in enumerate(case_svs):
+                plot_sv_coordinate_space(
+                    sub_ax,
+                    len(case_svs),
+                    (x_min, x_max),
+                    (L, R),
+                    y_offset,
+                    0.2,
+                    edgecolor="black",
+                    facecolor="lightgrey",
+                )
+                y_offset += 0.25
+
+    axs[1][-1].legend(
+        loc="upper center", title="Model", ncols=3, bbox_to_anchor=(0.5, -0.9)
+    )
+
+    plt.tight_layout()
+    plt.subplots_adjust(
+        top=0.97,
+        bottom=0.2,
+        wspace=0.15,
+        hspace=0.37,
+    )
+    plt.savefig("plots/synthetic_data.pdf")
+    plt.savefig("plots/synthetic_data.png")
+    plt.show()
+
+
+def synthetic_data_additional_svs():
+    svs = [
+        [
+            (100000, 100802),
+            (100722, 101524),
+            (101444, 102246),
+        ],  # r1 = 0.1, r2 = 0.1
+        [
+            (100000, 100802),
+            (100722, 101524),
+            (100803, 101605),
+        ],  # r1 = 0.1, r2 = 0.9
+        [
+            (100000, 100802),
+            (100081, 100883),
+            (100482, 101284),
+        ],  # r1 = 0.9, r2 = 0.5
+    ]
+
+    fig, axs = plt.subplots(len(svs), 1, figsize=(8, 2 * len(svs)))
+    for i, sv_coords in enumerate(svs):
+        y_offset = 0.2
+        x_min = min([sv[0] for sv in sv_coords]) - 100
+        x_max = max([sv[1] for sv in sv_coords]) + 100
+        for j, (L, R) in enumerate(sv_coords):
             plot_sv_coordinate_space(
-                sub_ax,
-                len(case_svs),
+                axs[i],
+                len(sv_coords),
                 (x_min, x_max),
                 (L, R),
                 y_offset,
@@ -252,56 +354,10 @@ def synthetic_data_fig():
                 facecolor="lightgrey",
             )
             y_offset += 0.25
-
-    model_handles = [
-        Line2D(
-            [0],
-            [0],
-            color=colors[i],
-            marker=markers[i],
-            lw=2.3,
-            label=models[i],
-        )
-        for i in range(len(models))
-    ]
-    style_handles = [
-        Line2D([0], [0], color="black", lw=2.3, label="True Positive (solid)"),
-        Line2D(
-            [0],
-            [0],
-            color="black",
-            lw=1.5,
-            ls="--",
-            label="False Positive (dashed)",
-        ),
-    ]
-
-    legend_handles = (
-        model_handles
-        + [Line2D([], [], color="gray", lw=0.8, label=" " * 50)]
-        + style_handles
-    )
-    legend_labels = (
-        [h.get_label() for h in model_handles]
-        + [""]
-        + [h.get_label() for h in style_handles]
-    )
-
-    axs[0, -1].legend(
-        legend_handles,
-        legend_labels,
-        fontsize=10,
-        title="Model / Line Style",
-        title_fontsize=11,
-        loc="upper right",
-        handlelength=2.5,
-        borderpad=1,
-        labelspacing=0.8,
-        frameon=True,
-    )
+        axs[i].axis("off")
 
     plt.tight_layout()
-    plt.savefig("plots/synthetic_data.pdf")
+    plt.savefig("plots/synthetic_data_additional_svs.pdf")
     plt.show()
 
 
@@ -645,9 +701,10 @@ def plot_sv_breakdown():
 
 
 if __name__ == "__main__":
+    synthetic_data_fig()
+    synthetic_data_additional_svs()
     # methods_figure_viz(
     #     [(100000, 100802), (100060, 100741)],
     #     "synthetic_data/data/B_r0.8500000000000001_svlen802_n66_fa6914bc-f836-4f50-8a14-5cc0b56a50c9.vcf",
     # )
-    # synthetic_data_fig()
-    plot_sv_breakdown()
+    # plot_sv_breakdown()
