@@ -261,7 +261,8 @@ def run_gmm(
     L,
     R,
     plot: bool = False,
-    pr: bool = False
+    pr: bool = False,
+    force_n_modes: Optional[int] = None,
 ) -> Optional[EstimatedGMM2D]:
     """
     Runs the GMM estimation process to determine the number of structural variants in a DNA reading frame.
@@ -301,7 +302,10 @@ def run_gmm(
     else:
         all_params = []
         iterations = []
-        for num_modes in range(1, 4):
+        mode_options = (
+            [force_n_modes] if force_n_modes is not None else range(1, 4)
+        )
+        for num_modes in mode_options:
             params, num_iterations = run_em(x, num_modes, L, R, plot)
             aic = calc_aic(
                 params[-1].logL, num_modes, params[-1].mu, params[-1].cov

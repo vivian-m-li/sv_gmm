@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Rectangle
 from matplotlib.lines import Line2D
 from collections import Counter, defaultdict
-from process_data import run_viz_gmm
-from viz import plot_2d_coords, plot_single_sv
+from viz import plot_2d_coords, get_evidence_by_mode, plot_single_sv
+from process_data import process_data
+from em import run_gmm
 from helper import get_sv_stats_collapsed_df, get_sv_lookup
 from gmm_types import COLORS
 from matplotlib.gridspec import GridSpec
@@ -21,6 +22,7 @@ def plot_sv_coordinate_space(ax, n_svs, xcoords, svcoords, y, height, **kwargs):
     """
     facecolor = kwargs.get("facecolor", "lightgrey")
     edgecolor = kwargs.get("edgecolor", "black")
+    rectcolor = kwargs.get("rectcolor", "#274c77")
     lw = kwargs.get("lw", 1)
 
     if kwargs.get("r") is not None:
@@ -83,7 +85,7 @@ def plot_sv_coordinate_space(ax, n_svs, xcoords, svcoords, y, height, **kwargs):
         (svcoords[0], y),
         svcoords[1] - svcoords[0],
         height,
-        facecolor="#274c77",
+        facecolor=rectcolor,
         edgecolor="none",
     )
     ax.add_patch(sv_rect)
@@ -361,25 +363,15 @@ def synthetic_data_additional_svs():
     plt.show()
 
 
-def methods_raw_reads(svs, reads):
+def methods_raw_reads(ax, svs, reads):
     """Figure 2a - Visualizes the reads in coordinate space."""
     sv_avg = (np.mean([sv[0] for sv in svs]), np.mean([sv[1] for sv in svs]))
 
-    fig, ax = plt.subplots(figsize=(4, 3))
-
     # plot reads
     y_offset = 0.2
-    all_reads = list(reads.values())
-    random.shuffle(all_reads)
-    reads_plotted = []
     n_reads_shown = 30
-    for i, sample_reads in enumerate(all_reads):
-        read = random.sample(sample_reads, 1)[0]
-        if i >= n_reads_shown:
-            reads_plotted.append(read)
-            continue
-        reads_plotted.append(read)
-        color = COLORS[1] if i == n_reads_shown - 1 else "#274c77"
+    for i, read in enumerate(reads[-n_reads_shown:]):
+        color = COLORS[2] if i == n_reads_shown - 1 else "#274c77"
         ax.scatter(
             [read[0], read[1]],
             [y_offset, y_offset],
@@ -394,8 +386,8 @@ def methods_raw_reads(svs, reads):
         )
         y_offset += 0.05
 
-    reads_min = min([read[0] for read in reads_plotted])
-    reads_max = max([read[1] for read in reads_plotted])
+    reads_min = min([read[0] for read in reads[-n_reads_shown:]])
+    reads_max = max([read[1] for read in reads[-n_reads_shown:]])
     plot_sv_coordinate_space(
         ax,
         1,
@@ -417,119 +409,92 @@ def methods_raw_reads(svs, reads):
     )
 
     # draw vertical dotted lines from the first read to the drawn axis
-    last_read = reads_plotted[n_reads_shown - 1]
+    last_read = reads[-1]
     ax.plot(
         [last_read[0], last_read[0]],
         [y_offset - 0.05, 0.1],
         linestyle="dotted",
-        color=COLORS[1],
+        color=COLORS[2],
         linewidth=2,
     )
     ax.plot(
         [last_read[1], last_read[1]],
         [y_offset - 0.05, 0.1],
         linestyle="dotted",
-        color=COLORS[1],
+        color=COLORS[2],
         linewidth=2,
     )
 
     # label the L/R of the read as L_i and R_i
     ax.text(
         last_read[0],
-        0,
+        -0.05,
         "Lᵢ",
         ha="center",
         va="center",
-        color=COLORS[1],
-        fontsize=16,
+        color=COLORS[2],
+        fontsize=14,
     )
     ax.text(
         last_read[1],
-        0,
+        -0.05,
         "Rᵢ",
         ha="center",
         va="center",
-        color=COLORS[1],
-        fontsize=16,
+        color=COLORS[2],
+        fontsize=14,
     )
-
     ax.axis("off")
-    plt.tight_layout()
-    plt.savefig("plots/methodsa.png")
-    plt.savefig("plots/methodsa.pdf")
-    plt.show()
-
-    return reads_plotted
 
 
-def methods_lr(reads_plotted):
+def methods_lr(ax, reads_plotted):
     """Figure 2b - Visualizes the reads in length vs. read L position space."""
-    fig, ax = plt.subplots(figsize=(4, 3))
-
-    L, R = 0, 0
     read_i = reads_plotted[-1]
     for read in reads_plotted:
         read_L = read[0]
         read_R = read[1]
         if read_L == read_i[0] and read_R == read_i[1]:
-            ax.scatter(read_L, read_R, color=COLORS[1], s=30)
-            L, R = read_L, read_R
+            ax.scatter(read_L, read_R, color=COLORS[2], s=30)
+            ax.text(
+                read_L + 20,
+                read_R - 20,
+                "(Lᵢ, Rᵢ)",
+                ha="center",
+                va="center",
+                color=COLORS[2],
+                fontsize=14,
+            )
         else:
             ax.scatter(read_L, read_R, color="#274c77", s=10)
 
-    # label the L/R of the read as L_i and R_i
-    ax.text(
-        L,
-        -50,
-        "Lᵢ",
-        ha="center",
-        va="center",
-        color=COLORS[1],
-        fontsize=10,
-    )
-    ax.text(
-        -200,
-        R,
-        "Rᵢ",
-        # "Rᵢ - Lᵢ",
-        ha="center",
-        va="center",
-        color=COLORS[1],
-        fontsize=10,
-    )
-
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_xlabel("Read L", fontsize=16)
-    ax.set_ylabel("Read R", fontsize=16)
-    plt.tight_layout()
-    plt.savefig("plots/methodsb.png")
-    plt.savefig("plots/methodsb.pdf")
-    plt.show()
+    ax.set_xlabel("L-coordinate", fontsize=16)
+    ax.set_ylabel("R-coordinate", fontsize=16)
 
 
-def methods_clustered(svs, reads, insert_size_lookup):
+def methods_clustered(ax, svs, reads, insert_size_lookup, num_modes):
     """Figure 2c - Visualizes the clustered reads in length vs. read L position space."""
 
-    squiggle_data = {}
-    for sample_id, sample_reads in reads.items():
-        squiggle_data[sample_id] = []
-        for read in sample_reads:
-            squiggle_data[sample_id].extend(read)
-
     sv_avg = (np.mean([sv[0] for sv in svs]), np.mean([sv[1] for sv in svs]))
-    gmm, evidence = run_viz_gmm(
+    squiggle_data = {sample_id: [reads[sample_id]] for sample_id in reads}
+    L, R = sv_avg[0], sv_avg[1]
+    points, sv_evidence = process_data(
         squiggle_data,
-        chr="1",
-        L=sv_avg[0],
-        R=sv_avg[1],
-        plot=False,
-        synthetic_data=True,
-        min_pairs=2,
+        file_name="",
+        L=L,
+        R=R,
         insert_size_lookup=insert_size_lookup,
+        min_pairs=1,
+    )
+    gmm = run_gmm(points, L=L, R=R, force_n_modes=num_modes)
+    evidence = get_evidence_by_mode(
+        gmm,
+        sv_evidence,
+        L,
+        R,
     )
 
-    fig, ax = plt.subplots(figsize=(4, 3))
     plot_2d_coords(
         ax,
         evidence,
@@ -544,12 +509,40 @@ def methods_clustered(svs, reads, insert_size_lookup):
 
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_xlabel("Read L", fontsize=16)
-    ax.set_ylabel("Read R", fontsize=16)
-    plt.tight_layout()
-    plt.savefig("plots/methodsc.png")
-    plt.savefig("plots/methodsc.pdf")
-    plt.show()
+    ax.set_xlabel("L-coordinate", fontsize=16)
+    ax.set_ylabel("R-coordinate", fontsize=16)
+
+
+def methods_svs(ax, svs):
+    """Figure 2d - Visualizes the resulting SVs in coordinate space."""
+    x_min = min([sv[0] for sv in svs]) - 100
+    x_max = max([sv[1] for sv in svs]) + 100
+    rect_height = 1.5
+    ax.add_patch(
+        Rectangle(
+            (x_min, 0),
+            x_max - x_min,
+            rect_height,
+            facecolor="white",
+            edgecolor="none",
+        )
+    )
+
+    y_offset = rect_height
+    for i, (L, R) in enumerate(svs):
+        plot_sv_coordinate_space(
+            ax,
+            len(svs),
+            (x_min, x_max),
+            (L, R),
+            y_offset,
+            0.2,
+            edgecolor="black",
+            facecolor="lightgrey",
+            rectcolor=COLORS[i],
+        )
+        y_offset += 0.25
+    ax.axis("off")
 
 
 def methods_figure_viz(svs, vcf_file: str):
@@ -558,7 +551,7 @@ def methods_figure_viz(svs, vcf_file: str):
     vcf_file is a vcf generated by the generate_synthetic_sv_data function in generate_data.py.
     """
     # parse vcf
-    reads = defaultdict(list)
+    reads = defaultdict(list)  # all reads
     mean_insert_sizes = {}
     vcf = pysam.VariantFile(vcf_file)
     for record in vcf.fetch():
@@ -570,9 +563,37 @@ def methods_figure_viz(svs, vcf_file: str):
         reads[sample_id].append((start, end))
         mean_insert_sizes[sample_id] = mean_insert_size
 
-    reads_plotted = methods_raw_reads(svs, reads)
-    methods_lr(reads_plotted)
-    methods_clustered(svs, reads, mean_insert_sizes)
+    # pick only a subset of reads to plot to show more variation in reads
+    # shuffle the samples first
+    sample_ids = list(reads.keys())
+    random.shuffle(sample_ids)
+    reads_to_plot = {
+        sample_id: random.sample(reads[sample_id], 1)[0]
+        for sample_id in sample_ids
+    }
+    reads_list = list(reads_to_plot.values())
+
+    fig, axes = plt.subplots(1, 4, figsize=(16, 3))
+    methods_raw_reads(axes[0], svs, reads_list)
+    methods_lr(axes[1], reads_list)
+    axes[2].axis("off")  # placeholder for clustered reads
+    methods_svs(axes[3], svs)
+
+    plt.tight_layout()
+    plt.subplots_adjust(left=0.05, right=0.95)
+    plt.savefig("plots/methods.png")
+    plt.savefig("plots/methods.pdf")
+    plt.show()
+
+    # Plot the clustered reads separately so I can stack them in post-processing
+    for num_modes in range(1, 4):
+        fig, ax = plt.subplots(figsize=(4, 3))
+        methods_clustered(ax, svs, reads_to_plot, mean_insert_sizes, num_modes)
+        plt.tight_layout()
+        plt.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+        plt.savefig(f"plots/methods_clustered_{num_modes}modes.png")
+        plt.savefig(f"plots/methods_clustered_{num_modes}modes.pdf")
+        plt.show()
 
 
 def plot_sv_short_long_reads():
@@ -701,10 +722,10 @@ def plot_sv_breakdown():
 
 
 if __name__ == "__main__":
-    synthetic_data_fig()
-    synthetic_data_additional_svs()
-    # methods_figure_viz(
-    #     [(100000, 100802), (100060, 100741)],
-    #     "synthetic_data/data/B_r0.8500000000000001_svlen802_n66_fa6914bc-f836-4f50-8a14-5cc0b56a50c9.vcf",
-    # )
+    # synthetic_data_fig()
+    # synthetic_data_additional_svs()
+    methods_figure_viz(
+        [(100000, 100802), (100060, 100741)],
+        "synthetic_data/data/B_r0.8500000000000001_svlen802_n66_fa6914bc-f836-4f50-8a14-5cc0b56a50c9.vcf",
+    )
     # plot_sv_breakdown()

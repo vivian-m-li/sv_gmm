@@ -1665,7 +1665,7 @@ def draw_conceptual_clusters_all(
         draw_conceptual_clusters(
             ax1, ax2, case, n_per_cluster, fontsize=fontsize
         )
-    fig.text(0.5, 0.01, "L-position", fontsize=fontsize, ha="center")
+    fig.text(0.5, 0.01, "L-coordinate", fontsize=fontsize, ha="center")
     fig.text(
         0.03,
         0.13,
