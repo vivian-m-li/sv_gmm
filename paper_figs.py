@@ -1,3 +1,5 @@
+import os
+import subprocess
 import random
 import pysam
 import numpy as np
@@ -7,9 +9,10 @@ from matplotlib.patches import Ellipse, Rectangle
 from matplotlib.lines import Line2D
 from collections import Counter, defaultdict
 from viz import plot_2d_coords, get_evidence_by_mode, plot_single_sv
-from process_data import process_data
+from query_sv import query_stix
+from process_data import process_data, run_viz_gmm
 from em import run_gmm
-from helper import get_sv_stats_collapsed_df, get_sv_lookup
+from helper import get_sv_stats_collapsed_df, get_sv_lookup, get_sv_chr
 from gmm_types import COLORS
 from matplotlib.gridspec import GridSpec
 
@@ -596,10 +599,66 @@ def methods_figure_viz(svs, vcf_file: str):
         plt.show()
 
 
-def plot_sv_short_long_reads():
-    # run gmm to get evidence by mode
-    # pass into plot_single_sv
-    pass
+def plot_sv_short_long_reads(sv_id, sample_ids):
+    squiggle_data = query_stix(sv_id=sv_id, run_gmm=False)
+    chr, start, stop = get_sv_chr(sv_id)
+    gmm, evidence_by_mode = run_viz_gmm(
+        squiggle_data,
+        file_name="",
+        chr=chr,
+        L=start,
+        R=stop,
+        plot=False,
+        sv_id=sv_id,
+    )
+    plot_single_sv(
+        evidence_by_mode,
+        sv_id=sv_id,
+        L=start,
+        R=stop,
+        axis1="L",
+        axis2="Length",
+        size_by="",
+        add_right_padding=True,
+    )
+
+    if len(sample_ids) == 0:
+        return
+
+    os.mkdir(f"long_reads/bam_files_subset/{sv_id}")
+    for sample_id in sample_ids:
+        subprocess.run(
+            [
+                "cp",
+                f"long_reads/bam_files/{sv_id}/{sample_id}.bam",
+                f"long_reads/bam_files_subset/{sv_id}/{sample_id}.bam",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            [
+                "cp",
+                f"long_reads/bam_files/{sv_id}/{sample_id}.bam.bai",
+                f"long_reads/bam_files_subset/{sv_id}/{sample_id}.bam.bai",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+    # the samplot image is generated separately and needs to be added in post-processing
+    subprocess.run(
+        ["bash", "samplot_paper_viz.sh"]
+        + [sv_id, str(chr), str(start), str(stop)],
+        capture_output=True,
+        text=True,
+    )
+
+    subprocess.run(
+        ["rm", "-r", f"long_reads/bam_files_subset/{sv_id}"],
+        capture_output=True,
+        text=True,
+    )
 
 
 def plot_sv_breakdown():
@@ -724,8 +783,14 @@ def plot_sv_breakdown():
 if __name__ == "__main__":
     # synthetic_data_fig()
     # synthetic_data_additional_svs()
-    methods_figure_viz(
-        [(100000, 100802), (100060, 100741)],
-        "synthetic_data/data/B_r0.8500000000000001_svlen802_n66_fa6914bc-f836-4f50-8a14-5cc0b56a50c9.vcf",
-    )
+    # methods_figure_viz(
+    #     [(100000, 100802), (100060, 100741)],
+    #     "synthetic_data/data/B_r0.8500000000000001_svlen802_n66_fa6914bc-f836-4f50-8a14-5cc0b56a50c9.vcf",
+    # )
     # plot_sv_breakdown()
+    plot_sv_short_long_reads("HGSV_776", ["HG00096"])
+    plot_sv_short_long_reads("HGSV_54541", ["HG03548", "HG00149"])
+    plot_sv_short_long_reads("HGSV_183773", ["HG03442", "HG02895", "NA19331"])
+
+    # 3 mode options
+    # HGSV_199579, HGSV_120349

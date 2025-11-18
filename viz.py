@@ -176,37 +176,6 @@ def plot_evidence_by_mode(
         p for paired_end in all_mode_paired_ends for p in paired_end
     ]
 
-    # Plot the ancestry bar chart
-    left_ax = fig.add_subplot(gs[0])
-    bar_offset = 1 / len(ANCESTRY_COLORS) / 2
-    for i, counter in enumerate(population_data):
-        total = sum(counter.values())
-        for j, (label, color) in enumerate(ANCESTRY_COLORS.items()):
-            value = counter.get(label, 0) / total
-            left_ax.barh(
-                i + j * bar_offset,
-                value,
-                color=color,
-                align="center",
-                height=bar_offset,
-            )
-            if value > 0:
-                left_ax.text(
-                    value + 0.01,
-                    i + j * bar_offset,
-                    f"{value:.2f}",
-                    va="center",
-                    fontsize=10,
-                    color="black",
-                )
-
-    left_ax.set_xlabel("Proportion", labelpad=18, fontsize=12)
-    left_ax.yaxis.set_ticks([])
-    left_ax.yaxis.set_ticklabels([])
-    for spine_name, spine in left_ax.spines.items():
-        if spine_name != "bottom":
-            spine.set_visible(False)
-
     # Set up axes
     left_half = max_max_l - min(all_mode_paired_end_flat)
     right_half = max(all_mode_paired_end_flat) - min_min_r
@@ -218,27 +187,26 @@ def plot_evidence_by_mode(
         ),
         hspace=0.05,
         wspace=0.2,
-        subplot_spec=gs[0, 1],
+        subplot_spec=gs[0, 0],
     )
     [
         x.remove() for x in bax.diag_handles
     ]  # remove diagonal lines since I can't get the positioning correct
 
-    # SV plot
-    min_y = np.inf
-    all_sample_means = []
+    # SV + ancestry plots
+    y_shift = 0.4
+    mean_y_positions = []
     for i, mode in enumerate(reversed(evidence_by_mode)):
         mode_color = COLORS[mode_indices_reversed[i]]
 
         # plot the paired ends
-        max_y = -np.inf
-        sample_means = []
+        y_positions = []
+        sample_means_l = []
+        sample_means_r = []
         for evidence in mode:
             color = add_color_noise(mode_color)
-            y = add_noise(i + 1)
-            # determine the y shift for the histograms later
-            max_y = max(y, max_y)
-            min_y = min(y, min_y)
+            y = add_noise(i + 1, scale=0.5 * (len(mode) / 100)) + y_shift
+            y_positions.append(y)
 
             # plot only the max L coordinate and min R coordinate (closest values to the actual SV, which is not sequenced)
             mean_l = np.mean(
@@ -250,46 +218,49 @@ def plot_evidence_by_mode(
             bax.plot(
                 [mean_l, mean_r],
                 [y, y],
-                marker="o",
-                markersize=5,
-                linestyle="-",
                 linewidth=1,
-                color=color,
+                alpha=0.5,
+                color="lightgrey",
             )
-            sample_means.extend([mean_l, mean_r])
-        all_sample_means.append(sample_means)
+            bax.scatter(
+                [mean_l, mean_r], [y, y], color=color, s=20, alpha=0.8, zorder=5
+            )
+            sample_means_l.append(mean_l)
+            sample_means_r.append(mean_r)
+        mean_y_positions.append(np.mean(y_positions))
 
-        # plot the histograms
-        for ax in bax.axs:
-            n, bins, hist_patches = ax.hist(
-                sample_means,
-                bins=30,
+        # plot distributions over l/r means
+        for sample_means in [sample_means_l, sample_means_r]:
+            if len(sample_means) < 2:  # too few points to calculate stddev
+                continue
+            mean_x = np.mean(sample_means)
+            std_x = np.std(sample_means)
+            std_x = max(std_x, 1e-6)  # avoid flat PDF = NaN
+
+            # convert x vals to a continuous grid to make a smoother curve
+            x_min = min(sample_means)
+            x_max = max(sample_means)
+            xs = np.linspace(x_min, x_max, 400)
+
+            pdf = norm.pdf(xs, mean_x, std_x)
+            y_vals = pdf * 20
+
+            bax.plot(
+                xs,
+                y_vals,
+                color=mode_color,
+                linewidth=1,
+                alpha=0.8,
+                zorder=5,
+            )
+            bax.fill_between(
+                xs,
+                0,
+                y_vals,
                 color=mode_color,
                 alpha=0.8,
-                range=(min(sample_means), max(sample_means)),
-                orientation="vertical",
-                align="mid",
+                zorder=5,
             )
-            max_hist_height = max(n)
-            scale_factor = 0.5 / max_hist_height
-            for patch in hist_patches:
-                patch.set_height(patch.get_height() * scale_factor)
-                patch.set_y(patch.get_y() + max_y + 0.05)
-            ax.set_ylim(min_y - 0.1, max_y + 0.65)
-
-    # plot the vertical lines
-    for i in range(num_modes):
-        sample_means = np.array(all_sample_means[i])
-        bax.axvline(
-            np.mean(sample_means[0::2]),
-            color=COLORS[mode_indices_reversed[i]],
-            linestyle="--",
-        )
-        bax.axvline(
-            np.mean(sample_means[1::2]),
-            color=COLORS[mode_indices_reversed[i]],
-            linestyle="--",
-        )
 
     # Set ticks and labels for SV plot
     for ax in bax.axs:
@@ -304,21 +275,62 @@ def plot_evidence_by_mode(
     bax.locator_params(axis="x", nbins=4)
     bax.set_xlabel("Paired Ends", labelpad=35, fontsize=12)
 
-    # Add the legend
+    # plot pie charts
+    ancestry_ax = fig.add_subplot(gs[0, 1])
+    fig_x0, fig_y0, fig_w, fig_h = ancestry_ax.get_position().bounds
+    for i, population_counter in enumerate(population_data):
+        total = sum(population_counter.values())
+        values = [
+            population_counter.get(label, 0) / total
+            for label in ANCESTRY_COLORS
+        ]
+        # Compute normalized y in the brokenaxes coordinate system
+        ax0 = bax.axs[0]  # choose the first brokenaxes subplot
+        y_frac = (mean_y_positions[i] - ax0.get_ylim()[0]) / (
+            ax0.get_ylim()[1] - ax0.get_ylim()[0]
+        )
+
+        # map into figure coordinates
+        axpos = ax0.get_position()
+        mean_y_fig_norm = axpos.y0 + y_frac * axpos.height
+
+        # Place pie chart using normalized figure coordinates
+        pie_ax = fig.add_axes(
+            [
+                fig_x0 - 0.18,  # horizontal position
+                mean_y_fig_norm - 0.1,  # vertical position (centered)
+                0.2,  # width
+                0.2,  # height
+            ]
+        )
+        pie_ax.pie(
+            values,
+            labels=None,
+            colors=ANCESTRY_COLORS.values(),
+            startangle=90,
+            wedgeprops=dict(width=0.6),
+        )
+        pie_ax.set_aspect("equal")
+        pie_ax.axis("off")
+
+    ancestry_ax.axis("off")
+
+    # add the legend for ancestry pie charts
     handles = [
         plt.Rectangle((0, 0), 1, 1, color=ANCESTRY_COLORS[value])
         for value in ANCESTRY_COLORS.keys()
     ]
-    plt.legend(
+    fig.legend(
         handles[::-1],
         list(ANCESTRY_COLORS.keys())[::-1],
-        loc="center left",
-        bbox_to_anchor=(-0.18, 0.9),
         title="Superpopulation",
+        ncols=len(ANCESTRY_COLORS),
+        loc="lower center",
+        bbox_to_anchor=(fig_x0 - 0.05, 0.82),
     )
 
-    # Plot the pie chart
-    pie_ax = fig.add_axes([0.36, 0.68, 0.25, 0.25])
+    # Plot n samples per cluster pie chart
+    pie_ax = fig.add_axes([-0.062, 0.68, 0.25, 0.25])
     counts = [len(mode) for mode in evidence_by_mode]
     total_population = sum(counts)
     mode_percentages = [count / total_population for count in counts]
@@ -326,8 +338,9 @@ def plot_evidence_by_mode(
         mode_percentages,
         colors=COLORS[: len(mode_indices)],
         startangle=90,
+        wedgeprops=dict(width=0.6),
     )
-    pie_ax.set_title("Samples per Cluster", fontsize=10, pad=-10)
+    pie_ax.set_title("Samples per Cluster", fontsize=10, pad=-10, zorder=10)
     pie_ax.set_aspect("equal")
 
 
@@ -461,9 +474,11 @@ def plot_2d_coords(
     R: int,
     axis1: str,
     axis2: str,
+    axis1_dist: bool = True,
+    axis2_dist: bool = True,
     add_error_bars: bool = False,
     color_by: str = "mode",
-    size_by="num_evidence",
+    size_by: str = "num_evidence",
     show_mode_stats: bool = True,
     show_1d_distributions: bool = True,
 ):
@@ -528,7 +543,7 @@ def plot_2d_coords(
             elif size_by == "insert_size":
                 scatter_sizes.append(mean_insert_size)
             else:
-                scatter_sizes.append(20)
+                scatter_sizes.append(100)
 
         x = np.array(x)
         num_evidence = np.array(num_evidence)
@@ -591,7 +606,7 @@ def plot_2d_coords(
         mean_x, std_x = np.mean(x[:, 0]), np.std(x[:, 0])
         x_vals = np.linspace(mean_x - 3 * std_x, mean_x + 3 * std_x, 100)
         zorder = 10 - i
-        if show_1d_distributions:
+        if show_1d_distributions and axis1_dist:
             ax_xhist.plot(
                 x_vals,
                 norm.pdf(x_vals, mean_x, std_x),
@@ -615,7 +630,7 @@ def plot_2d_coords(
         ax_yhist.set_zorder(zorder - 1)
         mean_y, std_y = np.mean(x[:, 1]), np.std(x[:, 1])
         y_vals = np.linspace(mean_y - 3 * std_y, mean_y + 3 * std_y, 100)
-        if show_1d_distributions:
+        if show_1d_distributions and axis2_dist:
             ax_yhist.plot(
                 norm.pdf(y_vals, mean_y, std_y),
                 y_vals,
@@ -660,10 +675,14 @@ def plot_single_sv(
     axis2: str,
     add_error_bars: bool = False,
     color_by: str = "mode",
-    size_by="num_evidence",
+    size_by: str = "num_evidence",
+    add_right_padding: bool = False,  # adds a bit of extra space to the right side of the plot for post-processing
 ):
-    fig = plt.figure(figsize=(12, 3))
-    gs = GridSpec(1, 3, width_ratios=[1, 5, 4], figure=fig)
+    fig = plt.figure(figsize=(12, 3.5))
+    if add_right_padding:
+        gs = GridSpec(1, 4, width_ratios=[6, 1, 4, 6], figure=fig)
+    else:
+        gs = GridSpec(1, 3, width_ratios=[6, 1, 4], figure=fig)
     plot_evidence_by_mode(fig, gs, evidence_by_mode)
     ax2 = fig.add_subplot(gs[0, 2])
     plot_2d_coords(
@@ -673,15 +692,22 @@ def plot_single_sv(
         R=R,
         axis1=axis1,
         axis2=axis2,
+        axis1_dist=False,
+        axis2_dist=True,
         add_error_bars=add_error_bars,
         size_by=size_by,
         color_by=color_by,
+        show_mode_stats=False,
     )
-    plt.tight_layout()
+    if add_right_padding:
+        ax3 = fig.add_subplot(gs[0, 3])
+        ax3.axis("off")
+
+    # plt.tight_layout()
     plt.subplots_adjust(
-        left=0.02, right=0.93, bottom=0.24, top=0.83, wspace=0.25, hspace=0
+        left=0.02, right=0.93, bottom=0.205, top=0.82, wspace=0.05, hspace=0
     )
-    plot_title = f"plots/{sv_id}{'' if sv_id == '' else '_'}evidence_by_mode"
+    plot_title = f"plots/evidence/{sv_id}{'' if sv_id == '' else '_'}"
     plt.savefig(f"{plot_title}.pdf")
     plt.show()
 
