@@ -600,31 +600,46 @@ def methods_figure_viz(svs, vcf_file: str):
         plt.show()
 
 
-def plot_sv_short_long_reads(sv_id, sample_ids):
-    squiggle_data = query_stix(sv_id=sv_id, run_gmm=False)
+def plot_sv_short_long_reads(sv_id, sample_ids, skip_evidence_plot=False):
     chr, start, stop = get_sv_chr(sv_id)
-    gmm, evidence_by_mode = run_viz_gmm(
-        squiggle_data,
-        file_name="",
-        chr=chr,
-        L=start,
-        R=stop,
-        plot=False,
-        sv_id=sv_id,
-    )
-    plot_single_sv(
-        evidence_by_mode,
-        sv_id=sv_id,
-        L=start,
-        R=stop,
-        axis1="L",
-        axis2="Length",
-        size_by="",
-        add_right_padding=True,
-    )
+
+    if not skip_evidence_plot:
+        squiggle_data = query_stix(sv_id=sv_id, run_gmm=False)
+        gmm, evidence_by_mode = run_viz_gmm(
+            squiggle_data,
+            file_name="",
+            chr=chr,
+            L=start,
+            R=stop,
+            plot=False,
+            sv_id=sv_id,
+        )
+        plot_single_sv(
+            evidence_by_mode,
+            sv_id=sv_id,
+            L=start,
+            R=stop,
+            axis1="L",
+            axis2="Length",
+            size_by="",
+            add_right_padding=True,
+        )
 
     if len(sample_ids) == 0:
         return
+
+    if not os.path.exists(f"long_reads/bam_files/{sv_id}"):
+        # copy files from fiji
+        subprocess.run(
+            [
+                "scp",
+                "-r",
+                f"vili4418@fiji.colorado.edu:/Users/vili4418/sv/sv_gmm/long_reads/bam_files/{sv_id}",
+                "long_reads/bam_files",
+            ],
+            capture_output=True,
+            text=True,
+        )
 
     os.mkdir(f"long_reads/bam_files_subset/{sv_id}")
     for sample_id in sample_ids:
@@ -668,12 +683,18 @@ def find_example_svs():
     ancestry = pd.read_csv("1kgp/ancestry_dissimilarity.csv")
     df = df.merge(ancestry, on="id")
     df = df.sort_values(by="dissimilarity", ascending=False)
-    df = df[(df["confidence"] == "high") & (df["num_modes"] == 3) & (df["dissimilarity"] >= 0.5)]
+    df = df[
+        (df["confidence"] == "high")
+        & (df["num_modes"] == 3)
+        & (df["dissimilarity"] >= 0.5)
+    ]
     collapsed = pd.read_csv("1kgp/sv_stats_collapsed.csv")
     for _, row in df.iterrows():
         sv_id = row["id"]
         # check if there are bam files for samples in each mode
-        modes = ast.literal_eval(collapsed[collapsed["id"] == sv_id]["modes"].values[0])
+        modes = ast.literal_eval(
+            collapsed[collapsed["id"] == sv_id]["modes"].values[0]
+        )
         can_plot = [False for _ in range(len(modes))]
         for i, mode in enumerate(modes):
             for sample_id in mode["sample_ids"]:
@@ -817,7 +838,6 @@ if __name__ == "__main__":
     # plot_sv_breakdown()
     # plot_sv_short_long_reads("HGSV_776", ["HG00096"])
     # plot_sv_short_long_reads("HGSV_54541", ["HG03548", "HG00149"])
-    # plot_sv_short_long_reads("HGSV_183773", ["HG03442", "HG02895", "NA19331"])
-    find_example_svs()
-        
-
+    plot_sv_short_long_reads(
+        "HGSV_1289", ["HG00537", "NA19383", "NA19350"], skip_evidence_plot=True
+    )
