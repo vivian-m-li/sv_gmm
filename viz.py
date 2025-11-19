@@ -668,7 +668,7 @@ def plot_2d_coords(
 def plot_single_sv(
     evidence_by_mode: List[List[Evidence]],
     *,
-    sv_id: str = "",
+    sv_id: str,
     L: int,
     R: int,
     axis1: str,
@@ -707,9 +707,7 @@ def plot_single_sv(
     plt.subplots_adjust(
         left=0.02, right=0.93, bottom=0.205, top=0.82, wspace=0.05, hspace=0
     )
-    plot_title = f"plots/evidence/{sv_id}{'' if sv_id == '' else '_'}"
-    plt.savefig(f"{plot_title}.pdf")
-    plt.show()
+    plt.savefig(f"plots/evidence/{sv_id}.pdf")
 
 
 def extract_hetero_homozygous(row):

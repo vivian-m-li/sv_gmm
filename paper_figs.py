@@ -1,3 +1,4 @@
+import ast
 import os
 import subprocess
 import random
@@ -661,6 +662,32 @@ def plot_sv_short_long_reads(sv_id, sample_ids):
     )
 
 
+def find_example_svs():
+    df = pd.read_csv("1kgp/svs_n_modes.csv")
+    df.rename(columns={"sv_id": "id"}, inplace=True)
+    ancestry = pd.read_csv("1kgp/ancestry_dissimilarity.csv")
+    df = df.merge(ancestry, on="id")
+    df = df.sort_values(by="dissimilarity", ascending=False)
+    df = df[(df["confidence"] == "high") & (df["num_modes"] == 3) & (df["dissimilarity"] >= 0.5)]
+    collapsed = pd.read_csv("1kgp/sv_stats_collapsed.csv")
+    for _, row in df.iterrows():
+        sv_id = row["id"]
+        # check if there are bam files for samples in each mode
+        modes = ast.literal_eval(collapsed[collapsed["id"] == sv_id]["modes"].values[0])
+        can_plot = [False for _ in range(len(modes))]
+        for i, mode in enumerate(modes):
+            for sample_id in mode["sample_ids"]:
+                bam_path = f"long_reads/bam_files/{sv_id}/{sample_id}.bam"
+                if os.path.exists(bam_path):
+                    can_plot[i] = True
+                    break
+        if all(can_plot):
+            print("plotting", sv_id)
+            plot_sv_short_long_reads(sv_id, [])
+        else:
+            print("skipping", sv_id)
+
+
 def plot_sv_breakdown():
     """Figure 4 - horizontal bar charts of the breakdown of SVs by number of modes"""
     full_df = get_sv_stats_collapsed_df()
@@ -788,9 +815,9 @@ if __name__ == "__main__":
     #     "synthetic_data/data/B_r0.8500000000000001_svlen802_n66_fa6914bc-f836-4f50-8a14-5cc0b56a50c9.vcf",
     # )
     # plot_sv_breakdown()
-    plot_sv_short_long_reads("HGSV_776", ["HG00096"])
-    plot_sv_short_long_reads("HGSV_54541", ["HG03548", "HG00149"])
-    plot_sv_short_long_reads("HGSV_183773", ["HG03442", "HG02895", "NA19331"])
+    # plot_sv_short_long_reads("HGSV_776", ["HG00096"])
+    # plot_sv_short_long_reads("HGSV_54541", ["HG03548", "HG00149"])
+    # plot_sv_short_long_reads("HGSV_183773", ["HG03442", "HG02895", "NA19331"])
+    find_example_svs()
+        
 
-    # 3 mode options
-    # HGSV_199579, HGSV_120349
