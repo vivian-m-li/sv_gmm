@@ -154,7 +154,7 @@ def filter_and_plot_sequences_bokeh(
     R: int,
     insert_size_lookup: Dict[str, int],
     sig: int = 50,
-    min_pairs: int = 5,  # minimum number of paired end reads for a sample needed to keep the sample
+    min_pairs: int = 2,  # minimum number of paired end reads for a sample needed to keep the sample
     plot_bokeh: bool,
 ) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
     """
@@ -402,7 +402,7 @@ def get_intercepts(
     R: int,
     insert_size_lookup: Dict[str, int],
     plot_bokeh: bool = False,
-    min_pairs: int = 5,
+    min_pairs: int = 2,
 ) -> Tuple[np.ndarray[Tuple[float, int]], List[Evidence]]:
     """
     DEPRECATED: use process_data instead
@@ -452,7 +452,7 @@ def process_data(
     L: int,
     R: int,
     insert_size_lookup: Dict[str, int],
-    min_pairs: int = 5,  # minimum number of paired end reads for a sample needed to keep the sample
+    min_pairs: int = 2,  # minimum number of paired end reads for a sample needed to keep the sample
     plot_bokeh: bool = False,  # deprecated
     file_name: Optional[str],  # deprecated - used for plotting
 ):
@@ -530,7 +530,7 @@ def run_viz_gmm(
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
     insert_size_lookup: Optional[Dict[str, int]] = None,
-    min_pairs: int = 5,
+    min_pairs: int = 2,
     sv_id: Optional[str] = None,
     stem: str = "1kgp",
 ):
