@@ -482,6 +482,7 @@ def write_ancestry_dissimilarity(stem: str = "1kgp"):
                 dissimilarities.append(dissimilarity)
 
         results_df.loc[len(results_df)] = [
+            row["id"],
             row["chr"],
             row["start"],
             row["stop"],

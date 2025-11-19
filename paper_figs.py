@@ -8,13 +8,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Rectangle
 from matplotlib.lines import Line2D
+from matplotlib.ticker import FixedLocator
 from collections import Counter, defaultdict
 from viz import plot_2d_coords, get_evidence_by_mode, plot_single_sv
 from query_sv import query_stix
 from process_data import process_data, run_viz_gmm
 from em import run_gmm
-from helper import get_sv_stats_collapsed_df, get_sv_lookup, get_sv_chr
-from gmm_types import COLORS
+from helper import get_sv_stats_collapsed_df, get_sv_lookup, get_sv_chr, calc_af
+from gmm_types import COLORS, SUPERPOPULATIONS, SUBPOPULATIONS, ANCESTRY_COLORS
 from matplotlib.gridspec import GridSpec
 
 
@@ -828,16 +829,244 @@ def plot_sv_breakdown():
     plt.show()
 
 
+def plot_af_delta_histogram():
+    """Figure 5 - Histogram of allele frequency changes after splitting SVs."""
+    sv_df = get_sv_stats_collapsed_df()
+    sv_df = sv_df[sv_df["num_samples"] > 10]
+    original_afs = sv_df[sv_df["num_modes"] == 1]["af"].values
+    sv_df = sv_df[sv_df["num_modes"].isin([2, 3])]
+    original_afs_split = sv_df["af"].values
+
+    # calculate delta ratios
+    delta_ratios = []
+    for _, row in sv_df.iterrows():
+        n_homozygous = 0
+        n_heterozygous = 0
+        modes = ast.literal_eval(row["modes"])
+        mode_afs = []
+
+        for mode in modes:
+            n_homozygous += mode["num_homozygous"]
+            n_heterozygous += mode["num_heterozygous"]
+            af = calc_af(mode["num_homozygous"], mode["num_heterozygous"], 2504)
+            mode_afs.append(af)
+
+        original_af = calc_af(n_homozygous, n_heterozygous, 2504)
+        for af in mode_afs:
+            if original_af > 0:
+                delta = af / original_af
+                delta_ratios.append(delta)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    ax.hist(delta_ratios, bins=20, color="black", alpha=0.8, edgecolor="white")
+    ax.set_xlim(-0.005, 1.015)
+
+    ax_box = ax.inset_axes([0.4, 0.65, 0.4, 0.3])
+    ax_box.boxplot(
+        [
+            original_afs[original_afs <= 0.5],
+            original_afs_split[original_afs_split <= 0.5],
+        ],
+        positions=[1, 2],
+        widths=0.4,
+        patch_artist=True,
+        boxprops=dict(facecolor="lightgrey", color="black"),
+        medianprops=dict(color="black"),
+        whiskerprops=dict(color="black"),
+        capprops=dict(color="black"),
+        flierprops=dict(marker="o", color="black", markersize=5),
+    )
+    ax_box.set_xticks([1, 2])
+    ax_box.set_xticklabels(
+        ["Unsplit SVs", "Split SVs"],
+        fontsize=12,
+    )
+    ax_box.set_ylabel("Original Allele\nFrequency", fontsize=12)
+    ax_box.set_ylim(0, 0.5)
+    ax_box.tick_params(axis="y", labelsize=12)
+    ax_box.yaxis.set_major_locator(FixedLocator(np.arange(0, 0.51, 0.1)))
+
+    ax.set_xlabel("Allele Frequency Ratio, New/Original", fontsize=14)
+    ax.set_ylabel("Count", fontsize=14)
+    ax.tick_params(axis="both", labelsize=14)
+    # ax.xaxis.set_major_locator(FixedLocator(np.arange(0, 1.1, 0.2)))
+    # ax.yaxis.set_major_locator(FixedLocator(np.arange(0, 181, 20)))
+    # ax.xaxis.set_minor_locator(FixedLocator(np.arange(0, 1.1, 0.1)))
+    # ax.yaxis.set_minor_locator(FixedLocator(np.arange(0, 181, 10)))
+    # ax.tick_params(axis="x", which="minor", length=4, labelbottom=False)
+    # ax.tick_params(axis="y", which="minor", length=4, labelleft=False)
+    plt.tight_layout()
+    plt.savefig("plots/af_delta_histogram.pdf")
+    plt.show()
+
+
+def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
+    ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
+    sv_df = get_sv_stats_collapsed_df()
+    sv_df = sv_df[sv_df["num_modes"] > 1]
+
+    populations = (
+        SUPERPOPULATIONS if by == "superpopulation" else SUBPOPULATIONS
+    )[::-1]
+
+    comparisons = [np.zeros(len(populations)) for _ in range(len(populations))]
+    all_comparisons = [
+        np.zeros(len(populations)) for _ in range(len(populations))
+    ]
+    for _, row in sv_df.iterrows():
+        modes = ast.literal_eval(row["modes"])
+        sp_by_mode = []
+        for mode in modes:
+            sample_ids = mode["sample_ids"]
+            pops = set()
+            for sample_id in sample_ids:
+                ancestry_row = ancestry_df[
+                    ancestry_df["Sample name"] == sample_id
+                ]
+                pop_key = (
+                    "Superpopulation code"
+                    if by == "superpopulation"
+                    else "Population code"
+                )
+                population = ancestry_row[pop_key].values[0].split(",")[0]
+                pops.add(population)
+            sp_by_mode.append(pops)
+
+        for i, p1 in enumerate(populations):
+            all_sp = [sp for mode in sp_by_mode for sp in mode]
+            if p1 not in all_sp:
+                continue
+            for j_idx, p2 in enumerate(populations[i + 1 :]):
+                j = i + j_idx + 1
+                if p2 not in all_sp:
+                    continue
+                all_comparisons[i][j] += 1
+                all_comparisons[j][i] += 1
+                for mode in sp_by_mode:
+                    if p1 in mode and p2 in mode:
+                        comparisons[i][j] += 1
+                        comparisons[j][i] += 1
+                        break
+
+    for i in range(len(populations)):
+        for j in range(len(populations)):
+            if i == j:
+                comparisons[i][j] = 1
+            elif all_comparisons[i][j] == 0:
+                comparisons[i][j] = 0
+            else:
+                comparisons[i][j] /= all_comparisons[i][j]
+
+    population_lookup = {}
+    for i, row in ancestry_df.iterrows():
+        population_lookup[row["Population code"]] = row["Superpopulation code"]
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    im = ax.imshow(comparisons, cmap="Blues", interpolation="nearest")
+    ax.set_yticks(range(len(populations)))
+    ax.set_xticklabels([])
+    ax.set_xticks([])
+    ax.set_yticklabels(populations, fontsize=12)
+    ax.text(7, -3.25, "Superpopulation", fontsize=14)
+    # ax.set_xlabel("Superpopulation", fontsize=14, labelpad=20)
+    ax.set_ylabel("Population" if by == "population" else "", fontsize=14)
+    ax.set_ylim(len(populations) - 0.5, -2.5)
+    if by == "population":
+        superpop_seen = set()
+        for i, label in enumerate(populations):
+            superpop = population_lookup[label]
+            if superpop not in superpop_seen:
+                ax.text(
+                    i + 0.03,
+                    -1,
+                    superpop,
+                    color="whitesmoke",
+                    fontsize=14,
+                    zorder=2,
+                )
+                superpop_seen.add(superpop)
+
+                if i != 0:
+                    ax.axhline(
+                        y=i - 0.5,
+                        color="black",
+                        linestyle="--",
+                        linewidth=0.8,
+                        zorder=10,
+                    )
+                    ax.axvline(
+                        x=i - 0.5,
+                        color="black",
+                        linestyle="--",
+                        linewidth=0.8,
+                        zorder=10,
+                    )
+
+            rect = Rectangle(
+                (i - 0.5, -2.5),
+                1,
+                2,
+                linewidth=0,
+                edgecolor="none",
+                facecolor=ANCESTRY_COLORS[superpop],
+                alpha=0.9,
+                zorder=1,
+            )
+            ax.add_patch(rect)
+
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    rect_border = Rectangle(
+        (-0.5, -0.5),
+        len(populations),
+        len(populations),
+        linewidth=1,
+        edgecolor="black",
+        facecolor="none",
+        zorder=3,
+    )
+    ax.add_patch(rect_border)
+    cbar = plt.colorbar(im, fraction=0.046, pad=0.1)
+    cbar.set_label("Clustering Likelihood", fontsize=12, labelpad=10)
+    cbar.ax.tick_params(labelsize=14)
+    ax.tick_params(bottom=False, top=False, labelbottom=False)
+    ax.text(
+        0.5,
+        -0.1,
+        "Spacing",
+        fontsize=14,
+        color="white",
+        ha="center",
+        va="center",
+        transform=ax.transAxes,
+    )
+    plt.savefig("plots/ancestry_comparison.pdf", bbox_inches="tight")
+    plt.show()
+
+
 if __name__ == "__main__":
-    # synthetic_data_fig()
-    # synthetic_data_additional_svs()
+    # Figure 1
     # methods_figure_viz(
     #     [(100000, 100802), (100060, 100741)],
     #     "synthetic_data/data/B_r0.8500000000000001_svlen802_n66_fa6914bc-f836-4f50-8a14-5cc0b56a50c9.vcf",
     # )
+
+    # Figure 2
+    # synthetic_data_fig()
+    # synthetic_data_additional_svs()
+
+    # Figure 3
     # plot_sv_breakdown()
+
+    # Figure 4
     # plot_sv_short_long_reads("HGSV_776", ["HG00096"])
     # plot_sv_short_long_reads("HGSV_54541", ["HG03548", "HG00149"])
-    plot_sv_short_long_reads(
-        "HGSV_1289", ["HG00537", "NA19383", "NA19350"], skip_evidence_plot=True
-    )
+    # plot_sv_short_long_reads(
+    #     "HGSV_1289", ["HG00537", "NA19383", "NA19350"], skip_evidence_plot=True
+    # )
+
+    # Figure 5
+    # plot_af_delta_histogram()
+    compare_sv_ancestry_by_mode(by="population")
