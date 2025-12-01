@@ -293,6 +293,7 @@ def query_stix(
             shutil.move(processed_output_file, home_processed_output_file)
 
     # remove samples queried by stix but missing in the 1000genomes columns
+    # this happens because the extended high coverage dataset includes samples that did not appear in the original study
     sample_ids = get_sample_ids(file_root)
     missing_keys = set(squiggle_data.keys()) - sample_ids
     for key in missing_keys:

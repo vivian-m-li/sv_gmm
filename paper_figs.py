@@ -162,8 +162,8 @@ def plot_reciprocal_overlap_svlen(
 def synthetic_data_fig():
     """Synthetic data results comparison: my method vs. GATK clustering methods"""
     cases = ["B", "C", "D"]
-    sample_size = 313
-    svlen = 802
+    sample_size = 66  # 11, 21, 66, 206, 303
+    svlen = 51  # 51, 167, 802, 3377, 17352
     df = load_synthetic_data_results(sample_size)
     df = df[df["svlen"] == svlen]
 
@@ -226,7 +226,7 @@ def synthetic_data_fig():
 
             overlaps = np.array(sorted(total.keys()))
             acc = np.array([right[o] / total[o] for o in overlaps])
-            fps = np.array([false_positives[o] for o in overlaps])
+            fps = np.array([false_positives[o] / total[o] for o in overlaps])
             all_overlaps.append(overlaps)
             all_accs.append(acc)
             all_fps.append(fps)
@@ -320,8 +320,8 @@ def synthetic_data_fig():
         wspace=0.15,
         hspace=0.37,
     )
-    plt.savefig("plots/synthetic_data.pdf")
-    plt.savefig("plots/synthetic_data.png")
+    plt.savefig(f"plots/synthetic_data_n={sample_size}_len={svlen}.pdf")
+    plt.savefig(f"plots/synthetic_data_n={sample_size}_len={svlen}.png")
     plt.show()
 
 
@@ -1054,7 +1054,7 @@ if __name__ == "__main__":
     # )
 
     # Figure 2
-    # synthetic_data_fig()
+    synthetic_data_fig()
     # synthetic_data_additional_svs()
 
     # Figure 3
@@ -1069,4 +1069,4 @@ if __name__ == "__main__":
 
     # Figure 5
     # plot_af_delta_histogram()
-    compare_sv_ancestry_by_mode(by="population")
+    # compare_sv_ancestry_by_mode(by="population")
