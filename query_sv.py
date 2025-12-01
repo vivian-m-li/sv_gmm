@@ -53,8 +53,10 @@ def reverse_giggle_format(l: str, r: str):  # noqa741
     stop = int(r.split("-")[1])
     return chr, start, stop
 
-
 def lookup_sv_position(sv_id: str, stem: str = "1kgp"):
+    """
+    Looks up the chr, start, stop for an SV Id
+    """
     lookup = pd.read_csv(f"{stem}/sv_lookup.csv")
     row = lookup[lookup["id"] == sv_id]
     if row.empty:
@@ -67,6 +69,11 @@ def lookup_sv_position(sv_id: str, stem: str = "1kgp"):
 
 
 def load_squiggle_data(filename: str, rewrite_file: bool = False):
+    """
+    Takes in a file name and reads it in. Gets the read evidence for
+    each sample 
+    If there is no file of that name, then returns empty dictionary
+    """
     squiggle_data = {}
     if not os.path.isfile(filename):
         return squiggle_data
@@ -120,6 +127,7 @@ def parse_input(input: str) -> str:
 
 
 def get_reference_samples(
+    # Gets the samples with the homozygous reference genotype (0, 0)
     squiggle_data: Dict[str, np.ndarray[float]],
     chr: str,
     start: int,
@@ -142,6 +150,11 @@ def query_stix_bash(
     long_reads: bool,
     scratch: bool,
 ):
+    """
+    Runs the appropriate bash query file which simply uses STIX to get all the read
+    data within the defined coordinate space.
+    NOT SURE IF THIS ALSO ONLY GETS THE DELETION EVIDENCE (e.g. split or discordant pairs)
+    """
     bash_file = "query_stix.sh"
     if long_reads:
         bash_file = "query_stix_lr.sh"
@@ -224,10 +237,11 @@ def query_stix(
     if sv_id == "" and (l == "" or r == ""):
         raise ValueError("Missing SV position or ID")
 
-    file_root = "1kgp"
+    file_root = "1kgp" ## another hard coding
     if reference_genome == "grch37":
         file_root = "grch37"
 
+    # if an SV id is provided, then get the chromosomes for that
     if sv_id != "":
         chr, start, stop = lookup_sv_position(sv_id, file_root)
         l = giggle_format(chr, start)  # noqa741
@@ -269,7 +283,7 @@ def query_stix(
     else:
         # check if this sv has already been queried for in the home directory
         if not os.path.isfile(home_output_file):
-            multi_files = reference_genome == "grch38"
+            multi_files = reference_genome == "grch38" # this seems like a potential hard code problem
             query_stix_bash(
                 l,
                 r,
@@ -299,6 +313,7 @@ def query_stix(
         squiggle_data.pop(key, None)
 
     if filter_reference:
+        # remove any samples with the homozygous reference genotypes (0,0)
         ref_samples = get_reference_samples(
             squiggle_data, chr, start, stop, file_root
         )

@@ -2,11 +2,28 @@
 
 This tool is designed to analyze genetic data, determining the number of structural variants in a reading frame using statistical inference.
 
+
+## 1. Get the Sample SV evidence coordinates
+
+#### 1A. Edit query_stix.sh, query_stix_multifile.sh, query_stix_lr.sh to use the correct file paths for the STIX database (indices) and STIX build.
+
+#### 1B. Run query_sv.py to query the samples and reads found within the coordinates of a predefined structural variant
+
+* For short-read data (default), queries STIX for all evidence within the region, +- 50 bp from each end of the provided SV
+* For long-read data (requires option `-lr`), Parses the cigar string for all available 1kg samples with long-read data
+  * From the sample's entire cram file, download the bam file corresponding to an SV region (start - tolerance, stop + tolerance). Look for instances of "D" in the cigar string, corresponding with a deletion in the selected region. Use the size of the original SV +- an additional tolerance to find deletions that match the original SV. Using the reference, calculate the start/stop/length of the deletion.
+
 Input: chr:left_paired_end_start-left_paired_end_end, chr:right_paired_end_start-right_paired_end_end\
 Example: python query_sv.py -l 1:113799624-113799624 -r 1:113800089-113800089
 
-### 1a. Short-read data: Query STIX for all evidence within the region, +- 50 bp from each end
+**NOTES FROM HOPE:** 
+* I'd like to see the full arguments for this since there are several missing (e.g. don't I need)
+* I also don't understand the input. From my understanding, this is where I'd get the samples and coordinates that would support an SV of interest (e.g. deletion between positions 1000 and 2000 of chr2). I believe these would be some helpful examples:
+* Example 1: Deletion at chr2 between positions 1000 and 2000 in gr38: `python query_sv.py -l 2:1000-1000 -r 2:2000-2000 -ref grch38`
+* Example 2: SV Id from 1000 genomes project of SV1000 in grch37: `python query_sv.py -id SV1000 -ref grch37`
+* Example 3: Deletion at chromsome 10 with end points estimated to be between 2000 and 2050, and 4000 and 4100, using long read data: `python query_sv.py -l 10:2000-2050 -r 10:4000-4100 -lr` -- THIS MAY BE INCORRECT BASED ON THE CODE AS THE CODE WOULD DO 2050-4100 (reverse_giggle_format).
 
+#### Example Output for Short-read data
 | File ID | File Name               | Chr | Left Start | Left End  | Chr | Right Start | Right End | Paired/Split |
 | ------- | ----------------------- | --- | ---------- | --------- | --- | ----------- | --------- | ------------ |
 | 0       | alt_sort/HG00096.bed.gz | 1   | 113799540  | 113799639 | 1   | 113800087   | 113800187 | paired       |
@@ -15,9 +32,10 @@ Example: python query_sv.py -l 1:113799624-113799624 -r 1:113800089-113800089
 | 3       | alt_sort/HG00100.bed.gz | 1   | 113799234  | 113799333 | 1   | 113800090   | 113800190 | paired       |
 | 3       | alt_sort/HG00100.bed.gz | 1   | 113799235  | 113799334 | 1   | 113800139   | 113800238 | paired       |
 
-### 1b: Long-read data: Parse the cigar string for all available 1kg samples with long-read data
-
-From the sample's entire cram file, download the bam file corresponding to an SV region (start - tolerance, stop + tolerance). Look for instances of "D" in the cigar string, corresponding with a deletion in the selected region. Use the size of the original SV +- an additional tolerance to find deletions that match the original SV. Using the reference, calculate the start/stop/length of the deletion.
+#### Example Output for Long-read data
+| File ID | File Name               | Chr | Left Start | Left End  | Chr | Right Start | Right End | Paired/Split |
+| ------- | ----------------------- | --- | ---------- | --------- | --- | ----------- | --------- | ------------ |
+| 0       | alt_sort/HG00096.bed.gz | 1   | X  | X | 1   | X   | X | Split       |
 
 ### 2. Filter out reference samples & process the output so that the each line contains pairs of evidence that correspond with one sample
 
