@@ -20,18 +20,6 @@ SCRATCH_DIR = "/scratch/Users/vili4418"
 STIX_DATA_DIR = "/Users/vili4418/sv/sv_gmm/data_dump/lr_stix_output/"
 
 
-def get_completed_samples():
-    file = "long_reads/completed_samples.txt"
-    samples = []
-    with open(file, "r") as f:
-        for line in f.readlines():
-            sample_id = line.strip()
-            if sample_id == "":
-                continue
-            samples.append(sample_id)
-    return samples
-
-
 def write_completed_sample(sample_id: str):
     """Writes the completed sample id to the completed samples file."""
     file = "long_reads/completed_samples.txt"
@@ -223,7 +211,8 @@ def process_sample_evidence_inner(
     seen_reads = set()
     for _, row in reads.iterrows():
         read_start, read_stop = row["l_start"], row["l_end"]
-        if read_start in seen_reads: # read start is used to identify unique reads
+        # read start is used to identify unique reads
+        if read_start in seen_reads:
             continue
         bam_region = f"chr{sv_chr}:{read_start}-{read_stop}"
         output_file = get_bam_file(
@@ -240,7 +229,9 @@ def process_sample_evidence_inner(
                 output_file, (sv_start, sv_stop), (read_start, read_stop)
             )
         except Exception as e:
-            print(f"Redo sample {sv_id}-{sample_id}, read coords {(read_start, read_stop)}. Error={e}")
+            print(
+                f"Redo sample {sv_id}-{sample_id}, read coords {(read_start, read_stop)}. Error={e}"
+            )
             remove_bam_file(output_file, scratch=True)
             continue
 

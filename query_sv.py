@@ -22,7 +22,10 @@ PLOT_DIR = "plots"
 
 
 def txt_to_df(filename: str, long_reads: bool) -> pd.DataFrame:
-    """Parses the raw stix output into a dataframe."""
+    """
+    Parses the raw stix output into a dataframe.
+    Be aware that file_id is not a unique identifier if there are multiple shards for an index.
+    """
     column_names = [
         "file_id",
         "sample_id",
@@ -188,7 +191,7 @@ def write_processed_output(
     """
     df = txt_to_df(output_file, long_reads)
 
-    grouped = df.groupby("file_id")
+    grouped = df.groupby("sample_id")
     squiggle_data = {}
     processed_stix_output = []
     for _, group in grouped:
