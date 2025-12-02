@@ -47,6 +47,7 @@ def vcf_to_bed():
 def write_cipos():
     vcf_in = pysam.VariantFile(f"{FILE_DIR}/1kg.subset.vcf.gz")
     df = pd.DataFrame(columns=["id", "cipos", "ciend"])
+    # a record will have all 4 fields cipos, cipos95, ciend, and ciend95 or none of the above
     n_missing = 0
     for record in vcf_in.fetch():
         info = dict(record.info)

@@ -710,17 +710,30 @@ def find_example_svs():
             print("skipping", sv_id)
 
 
-def plot_sv_breakdown():
-    """Figure 4 - horizontal bar charts of the breakdown of SVs by number of modes"""
+def get_all_svs_df():
     full_df = get_sv_stats_collapsed_df()
     full_df["num_samples_run"] = full_df["num_samples"] - (
         full_df["num_pruned"] + full_df["num_reference"]
     )
     full_df.rename(columns={"id": "sv_id"}, inplace=True)
-    full_df = full_df[["sv_id", "num_samples_run"]]
+    full_df = full_df[
+        [
+            "chr",
+            "sv_id",
+            "af",
+            "svlen",
+            "num_samples_run",
+            "modes",
+        ]
+    ]
     df = pd.read_csv("1kgp/svs_n_modes.csv")
     df = df.merge(full_df, on="sv_id")
+    return df
 
+
+def plot_sv_breakdown():
+    """Figure 4 - horizontal bar charts of the breakdown of SVs by number of modes"""
+    df = get_all_svs_df()
     sv_lookup = get_sv_lookup()
     svs_not_enough_evidence = df[
         (df["num_samples_run"] > 0) & (df["num_samples_run"] <= 10)
@@ -1046,6 +1059,61 @@ def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
     plt.show()
 
 
+def print_sv_stats():
+    """Compares various statistics between split SVs and all SVs."""
+    df = get_all_svs_df()
+
+    # load breakpoint precision info
+    # 9367 rows have cipos info
+    bp_df = pd.read_csv("1kgp/cipos.csv")
+    bp_df.rename(columns={"id": "sv_id"}, inplace=True)
+    bp_df["bp_precision"] = bp_df["ciend"].apply(
+        lambda x: eval(x)[1] - eval(x)[0]
+    ) + bp_df["cipos"].apply(lambda x: eval(x)[1] - eval(x)[0])
+    df = df.merge(bp_df[["sv_id", "bp_precision"]], on="sv_id", how="left")
+
+    # get only SVs that were actually clustered
+    df = df[df["num_samples_run"] > 10]
+    split = df[df["num_modes"] > 1]
+
+    for field in ["af", "svlen", "num_samples_run", "bp_precision"]:
+        # filter by non-nan values
+        filtered_df = df[~df[field].isna()]
+        filtered_split = split[~split[field].isna()]
+        print(
+            f"{field} (all): {pd.DataFrame(filtered_df[field].values).describe()}"
+        )
+        print(
+            f"{field} (split): {pd.DataFrame(filtered_split[field].values).describe()}\n"
+        )
+
+    # print what % of SVs were split per chromosome
+    split_counts = split["chr"].value_counts().sort_index()
+    all_counts = df["chr"].value_counts().sort_index()
+    chr_labels = all_counts.index.tolist()
+    split_percents = [
+        split_counts.get(chr, 0) / all_counts[chr] for chr in chr_labels
+    ]
+    print("% SVs split per chr", pd.DataFrame(split_percents).describe(), "\n")
+
+    # print reciprocal overlap stats for split SVs
+    reciprocal_overlaps = []
+    for _, row in split.iterrows():
+        modes = ast.literal_eval(row["modes"])
+        sv_coords = [(mode["start"], mode["end"]) for mode in modes]
+        for i in range(len(sv_coords)):
+            for j in range(i + 1, len(sv_coords)):
+                L1, R1 = sv_coords[i]
+                L2, R2 = sv_coords[j]
+                overlap = max(0, min(R1, R2) - max(L1, L2))
+                union = max(R1, R2) - min(L1, L2)
+                ro = overlap / union if union > 0 else 0
+                reciprocal_overlaps.append(ro)
+    print("reciprocal overlap", pd.DataFrame(reciprocal_overlaps).describe())
+
+    # gene overlapping proportion
+
+
 if __name__ == "__main__":
     # Figure 1
     # methods_figure_viz(
@@ -1054,7 +1122,7 @@ if __name__ == "__main__":
     # )
 
     # Figure 2
-    synthetic_data_fig()
+    # synthetic_data_fig()
     # synthetic_data_additional_svs()
 
     # Figure 3
@@ -1070,3 +1138,6 @@ if __name__ == "__main__":
     # Figure 5
     # plot_af_delta_histogram()
     # compare_sv_ancestry_by_mode(by="population")
+
+    # Print SV stats
+    print_sv_stats()
