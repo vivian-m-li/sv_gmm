@@ -159,10 +159,80 @@ def plot_reciprocal_overlap_svlen(
     plt.show()
 
 
+def parameter_sweep(case: str = "B"):
+    sample_sizes = [11, 21, 66, 206, 313]
+    svlens = [51, 167, 802, 3377, 17352][::-1]
+    tprs = np.zeros((len(sample_sizes), len(svlens)))
+    fprs = np.zeros((len(sample_sizes), len(svlens)))
+    ros = np.zeros((len(sample_sizes), len(svlens)))
+    for i, sample_size in enumerate(sample_sizes):
+        df = load_synthetic_data_results(sample_size)
+        df = df[(df["gmm_model"] == "2d") & (df["case"] == case)]
+        for j, svlen in enumerate(svlens):
+            subset_df = df[df["svlen"] == svlen]
+            if subset_df.empty:
+                print("missing data for", sample_size, svlen)
+                continue
+            right, total, false_positives = (
+                defaultdict(int),
+                defaultdict(int),
+                defaultdict(int),
+            )
+            for _, row in subset_df.iterrows():
+                overlap = row["r"]
+                total[overlap] += 1
+                if row["expected_num_modes"] == row["num_modes"]:
+                    right[overlap] += 1
+                if row["num_modes"] > row["expected_num_modes"]:
+                    false_positives[overlap] += 1
+
+            # find the overlap at which
+            overlaps = np.array(sorted(total.keys()))
+            acc = np.array([right[o] / total[o] for o in overlaps])
+            fps = np.array([false_positives[o] / total[o] for o in overlaps])
+            tprs[i, j] = np.mean(acc)
+            fprs[i, j] = np.mean(fps)
+            ro_idx = np.where(acc > 0.5)[0]
+            if len(ro_idx) > 0:
+                ros[i, j] = overlaps[ro_idx[-1]]
+
+    fig, axs = plt.subplots(1, 3, figsize=(15, 3))
+    for i, (values, label) in enumerate(
+        zip([tprs, fprs, ros], ["Average TPR", "Average FPR", "r at TPR > 0.5"])
+    ):
+        ax = axs[i]
+        im = ax.imshow(values.T, cmap="Blues", vmin=0, vmax=1)
+        # put numbers in each cell
+        for j in range(len(sample_sizes)):
+            for k in range(len(svlens)):
+                text = f"{values[j, k]:.2f}"
+                ax.text(
+                    j,
+                    k,
+                    text,
+                    ha="center",
+                    va="center",
+                    color="black" if values[j, k] < 0.5 else "white",
+                    fontsize=10,
+                )
+        ax.set_xticks(np.arange(len(sample_sizes)))
+        ax.set_yticks(np.arange(len(svlens)))
+        ax.set_xticklabels(sample_sizes)
+        ax.set_yticklabels(svlens)
+        ax.set_xlabel("Sample Size", fontsize=14)
+        ax.set_ylabel("SV Length", fontsize=14)
+        ax.set_title(label, fontsize=16)
+        fig.colorbar(im, ax=axs[i])
+
+    plt.tight_layout()
+    plt.savefig(f"plots/parameter_sweep_heatmaps_case{case}.pdf")
+    plt.show()
+
+
 def synthetic_data_fig():
     """Synthetic data results comparison: my method vs. GATK clustering methods"""
     cases = ["B", "C", "D"]
-    sample_size = 66  # 11, 21, 66, 206, 303
+    sample_size = 66  # 11, 21, 66, 206, 313
     svlen = 51  # 51, 167, 802, 3377, 17352
     df = load_synthetic_data_results(sample_size)
     df = df[df["svlen"] == svlen]
@@ -220,9 +290,7 @@ def synthetic_data_fig():
                 if row["expected_num_modes"] == row["num_modes"]:
                     right[overlap] += 1
                 if row["num_modes"] > row["expected_num_modes"]:
-                    false_positives[overlap] += (
-                        row["num_modes"] - row["expected_num_modes"]
-                    )
+                    false_positives[overlap] += 1
 
             overlaps = np.array(sorted(total.keys()))
             acc = np.array([right[o] / total[o] for o in overlaps])
@@ -1122,6 +1190,8 @@ if __name__ == "__main__":
     # )
 
     # Figure 2
+    for case in ["B", "C", "D"]:
+        parameter_sweep(case)
     # synthetic_data_fig()
     # synthetic_data_additional_svs()
 
@@ -1140,4 +1210,4 @@ if __name__ == "__main__":
     # compare_sv_ancestry_by_mode(by="population")
 
     # Print SV stats
-    print_sv_stats()
+    # print_sv_stats()
