@@ -18,6 +18,8 @@ Example: python query_sv.py -l 1:113799624-113799624 -r 1:113800089-113800089
 
 **NOTES FROM HOPE:** 
 * I'd like to see the full arguments for this since there are several missing (e.g. don't I need)
+* What are ALL the outputs I get? And what files do I need available?
+* What are the software requirements?
 * I also don't understand the input. From my understanding, this is where I'd get the samples and coordinates that would support an SV of interest (e.g. deletion between positions 1000 and 2000 of chr2). I believe these would be some helpful examples:
 * Example 1: Deletion at chr2 between positions 1000 and 2000 in gr38: `python query_sv.py -l 2:1000-1000 -r 2:2000-2000 -ref grch38`
 * Example 2: SV Id from 1000 genomes project of SV1000 in grch37: `python query_sv.py -id SV1000 -ref grch37`
