@@ -311,18 +311,18 @@ def query_stix(
 
     # remove samples queried by stix but missing in the 1000genomes columns
     # this happens because the extended high coverage dataset includes samples that did not appear in the original study
-    sample_ids = get_sample_ids(file_root)
-    missing_keys = set(squiggle_data.keys()) - sample_ids
-    for key in missing_keys:
-        squiggle_data.pop(key, None)
+    #sample_ids = get_sample_ids(file_root)
+    #missing_keys = set(squiggle_data.keys()) - sample_ids
+    #for key in missing_keys:
+    #    squiggle_data.pop(key, None)
 
-    if filter_reference:
-        # remove any samples with the homozygous reference genotypes (0,0)
-        ref_samples = get_reference_samples(
-            squiggle_data, chr, start, stop, file_root
-        )
-        for ref in ref_samples:
-            squiggle_data.pop(ref, None)
+    #if filter_reference:
+    #    # remove any samples with the homozygous reference genotypes (0,0)
+    #    ref_samples = get_reference_samples(
+    #        squiggle_data, chr, start, stop, file_root
+    #    )
+    #    for ref in ref_samples:
+    #        squiggle_data.pop(ref, None)
 
     if run_gmm:
         if len(squiggle_data) == 0:

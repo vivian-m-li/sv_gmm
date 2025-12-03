@@ -2,6 +2,17 @@
 
 This tool is designed to analyze genetic data, determining the number of structural variants in a reading frame using statistical inference.
 
+## Requirements
+* Tested with python version 3.11.3 and 3.12.10. 
+  * If running on Fiji, use `module load python/3.11.3`
+* Create a python environment and install the packages listed in requirements
+```
+python -m venv venv
+source venv/bin/activate
+pip3 install -r requirements.txt
+```
+
+
 
 ## 1. Get the Sample SV evidence coordinates
 
