@@ -186,21 +186,26 @@ def get_sample_sequencing_centers():
     return df
 
 
-def extract_data_from_deletions_df():
+def extract_data_from_deletions_df(input_dir: str = "1kgp"):
     """Extracts sample ids and splits deletions into separate files by chromosome. Makes SV lookup more efficient if the SV chromosome is known."""
     deletions_df = get_deletions_df()
 
+    # write sample ids for easy lookup later
     sample_ids = set(deletions_df.columns[11:-1])
-    with open("1kgp/sample_ids.txt", "w") as f:
+    with open(f"{input_dir}/sample_ids.txt", "w") as f:
         for sample_id in sample_ids:
             f.write(f"{sample_id}\n")
 
+    # write an sv lookup for easier access to sv info without loading entire deletions_df
+    sv_lookup_df = deletions_df[["id", "chr", "start", "stop", "svlen", "af"]]
+    sv_lookup_df.to_csv(f"{input_dir}/sv_lookup.csv", index=False)
+
     # split the deletions into separate files by chromosome
     # another option is to create a lookup for row index in deletions_df by chr, start, stop, sample_id and
-    os.mkdir("1kgp/deletions_by_chr")
+    os.mkdir(f"{input_dir}/deletions_by_chr")
     for i in range(1, 23):
         chr_df = deletions_df[deletions_df["chr"] == i]
-        chr_df.to_csv(f"1kgp/deletions_by_chr/chr{i}.csv", index=False)
+        chr_df.to_csv(f"{input_dir}/deletions_by_chr/chr{i}.csv", index=False)
 
 
 """Handle varying insert sizes"""
