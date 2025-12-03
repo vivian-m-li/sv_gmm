@@ -91,7 +91,8 @@ def calc_log_likelihood(
         hinge_loss_d = calc_hinge_loss_d(len(x), mu)
         hinge_loss = calc_hinge_loss(len(x), mu, L, R)
         # use both criteria to determine hinge loss - clusters need to be far apart in L-length space and have low reciprocal overlap
-        logL -= (0.5 * hinge_loss_d) + (0.5 * hinge_loss)
+        # reduce the hinge loss from high reciprocal overlap
+        logL -= (0.75 * hinge_loss_d) + (0.25 * hinge_loss)
     return logL
 
 
