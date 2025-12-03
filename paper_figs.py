@@ -984,6 +984,17 @@ def plot_af_delta_histogram():
 
 def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
     ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
+
+    # create a lookup of sample_id:population
+    # if multiple populations are listed for a sample, take the first one (only happens for 1 sample)
+    sample_lookup = {
+        row["Sample name"]: row["Population code"].split(",")[0]
+        for _, row in ancestry_df.iterrows()
+    }
+    population_lookup = {}
+    for i, row in ancestry_df.iterrows():
+        population_lookup[row["Population code"]] = row["Superpopulation code"]
+
     sv_df = get_sv_stats_collapsed_df()
     sv_df = sv_df[sv_df["num_modes"] > 1]
 
@@ -991,66 +1002,46 @@ def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
         SUPERPOPULATIONS if by == "superpopulation" else SUBPOPULATIONS
     )[::-1]
 
-    comparisons = [np.zeros(len(populations)) for _ in range(len(populations))]
+    # all instances of two populations co-occurring so we can normalize later
     all_comparisons = [
         np.zeros(len(populations)) for _ in range(len(populations))
     ]
+    # actual co-occurrences in same mode after splitting
+    comparisons = [np.zeros(len(populations)) for _ in range(len(populations))]
+
+    # check pairwise population comparisons for each SV
     for _, row in sv_df.iterrows():
         modes = ast.literal_eval(row["modes"])
-        sp_by_mode = []
-        for mode in modes:
-            sample_ids = mode["sample_ids"]
-            pops = set()
-            for sample_id in sample_ids:
-                ancestry_row = ancestry_df[
-                    ancestry_df["Sample name"] == sample_id
-                ]
-                pop_key = (
-                    "Superpopulation code"
-                    if by == "superpopulation"
-                    else "Population code"
-                )
-                population = ancestry_row[pop_key].values[0].split(",")[0]
-                pops.add(population)
-            sp_by_mode.append(pops)
-
-        for i, p1 in enumerate(populations):
-            all_sp = [sp for mode in sp_by_mode for sp in mode]
-            if p1 not in all_sp:
-                continue
-            for j_idx, p2 in enumerate(populations[i + 1 :]):
-                j = i + j_idx + 1
-                if p2 not in all_sp:
+        mode_by_samples = {}
+        for mode_index, mode in enumerate(modes):
+            for sample in mode["sample_ids"]:
+                mode_by_samples[sample] = mode_index
+        for s1, m1 in mode_by_samples.items():
+            p1 = populations.index(sample_lookup[s1])
+            for s2, m2 in mode_by_samples.items():
+                if s1 == s2:
                     continue
-                all_comparisons[i][j] += 1
-                all_comparisons[j][i] += 1
-                for mode in sp_by_mode:
-                    if p1 in mode and p2 in mode:
-                        comparisons[i][j] += 1
-                        comparisons[j][i] += 1
-                        break
+                p2 = populations.index(sample_lookup[s2])
+                all_comparisons[p1][p2] += 1
+                if m1 == m2:  # in the same mode
+                    comparisons[p1][p2] += 1
 
+    # normalize comparisons by all_comparisons
     for i in range(len(populations)):
         for j in range(len(populations)):
-            if i == j:
-                comparisons[i][j] = 1
-            elif all_comparisons[i][j] == 0:
+            if all_comparisons[i][j] == 0:
                 comparisons[i][j] = 0
             else:
                 comparisons[i][j] /= all_comparisons[i][j]
 
-    population_lookup = {}
-    for i, row in ancestry_df.iterrows():
-        population_lookup[row["Population code"]] = row["Superpopulation code"]
-
-    fig, ax = plt.subplots(figsize=(6, 6))
+    # fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+    fig, ax = plt.subplots(1, 1, figsize=(6, 6))
     im = ax.imshow(comparisons, cmap="Blues", interpolation="nearest")
     ax.set_yticks(range(len(populations)))
     ax.set_xticklabels([])
     ax.set_xticks([])
     ax.set_yticklabels(populations, fontsize=12)
     ax.text(7, -3.25, "Superpopulation", fontsize=14)
-    # ax.set_xlabel("Superpopulation", fontsize=14, labelpad=20)
     ax.set_ylabel("Population" if by == "population" else "", fontsize=14)
     ax.set_ylim(len(populations) - 0.5, -2.5)
     if by == "population":
@@ -1190,8 +1181,8 @@ if __name__ == "__main__":
     # )
 
     # Figure 2
-    for case in ["B", "C", "D"]:
-        parameter_sweep(case)
+    # for case in ["B", "C", "D"]:
+    #     parameter_sweep(case)
     # synthetic_data_fig()
     # synthetic_data_additional_svs()
 
@@ -1207,7 +1198,7 @@ if __name__ == "__main__":
 
     # Figure 5
     # plot_af_delta_histogram()
-    # compare_sv_ancestry_by_mode(by="population")
+    compare_sv_ancestry_by_mode(by="population")
 
     # Print SV stats
     # print_sv_stats()
