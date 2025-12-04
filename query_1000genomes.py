@@ -128,7 +128,7 @@ def load_vcf():
     print(f"Removed {n_removed} rows without genotypes")
     df = pd.DataFrame(data, columns=header)
     df["num_samples"] = 0
-    df.to_csv(f"{FILE_DIR}/deletions_df.csv", index=False)
+    df.to_csv(f"{FILE_DIR}/deletions.csv", index=False)
 
 
 def get_num_samples(
@@ -158,7 +158,7 @@ def get_num_samples(
 
 @break_after(hours=167, minutes=55)  # break before the job is cancelled
 def get_num_sv(long_reads: bool = False):
-    filename = f"{FILE_DIR}/deletions_df.csv"
+    filename = f"{FILE_DIR}/deletions.csv"
     df = pd.read_csv(filename, low_memory=False)
 
     processed_files = os.listdir(PROCESSED_FILE_DIR)
@@ -190,7 +190,7 @@ def get_num_sv(long_reads: bool = False):
 
 
 def main():
-    # if not os.path.isfile(f"{FILE_DIR}/deletions_df.csv"):
+    # if not os.path.isfile(f"{FILE_DIR}/deletions.csv"):
     #     load_vcf()
     get_num_sv(True)
 

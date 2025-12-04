@@ -19,7 +19,7 @@ PROCESSED_SVS_DIR = "processed_svs"
 
 def get_deletions_df(stem: str = "1kgp"):
     """Returns a dataframe of all SVs and genotypes for each sample."""
-    return pd.read_csv(f"{stem}/deletions_df.csv", low_memory=False)
+    return pd.read_csv(f"{stem}/deletions.csv", low_memory=False)
 
 
 def get_sv_stats_df(stem: str = "1kgp"):
@@ -399,10 +399,10 @@ Analyze SVs that have been run
 """
 
 
-def write_sv_stats_collapsed(stem: str = "1kgp"):
+def write_sv_stats_collapsed(output_dir: str):
     """Collapse sv_stats_converge.csv to sv_stats_collapsed.csv by picking the most common result for each SV."""
-    df = get_sv_stats_converge_df(stem)
-    svs_n_modes = pd.read_csv(f"{stem}/svs_n_modes.csv")
+    df = get_sv_stats_converge_df(output_dir)
+    svs_n_modes = pd.read_csv(f"{output_dir}/svs_n_modes.csv")
     svs_n_modes.rename(
         columns={"num_modes": "consensus_num_modes"}, inplace=True
     )
@@ -411,7 +411,9 @@ def write_sv_stats_collapsed(stem: str = "1kgp"):
         1  # set num_modes = 1 where it is 0
     )
     sv_ids = df["id"].unique()
-    with open(f"{stem}/sv_stats_collapsed.csv", mode="w", newline="") as out:
+    with open(
+        f"{output_dir}/sv_stats_collapsed.csv", mode="w", newline=""
+    ) as out:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
         csv_writer.writeheader()
@@ -443,10 +445,10 @@ def write_sv_stats_collapsed(stem: str = "1kgp"):
             csv_writer.writerow(row.to_dict())
 
 
-def write_ancestry_dissimilarity(stem: str = "1kgp"):
+def write_ancestry_dissimilarity(output_dir: str):
     """Calculate the dissimilarity in ancestry between modes for each SV."""
-    df = get_sv_stats_collapsed_df()
-    confidence = pd.read_csv(f"{stem}/svs_n_modes.csv")
+    df = get_sv_stats_collapsed_df(output_dir)
+    confidence = pd.read_csv(f"{output_dir}/svs_n_modes.csv")
     confidence.rename(
         columns={"num_modes": "consensus_num_modes"}, inplace=True
     )
@@ -502,19 +504,19 @@ def write_ancestry_dissimilarity(stem: str = "1kgp"):
     results_df["num_samples"] = results_df["num_samples"].astype(int)
 
     results_df = results_df.sort_values(by="dissimilarity", ascending=False)
-    results_df.to_csv(f"{stem}/ancestry_dissimilarity.csv", index=False)
+    results_df.to_csv(f"{output_dir}/ancestry_dissimilarity.csv", index=False)
 
 
-def get_n_modes(stem: str = "1kgp"):
+def get_n_modes(input_dir: str, output_dir: str):
     """Get the number of modes and confidence for each SV."""
     sv_df = pd.DataFrame(
         columns=["sv_id", "num_modes", "confidence", "num_modes_2"]
     )
 
-    deletions_df = get_deletions_df()
+    deletions_df = get_deletions_df(input_dir)
     deletions_df = deletions_df[deletions_df["num_samples"] > 0]
     svs = deletions_df["id"].unique()
-    df = get_sv_stats_converge_df(stem)
+    df = get_sv_stats_converge_df(output_dir)
     for sv_id in svs:
         rows = df[df["id"] == sv_id]
 
@@ -549,7 +551,7 @@ def get_n_modes(stem: str = "1kgp"):
         new_row.append(num_modes_2)
 
         sv_df.loc[len(sv_df)] = new_row
-    sv_df.to_csv(f"{stem}/svs_n_modes.csv", index=False)
+    sv_df.to_csv(f"{output_dir}/svs_n_modes.csv", index=False)
 
 
 def get_sv_outliers(sv_rows, threshold: float):
@@ -572,12 +574,12 @@ def get_sv_outliers(sv_rows, threshold: float):
     return confident_outliers
 
 
-def get_outliers(stem: str = "1kgp", threshold: float = 0.9):
+def get_outliers(output_dir: str, threshold: float = 0.9):
     """Get outlier samples for each SV and write to a file."""
-    n_modes_df = pd.read_csv(f"{stem}/svs_n_modes.csv")
+    n_modes_df = pd.read_csv(f"{output_dir}/svs_n_modes.csv")
     n_modes_df = n_modes_df[n_modes_df["num_modes"] > 1]
-    df = get_sv_stats_converge_df()
-    with open(f"{stem}/outliers.csv", "w") as f:
+    df = get_sv_stats_converge_df(output_dir)
+    with open(f"{output_dir}/outliers.csv", "w") as f:
         csv_writer = csv.writer(f)
         csv_writer.writerow(["sv_id", "sample_ids"])
         for _, row in n_modes_df.iterrows():
@@ -587,10 +589,10 @@ def get_outliers(stem: str = "1kgp", threshold: float = 0.9):
                 csv_writer.writerow([row["sv_id"], ",".join(outliers)])
 
 
-def get_consensus_svs(stem: str = "1kgp"):
+def get_consensus_svs(output_dir: str):
     """Get consensus SVs by averaging the start/stop/length of each mode across all runs of the SV."""
-    df = get_sv_stats_converge_df()
-    svs_n_modes = pd.read_csv(f"{stem}/svs_n_modes.csv")
+    df = get_sv_stats_converge_df(output_dir)
+    svs_n_modes = pd.read_csv(f"{output_dir}/svs_n_modes.csv")
     sv_ids = svs_n_modes["sv_id"].unique()
     consensus_df = pd.DataFrame(
         columns=[
@@ -635,7 +637,7 @@ def get_consensus_svs(stem: str = "1kgp"):
                 row.append(int(np.mean(values)))
                 row.append(np.std(values))
             consensus_df.loc[len(consensus_df)] = row
-    consensus_df.to_csv(f"{stem}/consensus_svs.csv", index=False)
+    consensus_df.to_csv(f"{output_dir}/consensus_svs.csv", index=False)
 
 
 def get_new_gene_intersections():
@@ -881,20 +883,20 @@ def write_samplot_files():
         )
 
 
-def write_post_processed_files(stem: str = "1kgp"):
+def write_post_processed_files(input_dir: str, output_dir: str):
     """Write all post-processed files after running the dirichlet process with short or long reads."""
-    get_n_modes(stem)
+    get_n_modes(input_dir, output_dir)
     print("wrote svs_n_modes.csv")
-    if stem == "long_reads":
+    if input_dir == "long_reads":
         compare_short_long_reads()
         print("wrote sr_lr_merged.csv")
-    get_consensus_svs(stem)
+    get_consensus_svs(output_dir)
     print("wrote consensus_svs.csv")
-    write_sv_stats_collapsed(stem)
+    write_sv_stats_collapsed(output_dir)
     print("wrote sv_stats_collapsed.csv")
-    get_outliers(stem)
+    get_outliers(output_dir)
     print("wrote outliers.csv")
-    write_ancestry_dissimilarity(stem)
+    write_ancestry_dissimilarity(output_dir)
     print("wrote ancestry_dissimilarity.csv")
     # get_new_gene_intersections() # need bedtools to run this
 

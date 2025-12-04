@@ -74,7 +74,7 @@ Noise is added to generated data to replicate short-read data, and results are s
 
 ## 1kG Data Processing
 
-The data used for this project originates from the 1000 Genomes Project's original 2504 samples. All data is found in the `/scratch/Shares/layer/stix/indices/` directory on fiji. A pre-built [STIX](https://github.com/ryanlayer/stix) index is used to query genomic regions for short and long reads (by sample) that serve as evidence for the SV of interest. Low-coverage short read, high-coverage short read, and long-read data are all available. The deletions that were present in the initial 1kG analysis are found in `1kgp/1kg_hg38_deletions.vcf` or `1kgp/deletions_df.csv`.
+The data used for this project originates from the 1000 Genomes Project's original 2504 samples. All data is found in the `/scratch/Shares/layer/stix/indices/` directory on fiji. A pre-built [STIX](https://github.com/ryanlayer/stix) index is used to query genomic regions for short and long reads (by sample) that serve as evidence for the SV of interest. Low-coverage short read, high-coverage short read, and long-read data are all available. The deletions that were present in the initial 1kG analysis are found in `1kgp/1kg_hg38_deletions.vcf` or `1kgp/deletions.csv`.
 
 ### Low-coverage short-reads
 
@@ -106,7 +106,7 @@ After writing the `sv_stats_converge.csv` file, run the `write_post_processed_fi
 
 To create the flowchart figure, we need:
 
-- the number of total deletions (from `deletions_df.csv`)
+- the number of total deletions (from `deletions.csv`)
 - the number of SVs with no or too little evidence in STIX (<= 10 samples)
   - no evidence: `deletions_df.shape[0] - svs_n_modes.shape[0]`
   - little evidence: `svs_n_modes[svs_n_modes["confidence"] == "inconclusive"].shape[0]`
