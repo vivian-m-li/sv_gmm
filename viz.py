@@ -29,10 +29,8 @@ from helper import (
     calc_af,
 )
 from gmm_types import (
-    EstimatedGMM,
     Evidence,
     SVStat,
-    Sample,
     ANCESTRY_COLORS,
     COLORS,
     GMM_AXES,
@@ -51,63 +49,6 @@ def random_color():
 
 def add_noise(value, scale=0.07):
     return value + np.random.normal(scale=scale)
-
-
-def get_evidence_by_mode(
-    gmm: EstimatedGMM,
-    sv_evidence: List[Evidence],
-    L: int,
-    R: int,
-    *,
-    gmm_model: str = "2d",
-) -> List[List[Evidence]]:
-    sv_evidence = np.array(sv_evidence)
-    data = []
-    for mode in gmm.x_by_mode:
-        data_by_mode = []
-        for x in mode:
-            if gmm_model == "1d_len":
-                data_by_mode.append((x + (R - L)))  # length
-            elif gmm_model == "1d_L":
-                data_by_mode.append((x + L))  # L-coordinate
-            else:
-                data_by_mode.append(
-                    (x[0] + (R - L), x[1] + L)
-                )  # (length, L-coordinate)
-        data.append(data_by_mode)
-    evidence_by_mode = [[] for _ in range(len(data))]
-    for evidence in sv_evidence:
-        for i, mode in enumerate(data):
-            try:
-                if gmm_model == "1d_len":
-                    mode_data = evidence.intercept  # length
-                elif gmm_model == "1d_L":
-                    mode_data = evidence.mean_l  # L-coordinate
-                else:
-                    mode_data = (
-                        evidence.intercept,
-                        evidence.mean_l,
-                    )  # (length, L-coordinate)
-                if (
-                    mode_data in mode
-                ):  # assumes that each mode has unique (length, L-coordinate) pairs
-                    evidence_by_mode[i].append(evidence)
-                    continue
-            except ValueError:
-                print(evidence)
-                print(mode)
-                raise ValueError
-    lengths_by_mode = [
-        np.mean([evidence.start_y for evidence in mode])
-        for mode in evidence_by_mode
-    ]
-    evidence_by_mode = [
-        x
-        for _, x in sorted(
-            zip(lengths_by_mode, evidence_by_mode), key=lambda pair: pair[0]
-        )
-    ]
-    return evidence_by_mode
 
 
 def get_mean_std(label: str, values: List[float]):
@@ -1001,38 +942,6 @@ def query_sample(sample: str, chr: str, L: int, R: int):
     )
     sequence = record_dict[chr].seq[L:R]
     return sequence
-
-
-def populate_sample_info(
-    sv_evidence: List[Evidence],
-    chr: str,
-    L: int,
-    R: int,
-    *,
-    stem: str,
-) -> None:
-    """
-    Populates each sample with its sex, population, and superpopulation information
-    """
-    ancestry_df = pd.read_csv(f"{stem}/ancestry.tsv", delimiter="\t")
-    deletions_df = pd.read_csv(f"{stem}/deletions_by_chr/chr{chr}.csv")
-    deletions_row = deletions_df[
-        (deletions_df["start"] == L) & (deletions_df["stop"] == R)
-    ].iloc[0]
-    for evidence in sv_evidence:
-        sample_id = evidence.sample.id
-        ancestry_row = ancestry_df[ancestry_df["Sample name"] == sample_id]
-        superpopulation = (
-            ancestry_row["Superpopulation code"].values[0].split(",")[0]
-        )
-        allele = deletions_row[sample_id]
-        evidence.sample = Sample(
-            id=sample_id,
-            sex=ancestry_row["Sex"].values[0],
-            population=ancestry_row["Population code"].values[0],
-            superpopulation=superpopulation,
-            allele=allele,
-        )
 
 
 def analyze_ancestry() -> None:

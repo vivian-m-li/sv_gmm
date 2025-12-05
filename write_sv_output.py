@@ -103,7 +103,7 @@ def get_raw_data(
     squiggle_data = query_stix(
         l=start,
         r=end,
-        reference_genome="grch38" if stem == "1kgp" else "grch37",
+        input_dir="1kgp",
         run_gmm=False,
         filter_reference=False,
     )

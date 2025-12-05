@@ -204,16 +204,21 @@ def run_dirichlet(
 
     if display_output:
         # show the last L-len plot
+        fig, ax = plt.subplots(figsize=(6, 4))
         plot_2d_coords(
+            ax,
             gmms[-1][1],
             L=L,
             R=R,
             axis1="L",
             axis2="Length",
             add_error_bars=False,
-            color_by="sequencing_center",
-            size_by="insert_size",
+            size_by="",
+            show_mode_stats=True,
+            show_1d_distributions=True,
         )
+        plt.tight_layout()
+        plt.show()
 
         # animate_dirichlet_heatmap(alphas)
         # animate_dirichlet(posterior_distributions)
