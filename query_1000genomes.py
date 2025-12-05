@@ -81,7 +81,7 @@ def get_num_samples(
         long_reads=long_reads,
     )
     if len(squiggle_data) > 0:
-        insert_size_lookup = get_insert_size_lookup()
+        insert_size_lookup = get_insert_size_lookup("1kgp/insert_sizes.csv")
         points, _ = process_data(
             squiggle_data,
             file_name=None,

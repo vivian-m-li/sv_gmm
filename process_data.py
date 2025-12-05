@@ -601,17 +601,12 @@ def process_data(
     return np.array(points), sv_evidence
 
 
-def get_insert_size_lookup(stem: str = "1kgp") -> Dict[str, int]:
+def get_insert_size_lookup(filename) -> Dict[str, int]:
     """Returns a dictionary mapping sample IDs to their mean insert sizes from sequencing high-coverage short-reads."""
     insert_size_df = pd.read_csv(
-        f"{stem}/insert_sizes.csv",
+        filename,
         dtype={"sample_id": str, "mean_insert_size": float},
     )
-    # temporary: use a constant insert size for all samples
-    # return {
-    #     sample_id: 450 for sample_id, mean_insert_size in insert_size_df.values
-    # }
-
     return {
         sample_id: int(mean_insert_size)
         for sample_id, mean_insert_size in insert_size_df.values
@@ -636,7 +631,7 @@ def run_viz_gmm(
 ):
     """Runs the GMM pipeline and visualizes the results."""
     if insert_size_lookup is None:
-        insert_size_lookup = get_insert_size_lookup(stem)
+        insert_size_lookup = get_insert_size_lookup(f"{stem}/insert_sizes.csv")
 
     # transforms data to cluster
     points, sv_evidence = process_data(

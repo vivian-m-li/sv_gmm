@@ -7,7 +7,7 @@ import csv
 import pysam
 import pandas as pd
 import numpy as np
-from process_data import run_viz_gmm
+from process_data import run_viz_gmm, get_insert_size_lookup
 from run_dirichlet import run_dirichlet
 from helper import get_sample_ids, get_deletions_df, calc_af
 from typing import List, Dict, Optional
@@ -169,8 +169,13 @@ def process_input_files(
 
     if not os.path.isfile(os.path.join(dir, insert_size_file)):
         write_default_insert_sizes(dir, sample_ids)
+        insert_size_lookup = get_insert_size_lookup(f"{dir}/insert_sizes.csv")
+    else:
+        insert_size_lookup = get_insert_size_lookup(
+            os.path.join(dir, insert_size_file)
+        )
 
-    return df
+    return df, insert_size_lookup
 
 
 def txt_to_df(filename: str) -> pd.DataFrame:
@@ -369,7 +374,7 @@ def query_stix(
     input_dir: str = "assets",
     output_dir: Optional[str] = None,
     sv_lookup_file: str = "deletions.csv",
-    insert_size_lookup: str = "insert_sizes.csv",
+    insert_size_file: str = "insert_sizes.csv",
     stix_index: Optional[str] = None,
     stix_database: Optional[str] = None,
     num_stix_shards: int = 1,
@@ -388,7 +393,9 @@ def query_stix(
         raise FileNotFoundError(f"SV lookup file {sv_lookup_file} not found.")
 
     # write input files that will be used later on during querying
-    df = process_input_files(input_dir, sv_lookup_file, insert_size_lookup)
+    df, insert_size_lookup = process_input_files(
+        input_dir, sv_lookup_file, insert_size_file
+    )
 
     if sv_id != "":
         chr, start, stop = lookup_sv_position(sv_id, input_dir)
@@ -507,6 +514,7 @@ def query_stix(
                 plot_bokeh=False,
                 sv_id=sv_id,
                 stem=input_dir,
+                insert_size_lookup=insert_size_lookup,
             )
         else:
             run_dirichlet(
@@ -538,7 +546,7 @@ def main():
     --input_dir: Input directory for incoming data (default: assets)
     --output_dir: Output directory for processed data (default: None)
     --sv_lookup: VCF or CSV file with structural variants (default: deletions.csv)
-    --insert_size_lookup: Insert size for each sample (default: insert_sizes.csv)
+    --insert_size_file: Insert size for each sample (default: insert_sizes.csv)
     --stix_index: Path to STIX index for querying sample reads.
     --stix_database: Path to STIX database for querying sample reads.
     --num_stix_shards: Number of shards the STIX index and database are split into (default: 1)
@@ -608,7 +616,7 @@ def main():
         default="deletions.csv",
     )
     parser.add_argument(
-        "--insert_size_lookup",
+        "--insert_size_file",
         type=str,
         help="Insert size for each sample. Defaults to 450 bp if not provided.",
         default="insert_sizes.csv",
@@ -642,7 +650,7 @@ def main():
         input_dir=args.input_dir,
         output_dir=args.output_dir,
         sv_lookup_file=args.sv_lookup,
-        insert_size_lookup=args.insert_size_lookup,
+        insert_size_file=args.insert_size_file,
         stix_index=args.stix_index,
         stix_database=args.stix_database,
         num_stix_shards=args.num_stix_shards,
