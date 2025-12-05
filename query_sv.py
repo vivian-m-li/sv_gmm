@@ -194,6 +194,10 @@ def txt_to_df(filename: str) -> pd.DataFrame:
         "r_end",
         "type",
     ]
+    # check if file is empty
+    if os.stat(filename).st_size == 0:
+        return pd.DataFrame(columns=column_names)
+
     df = pd.read_csv(filename, names=column_names, sep=r"\s+")
     df["sample_id"] = df["sample_id"].str.extract(
         r".*([A-Z]{2}\d{5}).*", expand=False
@@ -296,32 +300,41 @@ def query_stix_bash(
     r: int,
     output_dir: str,
     file_name: str,
+    stix_bin: str,
     index_path: str,
     database_path: str,
     num_shards: int,
 ):
     if num_shards > 1:
-        output_file = f"{output_dir}/partial_outputs/{file_name}"
+        if not os.path.exists(f"{output_dir}/partial_outputs"):
+            os.mkdir(f"{output_dir}/partial_outputs")
+        stix_output_file = f"{output_dir}/partial_outputs/{file_name}"
     else:
-        output_file = f"{output_dir}/{file_name}"
+        stix_output_file = f"{output_dir}/{file_name}"
 
-    subprocess.run(
+    stix_path = "/".join(index_path.split("/")[:-1])
+    results = subprocess.run(
         ["bash", "query_stix.sh"]
         + [
             l,
             r,
+            stix_path,
             index_path,
             database_path,
-            num_shards,
-            output_file,
+            str(num_shards),
+            stix_output_file,
+            stix_bin,
         ],
         capture_output=True,
         text=True,
     )
+    print(results.stdout)
+    print(results.stderr)
 
     # the query output from each shard was written to a different file, and we want to write them to the same file
     if num_shards > 1:
-        with open(f"{output_dir}/{file_name}.txt", "w") as out_file:
+        output_file = f"{output_dir}/{file_name}.txt"
+        with open(output_file, "w") as out_file:
             for i in range(num_shards):
                 with open(
                     f"{output_dir}/partial_outputs/{file_name}_{i}.txt", "r"
@@ -331,6 +344,11 @@ def query_stix_bash(
 
                 # remove partial file
                 os.remove(f"{output_dir}/partial_outputs/{file_name}_{i}.txt")
+        os.rmdir(f"{output_dir}/partial_outputs")
+    else:
+        output_file = f"{stix_output_file}.txt"
+
+    return output_file
 
 
 def write_processed_output(
@@ -375,6 +393,7 @@ def query_stix(
     output_dir: Optional[str] = None,
     sv_lookup_file: str = "deletions.csv",
     insert_size_file: str = "insert_sizes.csv",
+    stix_bin: Optional[str] = None,
     stix_index: Optional[str] = None,
     stix_database: Optional[str] = None,
     num_stix_shards: int = 1,
@@ -456,24 +475,21 @@ def query_stix(
 
         if output_file is None:
             # stix path is required if the SV evidence has not been queried for yet
-            if (
-                stix_index is None
-                or stix_database is None
-                or not os.path.isfile(stix_index)
-                or not os.path.isfile(stix_database)
-            ):
-                raise FileNotFoundError("Missing STIX index or database path.")
+            if stix_bin is None or stix_index is None or stix_database is None:
+                raise FileNotFoundError("Missing STIX executable, index, or database path.")
 
             # run the bash script to query stix
-            query_stix_bash(
+            output_file = query_stix_bash(
                 l,
                 r,
                 output_file_dir,
-                f"{file_name}.txt",
+                file_name,
+                stix_bin,
                 stix_index,
                 stix_database,
                 num_stix_shards,
             )
+
 
         # write the processed output file
         processed_data = write_processed_output(
@@ -547,8 +563,9 @@ def main():
     --output_dir: Output directory for processed data (default: None)
     --sv_lookup: VCF or CSV file with structural variants (default: deletions.csv)
     --insert_size_file: Insert size for each sample (default: insert_sizes.csv)
-    --stix_index: Path to STIX index for querying sample reads.
-    --stix_database: Path to STIX database for querying sample reads.
+    --stix_bin: Path to STIX executable
+    --stix_index: Path to STIX index for querying sample reads
+    --stix_database: Path to STIX database for querying sample reads
     --num_stix_shards: Number of shards the STIX index and database are split into (default: 1)
     """
 
@@ -622,6 +639,11 @@ def main():
         default="insert_sizes.csv",
     )
     parser.add_argument(
+        "--stix_bin",
+        type=str,
+        help="Path to STIX executable.",
+    )
+    parser.add_argument(
         "--stix_index",
         type=str,
         help="Path to STIX index for querying sample reads.",
@@ -651,6 +673,7 @@ def main():
         output_dir=args.output_dir,
         sv_lookup_file=args.sv_lookup,
         insert_size_file=args.insert_size_file,
+        stix_bin=args.stix_bin,
         stix_index=args.stix_index,
         stix_database=args.stix_database,
         num_stix_shards=args.num_stix_shards,
