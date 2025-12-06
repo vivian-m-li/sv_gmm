@@ -8,7 +8,7 @@ import pandas as pd
 import math
 from generate_data import generate_synthetic_sv_data
 from helper import reciprocal_overlap
-from gmm_types import GMM_MODELS, Evidence
+from gmm_types import Evidence
 from typing import Optional, List, Tuple
 from timeout import break_after
 
@@ -32,17 +32,15 @@ def write_reciprocal_overlap():
 
 def run_gmm(case, r, svs, weights, n_samples, results):
     """Generates synthetic data and runs the GMM on it. Appends the results to the multiprocessing-managed list to be written to a CSV later."""
-    for gmm_model in GMM_MODELS:
-        gmm, evidence_by_mode = generate_synthetic_sv_data(
-            1,
-            svs,
-            n_samples=n_samples,
-            p=weights,
-            gmm_model=gmm_model,
-        )
-        results.append(
-            [case, r, gmm_model, svs, n_samples, weights, gmm, evidence_by_mode]
-        )
+    gmm, evidence_by_mode = generate_synthetic_sv_data(
+        1,
+        svs,
+        n_samples=n_samples,
+        p=weights,
+    )
+    results.append(
+        [case, r, "2d", svs, n_samples, weights, gmm, evidence_by_mode]
+    )
 
 
 def get_len_L(evidence_by_mode: List[List[Evidence]]):
