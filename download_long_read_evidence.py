@@ -44,7 +44,7 @@ def find_failing_sv():
 def get_svs_by_sample():
     """Creates a lookup table of samples and the SVs that are 0/1, 1/0, or 1/1. Standalone function."""
     df = pd.read_csv("long_reads/long_read_samples.csv")
-    deletions_df = pd.read_csv("1kgp/deletions_df.csv")
+    deletions_df = pd.read_csv("1kgp/deletions.csv")
 
     lookup_df = pd.DataFrame(columns=["sample_id", "sv_id"])
     sv_alleles = set(["(0, 1)", "(1, 0)", "(1, 1)"])

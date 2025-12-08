@@ -1,27 +1,184 @@
 import os
 import sys
 import re
-import shutil
 import subprocess
 import argparse
 import csv
+import pysam
 import pandas as pd
 import numpy as np
-from process_data import run_viz_gmm
+from process_data import run_viz_gmm, get_insert_size_lookup
 from run_dirichlet import run_dirichlet
-from helper import get_sample_ids
-from typing import List, Dict
+from helper import get_sample_ids, get_deletions_df, calc_af
+from typing import List, Dict, Optional
 
 # Increase the field size limit to avoid triggering the error
 csv.field_size_limit(sys.maxsize)
 
-SCRATCH_DIR = "/scratch/Users/vili4418"
 FILE_DIR = "stix_output"
 PROCESSED_FILE_DIR = "processed_stix_output"
 PLOT_DIR = "plots"
 
+"""File processing functions to convert user-provided SV files into a format taken by SPLIT"""
 
-def txt_to_df(filename: str, long_reads: bool) -> pd.DataFrame:
+
+def load_vcf(dir: str, vcf_filename: str):
+    """Loads a VCF file and converts it to a CSV file for easier processing later."""
+    vcf_in = pysam.VariantFile(os.path.join(dir, vcf_filename))
+    header = [
+        "id",
+        "chr",
+        "start",
+        "stop",
+        "svlen",
+        "ref",
+        "alt",
+        "qual",
+        "filter",
+        "af",
+        "info",
+    ] + list(vcf_in.header.samples)
+    data = []
+    n_removed = 0
+    for record in vcf_in.fetch():
+        info = dict(record.info)
+        chr = record.chrom.strip("chr")
+        if info["SVTYPE"] != "DEL" or chr in ["X", "Y"]:
+            continue
+        row = [
+            record.id,
+            chr,
+            record.start,
+            record.stop,
+            record.rlen,
+            record.ref,
+            ",".join([str(alt) for alt in record.alts]),
+            record.qual,
+            record.filter.keys(),
+            info["AF"],  # placeholder until it's recalculated below
+            info,
+        ]
+        n_homozygous = 0
+        n_heterozygous = 0
+        for sample in record.samples:
+            gt = record.samples[sample]["GT"]
+            gt = tuple([0 if g is None else g for g in gt])  # convert None to 0
+            gt_sum = sum(gt)
+            if gt_sum == 1:
+                n_heterozygous += 1
+            elif gt_sum == 2:
+                n_homozygous += 1
+            row.append(gt)
+
+        af = calc_af(n_homozygous, n_heterozygous, len(record.samples))
+        row[9] = af
+
+        # only keep the rows where at least one sample has an allele for the SV (i.e. a 1 in their GT)
+        # removed 1760 rows without genotypes
+        if n_homozygous > 0 or n_heterozygous > 0:
+            data.append(row)
+
+        else:
+            n_removed += 1
+
+    # print(f"Removed {n_removed} rows without genotypes")
+    df = pd.DataFrame(data, columns=header)
+    df["num_samples"] = 0
+    df.to_csv(f"{dir}/deletions.csv", index=False)
+    return df
+
+
+def extract_data_from_deletions_df(
+    input_dir: str = "1kgp",
+    chr: Optional[str] = None,
+    df: Optional[pd.DataFrame] = None,
+):
+    """Extracts sample ids and splits deletions into separate files by chromosome. Makes SV lookup more efficient if the SV chromosome is known."""
+    deletions_df = get_deletions_df() if df is None else df
+
+    # write sample ids for easy lookup later
+    sample_ids = set(deletions_df.columns[11:-1])
+    with open(f"{input_dir}/sample_ids.txt", "w") as f:
+        for sample_id in sample_ids:
+            f.write(f"{sample_id}\n")
+
+    # write an sv lookup for easier access to sv info without loading entire deletions_df
+    sv_lookup_df = deletions_df[["id", "chr", "start", "stop", "svlen", "af"]]
+    sv_lookup_df.to_csv(f"{input_dir}/sv_lookup.csv", index=False)
+
+    # split the deletions into separate files by chromosome
+    os.mkdir(f"{input_dir}/svs_by_chr")
+    chrs = range(1, 23) if chr is None else [chr]
+    for i in chrs:
+        chr_df = deletions_df[deletions_df["chr"] == i]
+        chr_df.to_csv(f"{input_dir}/svs_by_chr/chr{i}.csv", index=False)
+
+
+def write_sample_ids_file(dir: str, df: pd.DataFrame):
+    """Writes a list of sample IDs."""
+    sample_ids = set(df.columns[11:-1])
+    with open(f"{dir}/sample_ids.txt", "w") as f:
+        for sample_id in sample_ids:
+            f.write(f"{sample_id}\n")
+    return sample_ids
+
+
+def write_sv_lookup(dir: str, df: pd.DataFrame):
+    """Writes an SV lookup file for easier access to SV info without loading entire vcf/csv."""
+    sv_lookup_df = df[["id", "chr", "start", "stop", "svlen", "af"]]
+    sv_lookup_df.to_csv(f"{dir}/sv_lookup.csv", index=False)
+
+
+def write_svs_by_chr(dir: str, df: pd.DataFrame, chr: Optional[str]):
+    """Splits the SVs into separate files by chromosome for easier access during querying."""
+    if not os.path.isdir(f"{dir}/svs_by_chr"):
+        os.mkdir(f"{dir}/svs_by_chr")
+    chrs = range(1, 23) if chr is None else [chr]
+    for i in chrs:
+        chr_df = df[df["chr"] == int(i)]
+        chr_df.to_csv(f"{dir}/svs_by_chr/chr{i}.csv", index=False)
+
+
+def write_default_insert_sizes(
+    dir: str, sample_ids: str, default_size: int = 450
+):
+    """Writes a default insert size file with the specified default size for each sample."""
+    with open(os.path.join(dir, "insert_sizes.csv"), "w") as f:
+        f.write("sample_id,mean_insert_size\n")
+        for sample_id in sample_ids:
+            f.write(f"{sample_id},{default_size}\n")
+
+
+def process_input_files(
+    dir: str, sv_lookup_file: str, insert_size_file: Optional[str]
+):
+    """Processes input files for more efficient lookup during querying."""
+
+    if sv_lookup_file.endswith(".vcf") or sv_lookup_file.endswith(".vcf.gz"):
+        df = load_vcf(dir, sv_lookup_file)
+    else:
+        df = pd.read_csv(os.path.join(dir, sv_lookup_file))
+
+    if not os.path.isfile(os.path.join(dir, "sample_ids.txt")):
+        sample_ids = write_sample_ids_file(dir, df)
+    else:
+        sample_ids = get_sample_ids(dir)
+
+    if not os.path.isfile(os.path.join(dir, "sv_lookup.csv")):
+        write_sv_lookup(dir, df)
+
+    if not os.path.isfile(os.path.join(dir, insert_size_file)):
+        write_default_insert_sizes(dir, sample_ids)
+        insert_size_lookup = get_insert_size_lookup(f"{dir}/insert_sizes.csv")
+    else:
+        insert_size_lookup = get_insert_size_lookup(
+            os.path.join(dir, insert_size_file)
+        )
+
+    return df, insert_size_lookup
+
+
+def txt_to_df(filename: str) -> pd.DataFrame:
     """
     Parses the raw stix output into a dataframe.
     Be aware that file_id is not a unique identifier if there are multiple shards for an index.
@@ -37,12 +194,14 @@ def txt_to_df(filename: str, long_reads: bool) -> pd.DataFrame:
         "r_end",
         "type",
     ]
+    # check if file is empty
+    if os.stat(filename).st_size == 0:
+        return pd.DataFrame(columns=column_names)
+
     df = pd.read_csv(filename, names=column_names, sep=r"\s+")
     df["sample_id"] = df["sample_id"].str.extract(
-        r"/([^/]+)\.bed\.gz", expand=False
+        r".*([A-Z]{2}\d{5}).*", expand=False
     )
-    if long_reads:  # format is slightly different
-        df["sample_id"] = df["sample_id"].str.extract(r"^([^\.]+)")
     return df
 
 
@@ -56,11 +215,9 @@ def reverse_giggle_format(l: str, r: str):  # noqa741
     stop = int(r.split("-")[1])
     return chr, start, stop
 
-def lookup_sv_position(sv_id: str, stem: str = "1kgp"):
-    """
-    Looks up the chr, start, stop for an SV Id
-    """
-    lookup = pd.read_csv(f"{stem}/sv_lookup.csv")
+
+def lookup_sv_position(sv_id: str, dir: str = "1kgp"):
+    lookup = pd.read_csv(f"{dir}/sv_lookup.csv")
     row = lookup[lookup["id"] == sv_id]
     if row.empty:
         raise ValueError(f"SV ID {sv_id} not found in lookup table.")
@@ -71,12 +228,7 @@ def lookup_sv_position(sv_id: str, stem: str = "1kgp"):
     return chr, start, stop
 
 
-def load_squiggle_data(filename: str, rewrite_file: bool = False):
-    """
-    Takes in a file name and reads it in. Gets the read evidence for
-    each sample 
-    If there is no file of that name, then returns empty dictionary
-    """
+def load_processed_data(filename: str, rewrite_file: bool = False):
     squiggle_data = {}
     if not os.path.isfile(filename):
         return squiggle_data
@@ -86,7 +238,7 @@ def load_squiggle_data(filename: str, rewrite_file: bool = False):
         for row in reader:
             if len(row) < 2:
                 continue
-            pattern = r"[\S]*([A-Z][A-Z]\d\d\d\d\d)"
+            pattern = r"[\S]*([A-Z]{2}\d{5})"
             match = re.match(pattern, row[0])
             if match is None:
                 print("Invalid sample ID:", row[0])
@@ -135,9 +287,9 @@ def get_reference_samples(
     chr: str,
     start: int,
     stop: int,
-    file_root: str = "1kgp",
+    input_dir: str,
 ) -> List[str]:
-    df = pd.read_csv(f"{file_root}/deletions_by_chr/chr{chr}.csv")
+    df = pd.read_csv(f"{input_dir}/svs_by_chr/chr{chr}.csv")
     row = df[(df["start"] == start) & (df["stop"] == stop)]
     samples = squiggle_data.keys()
     ref_samples = [col for col in samples if row.iloc[0][col] == "(0, 0)"]
@@ -149,9 +301,10 @@ def query_stix_bash(
     r: int,
     output_dir: str,
     file_name: str,
-    multi_files: bool,  # if using grch38 reference, the STIX index and db are split into shards
-    long_reads: bool,
-    scratch: bool,
+    stix_bin: str,
+    index_path: str,
+    database_path: str,
+    num_shards: int,
 ):
     """
     Runs the appropriate bash query file which simply uses STIX to get all the read
@@ -166,20 +319,37 @@ def query_stix_bash(
 
     if multi_files or long_reads:
         output_file = f"{output_dir}/partial_outputs/{file_name}"
+    if num_shards > 1:
+        if not os.path.exists(f"{output_dir}/partial_outputs"):
+            os.mkdir(f"{output_dir}/partial_outputs")
+        stix_output_file = f"{output_dir}/partial_outputs/{file_name}"
     else:
-        output_file = f"{output_dir}/{file_name}"
+        stix_output_file = f"{output_dir}/{file_name}"
 
-    subprocess.run(
-        ["bash", bash_file] + [l, r, output_file, str(not scratch)],
+    stix_path = "/".join(index_path.split("/")[:-1])
+    results = subprocess.run(
+        ["bash", "query_stix.sh"]
+        + [
+            l,
+            r,
+            stix_path,
+            index_path,
+            database_path,
+            str(num_shards),
+            stix_output_file,
+            stix_bin,
+        ],
         capture_output=True,
         text=True,
     )
+    print(results.stdout)
+    print(results.stderr)
 
-    if multi_files or long_reads:
-        # the query output from each shard was written to a different file, and we want to write them to the same file
-        with open(f"{output_dir}/{file_name}.txt", "w") as out_file:
-            n_shards = 23 if long_reads else 8
-            for i in range(n_shards):
+    # the query output from each shard was written to a different file, and we want to write them to the same file
+    if num_shards > 1:
+        output_file = f"{output_dir}/{file_name}.txt"
+        with open(output_file, "w") as out_file:
+            for i in range(num_shards):
                 with open(
                     f"{output_dir}/partial_outputs/{file_name}_{i}.txt", "r"
                 ) as partial_file:
@@ -188,12 +358,16 @@ def query_stix_bash(
 
                 # remove partial file
                 os.remove(f"{output_dir}/partial_outputs/{file_name}_{i}.txt")
+        os.rmdir(f"{output_dir}/partial_outputs")
+    else:
+        output_file = f"{stix_output_file}.txt"
+
+    return output_file
 
 
 def write_processed_output(
     output_file: str,
     processed_output_file: str,
-    long_reads: bool,
     l_col: str = "l_start",
     r_col: str = "r_end",
 ) -> Dict[str, np.ndarray[float]]:
@@ -202,7 +376,7 @@ def write_processed_output(
     For short reads, use l_start and r_end since the breakpoints are calculated from the clustering of paired-end reads.
     For long reads, use l_end and r_start to calculate the deletion. All long reads returned from stix are split reads, so the l_start and r_end coordinates capture the entire read length (not just the deletion).
     """
-    df = txt_to_df(output_file, long_reads)
+    df = txt_to_df(output_file)
 
     grouped = df.groupby("sample_id")
     squiggle_data = {}
@@ -229,109 +403,140 @@ def query_stix(
     l: str = "",
     r: str = "",
     sv_id: str = "",
+    input_dir: str = "assets",
+    output_dir: Optional[str] = None,
+    sv_lookup_file: str = "deletions.csv",
+    insert_size_file: str = "insert_sizes.csv",
+    stix_bin: Optional[str] = None,
+    stix_index: Optional[str] = None,
+    stix_database: Optional[str] = None,
+    num_stix_shards: int = 1,
     run_gmm: bool = True,
     filter_reference: bool = True,
     single_trial: bool = True,
     plot: bool = True,
-    reference_genome: str = "grch38",  # or grch37
     long_reads: bool = False,
-    scratch: bool = False,
 ):
+    # check that the user inputted an sv id or sv coordinates
     if sv_id == "" and (l == "" or r == ""):
-        raise ValueError("Missing SV position or ID")
+        raise ValueError("Missing SV coordinates or ID")
 
-    file_root = "1kgp" ## another hard coding
-    if reference_genome == "grch37":
-        file_root = "grch37"
+    # check for required input files and process for more efficient lookup
+    if not os.path.isfile(os.path.join(input_dir, sv_lookup_file)):
+        raise FileNotFoundError(f"SV lookup file {sv_lookup_file} not found.")
+
+    # write input files that will be used later on during querying
+    df, insert_size_lookup = process_input_files(
+        input_dir, sv_lookup_file, insert_size_file
+    )
 
     # if an SV id is provided, then get the chromosomes for that
     if sv_id != "":
-        chr, start, stop = lookup_sv_position(sv_id, file_root)
+        chr, start, stop = lookup_sv_position(sv_id, input_dir)
         l = giggle_format(chr, start)  # noqa741
         r = giggle_format(chr, stop)
     else:
         chr, start, stop = reverse_giggle_format(l, r)
 
+    # finish setting up directories and file paths
+    if not os.path.isfile(
+        os.path.join(input_dir, "svs_by_chr", f"chr{chr}.csv")
+    ):
+        write_svs_by_chr(input_dir, df, chr)
+
     # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
     if chr.lower() in ["x", "y"]:
-        return {}
+        raise ValueError("X/Y chromosomes are not supported.")
 
-    # read/write files in scratch if flagged
-    if scratch:
-        output_file_dir = f"{SCRATCH_DIR}/{FILE_DIR}"
-        processed_file_dir = f"{SCRATCH_DIR}/{PROCESSED_FILE_DIR}"
-    else:
-        output_file_dir = FILE_DIR
-        processed_file_dir = PROCESSED_FILE_DIR
-    plot_dir = PLOT_DIR
+    # set filepaths
+    if output_dir is None:
+        output_dir = input_dir
+    output_file_dir = f"{output_dir}/{FILE_DIR}"
+    processed_file_dir = f"{output_dir}/{PROCESSED_FILE_DIR}"
+    plot_dir = f"{output_dir}/{PLOT_DIR}"
 
     for directory in [output_file_dir, processed_file_dir, plot_dir]:
         if not os.path.exists(directory):
             os.mkdir(directory)
 
-    # set up the correct file paths in case scratch is True
-    file_name = f"{l}_{r}"
-    output_file = f"{output_file_dir}/{file_name}.txt"
-    processed_output_file = f"{processed_file_dir}/{file_name}.csv"
-    home_output_file = f"{FILE_DIR}/{file_name}.txt"
-    home_processed_output_file = f"{PROCESSED_FILE_DIR}/{file_name}.csv"
-
-    # if reference_genome == "grch37" and not scratch:
-    #     output_file = f"{file_root}/{output_file}"
-    #     processed_output_file = f"{file_root}/{processed_output_file}"
-
-    # check if this sv has already been queried for and processed in the home directory
-    if os.path.isfile(home_processed_output_file):
-        squiggle_data = load_squiggle_data(home_processed_output_file)
+    file_name = f"{l}_{r}"  # base file name
+    # check if this SV evidence has already been queried for and processed in the home directory
+    # check multiple locations for this file
+    processed_output_file = None
+    for dir in [
+        input_dir,
+        output_dir,
+        f"{input_dir}/{PROCESSED_FILE_DIR}",
+        processed_file_dir,
+    ]:
+        if os.path.isfile(f"{dir}/{file_name}.csv"):
+            processed_output_file = f"{dir}/{file_name}.csv"
+            break
+    if processed_output_file is not None:
+        processed_data = load_processed_data(processed_output_file)
     else:
-        # check if this sv has already been queried for in the home directory
-        if not os.path.isfile(home_output_file):
-            multi_files = reference_genome == "grch38" # this seems like a potential hard code problem
-            query_stix_bash(
+        # check if this SV evidence has already been queried for in the home directory
+        output_file = None
+        processed_output_file = f"{processed_file_dir}/{file_name}.csv"
+        for dir in [
+            input_dir,
+            output_dir,
+            f"{input_dir}/{FILE_DIR}",
+            output_file_dir,
+        ]:
+            if os.path.isfile(f"{dir}/{file_name}.txt"):
+                output_file = f"{dir}/{file_name}.txt"
+                break
+
+        if output_file is None:
+            # stix path is required if the SV evidence has not been queried for yet
+            if stix_bin is None or stix_index is None or stix_database is None:
+                raise FileNotFoundError("Missing STIX executable, index, or database path.")
+
+            # run the bash script to query stix
+            output_file = query_stix_bash(
                 l,
                 r,
                 output_file_dir,
                 file_name,
-                multi_files,
-                long_reads,
-                scratch,
+                stix_bin,
+                stix_index,
+                stix_database,
+                num_stix_shards,
             )
-        squiggle_data = write_processed_output(
+
+
+        # write the processed output file
+        processed_data = write_processed_output(
             output_file,
             processed_output_file,
-            long_reads,
             l_col="l_end" if long_reads else "l_start",
             r_col="r_start" if long_reads else "r_end",
         )
 
-        if scratch:
-            # move files from scratch to home directory
-            shutil.move(output_file, home_output_file)
-            shutil.move(processed_output_file, home_processed_output_file)
-
     # remove samples queried by stix but missing in the 1000genomes columns
     # this happens because the extended high coverage dataset includes samples that did not appear in the original study
-    #sample_ids = get_sample_ids(file_root)
-    #missing_keys = set(squiggle_data.keys()) - sample_ids
-    #for key in missing_keys:
-    #    squiggle_data.pop(key, None)
+    sample_ids = get_sample_ids(input_dir)
+    missing_keys = set(processed_data.keys()) - sample_ids
+    for key in missing_keys:
+        processed_data.pop(key, None)
 
-    #if filter_reference:
-    #    # remove any samples with the homozygous reference genotypes (0,0)
-    #    ref_samples = get_reference_samples(
-    #        squiggle_data, chr, start, stop, file_root
-    #    )
-    #    for ref in ref_samples:
-    #        squiggle_data.pop(ref, None)
+    # remove samples with a genotype of (0, 0)
+    if filter_reference:
+        ref_samples = get_reference_samples(
+            processed_data, chr, start, stop, input_dir
+        )
+        for ref in ref_samples:
+            processed_data.pop(ref, None)
 
     if run_gmm:
-        if len(squiggle_data) == 0:
-            # print("No structural variants found in this region.")
+        if len(processed_data) == 0:
+            print("No evidence for structural variants found in this region.")
             return
 
         if single_trial:
             run_viz_gmm(
-                squiggle_data,
+                processed_data,
                 file_name=f"{PLOT_DIR}/{file_name}",
                 chr=chr,
                 L=start,
@@ -339,11 +544,12 @@ def query_stix(
                 plot=plot,
                 plot_bokeh=False,
                 sv_id=sv_id,
-                stem=file_root,
+                stem=input_dir,
+                insert_size_lookup=insert_size_lookup,
             )
         else:
             run_dirichlet(
-                squiggle_data,
+                processed_data,
                 **{
                     "file_name": f"{PLOT_DIR}/{file_name}",
                     "chr": chr,
@@ -351,14 +557,34 @@ def query_stix(
                     "R": stop,
                     "plot": plot,
                     "plot_bokeh": False,
-                    "stem": file_root,
+                    "stem": input_dir,
                 },
             )
 
-    return squiggle_data
+    return processed_data
 
 
 def main():
+    """
+    Main function to parse command line arguments and call query_stix.
+    Arguments:
+    -l: Left position of the structural variant, format=chromosome:position
+    -r: Right position of the structural variant, format=chromosome:position
+    -id: Structural variant ID from 1000 Genomes Project
+    -p: Plot the length and L coordinate of each sample (default: False)
+    -d: Rerun the SV until >= 80% confident in the outcome (default: True)
+    -lr: Cluster using long-read data instead of the default short-reads (default: False)
+    --input_dir: Input directory for incoming data (default: assets)
+    --output_dir: Output directory for processed data (default: None)
+    --sv_lookup: VCF or CSV file with structural variants (default: deletions.csv)
+    --insert_size_file: Insert size for each sample (default: insert_sizes.csv)
+    --stix_bin: Path to STIX executable
+    --stix_index: Path to STIX index for querying sample reads
+    --stix_database: Path to STIX database for querying sample reads
+    --num_stix_shards: Number of shards the STIX index and database are split into (default: 1)
+    """
+
+    # parse arguments
     parser = argparse.ArgumentParser(
         description="Queries structural variants in a specific region"
     )
@@ -389,15 +615,7 @@ def main():
         "-d",
         type=bool,
         help="Rerun the SV until >= 80% confident in the outcome",
-        default=False,
-        nargs="?",
-        const=True,
-    )
-    parser.add_argument(
-        "-s",
-        type=bool,
-        help="Use scratch directory for intermediate files",
-        default=False,
+        default=True,
         nargs="?",
         const=True,
     )
@@ -412,27 +630,71 @@ def main():
     parser.add_argument(
         "-ref", type=str, help="Reference genome", default="grch38"
     )
+    parser.add_argument(
+        "--input_dir",
+        type=str,
+        help="Input directory for incoming data",
+        default="assets",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        help="Output directory for processed data",
+    )
+    parser.add_argument(
+        "--sv_lookup",
+        type=str,
+        help="VCF or CSV file with structural variants",
+        default="deletions.csv",
+    )
+    parser.add_argument(
+        "--insert_size_file",
+        type=str,
+        help="Insert size for each sample. Defaults to 450 bp if not provided.",
+        default="insert_sizes.csv",
+    )
+    parser.add_argument(
+        "--stix_bin",
+        type=str,
+        help="Path to STIX executable.",
+    )
+    parser.add_argument(
+        "--stix_index",
+        type=str,
+        help="Path to STIX index for querying sample reads.",
+    )
+    parser.add_argument(
+        "--stix_database",
+        type=str,
+        help="Path to STIX database for querying sample reads.",
+    )
+    parser.add_argument(
+        "--num_stix_shards",
+        type=int,
+        help="Number of shards the STIX index and database are split into.",
+        default=1,
+    )
 
     args = parser.parse_args()
-
     l = parse_input(args.l) if args.l is not None else ""  # noqa741
     r = parse_input(args.r) if args.r is not None else ""
     sv_id = args.id or ""
-    p = args.p
-    d = args.d
-    s = args.s
-    lr = args.lr
-    reference_genome = "grch38" if args.ref != "grch37" else args.ref
+
     query_stix(
         l=l,
         r=r,
         sv_id=sv_id,
-        run_gmm=True,
-        single_trial=not d,
-        plot=p,
-        reference_genome=reference_genome,
-        long_reads=lr,
-        scratch=s,
+        input_dir=args.input_dir,
+        output_dir=args.output_dir,
+        sv_lookup_file=args.sv_lookup,
+        insert_size_file=args.insert_size_file,
+        stix_bin=args.stix_bin,
+        stix_index=args.stix_index,
+        stix_database=args.stix_database,
+        num_stix_shards=args.num_stix_shards,
+        single_trial=not args.d,
+        plot=args.p,
+        long_reads=args.lr,
     )
 
 

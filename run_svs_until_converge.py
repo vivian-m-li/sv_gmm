@@ -74,7 +74,7 @@ def run_dirichlet_wrapper(
         print(f"Error processing SV {row['id']}: {e}")
 
 
-@break_after(hours=22, minutes=00)
+@break_after(hours=27, minutes=00)
 def run_svs_until_convergence(stem: str, run_subset: bool = False):
     deletions_df = get_deletions_df(stem)
     sample_ids = set(get_sample_ids(stem))
@@ -116,10 +116,11 @@ def run_svs(*, ref_genome: str = "grch38"):
             os.path.join(SCRATCH_FILE_DIR, file), os.path.join(FILE_DIR, file)
         )
 
+    results_dir = "results"
     print("Concatenating multi-processed SV files...")
-    concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME, stem)
+    concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME, results_dir)
     print("Writing post-processed files...")
-    write_post_processed_files(stem)
+    write_post_processed_files(stem, results_dir)
     end = time.time()
     print(f"Completed in {end - start}")
 

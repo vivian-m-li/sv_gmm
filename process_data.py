@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.cm as cm
@@ -5,9 +6,8 @@ from bokeh.plotting import figure, output_file, save
 from bokeh.models import HoverTool, ColumnDataSource, NumeralTickFormatter
 from typing import Optional, List, Tuple, Dict
 from em import run_gmm
-from em_1d import run_gmm as run_gmm_1d
-from viz import populate_sample_info, get_evidence_by_mode, plot_single_sv
-from gmm_types import Evidence, Sample
+from viz import plot_single_sv
+from gmm_types import Evidence, Sample, EstimatedGMM
 
 
 def sv_viz(data: List[np.ndarray[float]], *, file_name: str):
@@ -394,6 +394,106 @@ def plot_fitted_lines_bokeh(
     return start_points_array, sv_evidence
 
 
+def populate_sample_info(
+    sv_evidence: List[Evidence],
+    chr: str,
+    L: int,
+    R: int,
+    *,
+    stem: str,
+) -> None:
+    """
+    Populates each sample with its sex, population, and superpopulation information
+    """
+    if os.path.exists(f"{stem}/ancestry.tsv"):
+        ancestry_df = pd.read_csv(f"{stem}/ancestry.tsv", delimiter="\t")
+    else:
+        ancestry_df = pd.DataFrame()
+
+    deletions_df = pd.read_csv(f"{stem}/svs_by_chr/chr{chr}.csv")
+    deletions_row = deletions_df[
+        (deletions_df["start"] == L) & (deletions_df["stop"] == R)
+    ].iloc[0]
+    for evidence in sv_evidence:
+        sample_id = evidence.sample.id
+        ancestry_row = ancestry_df[ancestry_df["Sample name"] == sample_id]
+
+        sex = "Unknown"
+        population = "Unknown"
+        superpopulation = "Unknown"
+        if not ancestry_row.empty:
+            sex = ancestry_row["Sex"].values[0]
+            population = ancestry_row["Population code"].values[0]
+            superpopulation = (
+                ancestry_row["Superpopulation code"].values[0].split(",")[0]
+            )
+        allele = deletions_row[sample_id]
+        evidence.sample = Sample(
+            id=sample_id,
+            sex=sex,
+            population=population,
+            superpopulation=superpopulation,
+            allele=allele,
+        )
+
+
+def get_evidence_by_mode(
+    gmm: EstimatedGMM,
+    sv_evidence: List[Evidence],
+    L: int,
+    R: int,
+    *,
+    gmm_model: str = "2d",
+) -> List[List[Evidence]]:
+    sv_evidence = np.array(sv_evidence)
+    data = []
+    for mode in gmm.x_by_mode:
+        data_by_mode = []
+        for x in mode:
+            if gmm_model == "1d_len":
+                data_by_mode.append((x + (R - L)))  # length
+            elif gmm_model == "1d_L":
+                data_by_mode.append((x + L))  # L-coordinate
+            else:
+                data_by_mode.append(
+                    (x[0] + (R - L), x[1] + L)
+                )  # (length, L-coordinate)
+        data.append(data_by_mode)
+    evidence_by_mode = [[] for _ in range(len(data))]
+    for evidence in sv_evidence:
+        for i, mode in enumerate(data):
+            try:
+                if gmm_model == "1d_len":
+                    mode_data = evidence.intercept  # length
+                elif gmm_model == "1d_L":
+                    mode_data = evidence.mean_l  # L-coordinate
+                else:
+                    mode_data = (
+                        evidence.intercept,
+                        evidence.mean_l,
+                    )  # (length, L-coordinate)
+                if (
+                    mode_data in mode
+                ):  # assumes that each mode has unique (length, L-coordinate) pairs
+                    evidence_by_mode[i].append(evidence)
+                    continue
+            except ValueError:
+                print(evidence)
+                print(mode)
+                raise ValueError
+    lengths_by_mode = [
+        np.mean([evidence.start_y for evidence in mode])
+        for mode in evidence_by_mode
+    ]
+    evidence_by_mode = [
+        x
+        for _, x in sorted(
+            zip(lengths_by_mode, evidence_by_mode), key=lambda pair: pair[0]
+        )
+    ]
+    return evidence_by_mode
+
+
 def get_intercepts(
     squiggle_data: Dict[str, np.ndarray[float]],
     *,
@@ -502,17 +602,12 @@ def process_data(
     return np.array(points), sv_evidence
 
 
-def get_insert_size_lookup(stem: str = "1kgp") -> Dict[str, int]:
+def get_insert_size_lookup(filename) -> Dict[str, int]:
     """Returns a dictionary mapping sample IDs to their mean insert sizes from sequencing high-coverage short-reads."""
     insert_size_df = pd.read_csv(
-        f"{stem}/insert_sizes.csv",
+        filename,
         dtype={"sample_id": str, "mean_insert_size": float},
     )
-    # temporary: use a constant insert size for all samples
-    # return {
-    #     sample_id: 450 for sample_id, mean_insert_size in insert_size_df.values
-    # }
-
     return {
         sample_id: int(mean_insert_size)
         for sample_id, mean_insert_size in insert_size_df.values
@@ -537,7 +632,7 @@ def run_viz_gmm(
 ):
     """Runs the GMM pipeline and visualizes the results."""
     if insert_size_lookup is None:
-        insert_size_lookup = get_insert_size_lookup(stem)
+        insert_size_lookup = get_insert_size_lookup(f"{stem}/insert_sizes.csv")
 
     # transforms data to cluster
     points, sv_evidence = process_data(
@@ -553,16 +648,7 @@ def run_viz_gmm(
         # warnings.warn("No structural variants found in this region.")
         return None, []
 
-    if gmm_model == "2d":
-        gmm_func = run_gmm
-    else:
-        gmm_func = run_gmm_1d
-        if gmm_model == "1d_len":
-            points = points[:, 0]
-        elif gmm_model == "1d_L":
-            points = points[:, 1]
-
-    gmm = gmm_func(points, L=L, R=R, plot=plot, pr=False)
+    gmm = run_gmm(points, L=L, R=R, plot=plot, pr=False)
 
     if not synthetic_data:
         populate_sample_info(

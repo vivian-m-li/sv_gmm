@@ -10,9 +10,9 @@ from matplotlib.patches import Ellipse, Rectangle
 from matplotlib.lines import Line2D
 from matplotlib.ticker import FixedLocator
 from collections import Counter, defaultdict
-from viz import plot_2d_coords, get_evidence_by_mode, plot_single_sv
+from viz import plot_2d_coords, plot_single_sv
 from query_sv import query_stix
-from process_data import process_data, run_viz_gmm
+from process_data import process_data, get_evidence_by_mode, run_viz_gmm
 from em import run_gmm
 from helper import get_sv_stats_collapsed_df, get_sv_lookup, get_sv_chr, calc_af
 from gmm_types import COLORS, SUPERPOPULATIONS, SUBPOPULATIONS, ANCESTRY_COLORS
@@ -673,7 +673,7 @@ def plot_sv_short_long_reads(sv_id, sample_ids, skip_evidence_plot=False):
     chr, start, stop = get_sv_chr(sv_id)
 
     if not skip_evidence_plot:
-        squiggle_data = query_stix(sv_id=sv_id, run_gmm=False)
+        squiggle_data = query_stix(sv_id=sv_id, input_dir="1kgp", run_gmm=False)
         gmm, evidence_by_mode = run_viz_gmm(
             squiggle_data,
             file_name="",
@@ -984,6 +984,17 @@ def plot_af_delta_histogram():
 
 def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
     ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
+
+    # create a lookup of sample_id:population
+    # if multiple populations are listed for a sample, take the first one (only happens for 1 sample)
+    sample_lookup = {
+        row["Sample name"]: row["Population code"].split(",")[0]
+        for _, row in ancestry_df.iterrows()
+    }
+    population_lookup = {}
+    for i, row in ancestry_df.iterrows():
+        population_lookup[row["Population code"]] = row["Superpopulation code"]
+
     sv_df = get_sv_stats_collapsed_df()
     sv_df = sv_df[sv_df["num_modes"] > 1]
 
@@ -991,138 +1002,132 @@ def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
         SUPERPOPULATIONS if by == "superpopulation" else SUBPOPULATIONS
     )[::-1]
 
-    comparisons = [np.zeros(len(populations)) for _ in range(len(populations))]
+    # all instances of two populations co-occurring so we can normalize later
     all_comparisons = [
         np.zeros(len(populations)) for _ in range(len(populations))
     ]
+    # actual co-occurrences in same mode after splitting
+    comparisons = [np.zeros(len(populations)) for _ in range(len(populations))]
+    # instances of two populations occurring in different modes
+    split_comparisons = [
+        np.zeros(len(populations)) for _ in range(len(populations))
+    ]
+
+    # check pairwise population comparisons for each SV
     for _, row in sv_df.iterrows():
         modes = ast.literal_eval(row["modes"])
-        sp_by_mode = []
-        for mode in modes:
-            sample_ids = mode["sample_ids"]
-            pops = set()
-            for sample_id in sample_ids:
-                ancestry_row = ancestry_df[
-                    ancestry_df["Sample name"] == sample_id
-                ]
-                pop_key = (
-                    "Superpopulation code"
-                    if by == "superpopulation"
-                    else "Population code"
-                )
-                population = ancestry_row[pop_key].values[0].split(",")[0]
-                pops.add(population)
-            sp_by_mode.append(pops)
-
-        for i, p1 in enumerate(populations):
-            all_sp = [sp for mode in sp_by_mode for sp in mode]
-            if p1 not in all_sp:
-                continue
-            for j_idx, p2 in enumerate(populations[i + 1 :]):
-                j = i + j_idx + 1
-                if p2 not in all_sp:
+        mode_by_samples = {}
+        for mode_index, mode in enumerate(modes):
+            for sample in mode["sample_ids"]:
+                mode_by_samples[sample] = mode_index
+        for s1, m1 in mode_by_samples.items():
+            p1 = populations.index(sample_lookup[s1])
+            for s2, m2 in mode_by_samples.items():
+                if s1 == s2:
                     continue
-                all_comparisons[i][j] += 1
-                all_comparisons[j][i] += 1
-                for mode in sp_by_mode:
-                    if p1 in mode and p2 in mode:
-                        comparisons[i][j] += 1
-                        comparisons[j][i] += 1
-                        break
+                p2 = populations.index(sample_lookup[s2])
+                all_comparisons[p1][p2] += 1
+                if m1 == m2:  # in the same mode
+                    comparisons[p1][p2] += 1
+                elif m1 != m2:  # in different modes
+                    split_comparisons[p1][p2] += 1
 
-    for i in range(len(populations)):
-        for j in range(len(populations)):
-            if i == j:
-                comparisons[i][j] = 1
-            elif all_comparisons[i][j] == 0:
-                comparisons[i][j] = 0
-            else:
-                comparisons[i][j] /= all_comparisons[i][j]
+    fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+    # fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+    for i, (values, cmap) in enumerate(
+        zip([comparisons, split_comparisons], ["Blues", "Reds"])
+    ):
+        values_normalized = np.array(values, dtype=float)
+        # normalize comparisons by all_comparisons
+        for pop_i in range(len(populations)):
+            for pop_j in range(len(populations)):
+                if all_comparisons[pop_i][pop_j] == 0:
+                    values_normalized[pop_i][pop_j] = 0
+                else:
+                    values_normalized[pop_i][pop_j] /= all_comparisons[pop_i][
+                        pop_j
+                    ]
 
-    population_lookup = {}
-    for i, row in ancestry_df.iterrows():
-        population_lookup[row["Population code"]] = row["Superpopulation code"]
+        ax = axs[i]
+        im = ax.imshow(values_normalized, cmap=cmap, interpolation="nearest")
+        ax.set_yticks(range(len(populations)))
+        ax.set_xticklabels([])
+        ax.set_xticks([])
+        ax.set_yticklabels(populations, fontsize=12)
+        ax.text(7, -3.25, "Superpopulation", fontsize=14)
+        ax.set_ylabel("Population" if by == "population" else "", fontsize=14)
+        ax.set_ylim(len(populations) - 0.5, -2.5)
+        if by == "population":
+            superpop_seen = set()
+            for i, label in enumerate(populations):
+                superpop = population_lookup[label]
+                if superpop not in superpop_seen:
+                    ax.text(
+                        i + 0.03,
+                        -1,
+                        superpop,
+                        color="whitesmoke",
+                        fontsize=14,
+                        zorder=2,
+                    )
+                    superpop_seen.add(superpop)
 
-    fig, ax = plt.subplots(figsize=(6, 6))
-    im = ax.imshow(comparisons, cmap="Blues", interpolation="nearest")
-    ax.set_yticks(range(len(populations)))
-    ax.set_xticklabels([])
-    ax.set_xticks([])
-    ax.set_yticklabels(populations, fontsize=12)
-    ax.text(7, -3.25, "Superpopulation", fontsize=14)
-    # ax.set_xlabel("Superpopulation", fontsize=14, labelpad=20)
-    ax.set_ylabel("Population" if by == "population" else "", fontsize=14)
-    ax.set_ylim(len(populations) - 0.5, -2.5)
-    if by == "population":
-        superpop_seen = set()
-        for i, label in enumerate(populations):
-            superpop = population_lookup[label]
-            if superpop not in superpop_seen:
-                ax.text(
-                    i + 0.03,
-                    -1,
-                    superpop,
-                    color="whitesmoke",
-                    fontsize=14,
-                    zorder=2,
+                    if i != 0:
+                        ax.axhline(
+                            y=i - 0.5,
+                            color="black",
+                            linestyle="--",
+                            linewidth=0.8,
+                            zorder=10,
+                        )
+                        ax.axvline(
+                            x=i - 0.5,
+                            color="black",
+                            linestyle="--",
+                            linewidth=0.8,
+                            zorder=10,
+                        )
+
+                rect = Rectangle(
+                    (i - 0.5, -2.5),
+                    1,
+                    2,
+                    linewidth=0,
+                    edgecolor="none",
+                    facecolor=ANCESTRY_COLORS[superpop],
+                    alpha=0.9,
+                    zorder=1,
                 )
-                superpop_seen.add(superpop)
+                ax.add_patch(rect)
 
-                if i != 0:
-                    ax.axhline(
-                        y=i - 0.5,
-                        color="black",
-                        linestyle="--",
-                        linewidth=0.8,
-                        zorder=10,
-                    )
-                    ax.axvline(
-                        x=i - 0.5,
-                        color="black",
-                        linestyle="--",
-                        linewidth=0.8,
-                        zorder=10,
-                    )
+        for spine in ax.spines.values():
+            spine.set_visible(False)
 
-            rect = Rectangle(
-                (i - 0.5, -2.5),
-                1,
-                2,
-                linewidth=0,
-                edgecolor="none",
-                facecolor=ANCESTRY_COLORS[superpop],
-                alpha=0.9,
-                zorder=1,
-            )
-            ax.add_patch(rect)
-
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-
-    rect_border = Rectangle(
-        (-0.5, -0.5),
-        len(populations),
-        len(populations),
-        linewidth=1,
-        edgecolor="black",
-        facecolor="none",
-        zorder=3,
-    )
-    ax.add_patch(rect_border)
-    cbar = plt.colorbar(im, fraction=0.046, pad=0.1)
-    cbar.set_label("Clustering Likelihood", fontsize=12, labelpad=10)
-    cbar.ax.tick_params(labelsize=14)
-    ax.tick_params(bottom=False, top=False, labelbottom=False)
-    ax.text(
-        0.5,
-        -0.1,
-        "Spacing",
-        fontsize=14,
-        color="white",
-        ha="center",
-        va="center",
-        transform=ax.transAxes,
-    )
+        rect_border = Rectangle(
+            (-0.5, -0.5),
+            len(populations),
+            len(populations),
+            linewidth=1,
+            edgecolor="black",
+            facecolor="none",
+            zorder=3,
+        )
+        ax.add_patch(rect_border)
+        cbar = plt.colorbar(im, fraction=0.046, pad=0.1)
+        cbar.set_label("Clustering Likelihood", fontsize=12, labelpad=10)
+        cbar.ax.tick_params(labelsize=14)
+        ax.tick_params(bottom=False, top=False, labelbottom=False)
+        ax.text(
+            0.5,
+            -0.1,
+            "Spacing",
+            fontsize=14,
+            color="white",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+    plt.tight_layout()
     plt.savefig("plots/ancestry_comparison.pdf", bbox_inches="tight")
     plt.show()
 
@@ -1190,8 +1195,8 @@ if __name__ == "__main__":
     # )
 
     # Figure 2
-    for case in ["B", "C", "D"]:
-        parameter_sweep(case)
+    # for case in ["B", "C", "D"]:
+    #     parameter_sweep(case)
     # synthetic_data_fig()
     # synthetic_data_additional_svs()
 
@@ -1210,4 +1215,4 @@ if __name__ == "__main__":
     # compare_sv_ancestry_by_mode(by="population")
 
     # Print SV stats
-    # print_sv_stats()
+    print_sv_stats()

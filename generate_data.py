@@ -381,8 +381,6 @@ if __name__ == "__main__":
     generate_synthetic_sv_data(
         1,
         [(100000, 100167), (100067, 100067 + 33)],
-        n_samples=66,
+        n_samples=50,
         p=[0.5, 0.5],
-        run_gmm=False,
-        vcf_filename="synthetic_data/data/test.vcf",
     )
