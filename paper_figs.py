@@ -406,8 +406,9 @@ def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
         wspace=0.15,
         hspace=0.37,
     )
-    plt.savefig(f"plots/synthetic_data_n={sample_size}_len={svlen}.pdf")
-    plt.savefig(f"plots/synthetic_data_n={sample_size}_len={svlen}.png")
+    plt.savefig(
+        f"plots/synthetic_data_n={sample_size}_len={svlen}{'_'if path else ''}{path}.pdf"
+    )
     plt.show()
 
 
@@ -1207,32 +1208,43 @@ def print_sv_stats(path: str = ""):
 
 
 if __name__ == "__main__":
+    figures = [2]
+
     # Figure 1
-    # methods_figure_viz(
-    #     [(100000, 100802), (100060, 100741)],
-    #     "synthetic_data/data/B_r0.8500000000000001_svlen802_n66_fa6914bc-f836-4f50-8a14-5cc0b56a50c9.vcf",
-    # )
+    if 1 in figures:
+        methods_figure_viz(
+            [(100000, 100802), (100060, 100741)],
+            "synthetic_data/data/B_r0.8500000000000001_svlen802_n66_fa6914bc-f836-4f50-8a14-5cc0b56a50c9.vcf",
+        )
 
     # Figure 2
-    # path = "biased_d"
-    # for case in ["B", "C", "D"]:
-    #     parameter_sweep(case, path)
-    # synthetic_data_fig(66, 802, path)
-    # synthetic_data_additional_svs()
+    if 2 in figures:
+        path = "biased_d"
+        # for case in ["B", "C", "D"]:
+        #     parameter_sweep(case, path)
+        synthetic_data_fig(100, 453, path)
+        # synthetic_data_fig(66, 802, path)
+        synthetic_data_additional_svs()
 
     # Figure 3
-    # plot_sv_breakdown("biased_d")
+    if 3 in figures:
+        plot_sv_breakdown("biased_d")
 
     # Figure 4
-    # plot_sv_short_long_reads("HGSV_776", ["HG00096"])
-    # plot_sv_short_long_reads("HGSV_54541", ["HG03548", "HG00149"])
-    # plot_sv_short_long_reads(
-    #     "HGSV_1289", ["HG00537", "NA19383", "NA19350"], skip_evidence_plot=True
-    # )
+    if 4 in figures:
+        plot_sv_short_long_reads("HGSV_776", ["HG00096"])
+        plot_sv_short_long_reads("HGSV_54541", ["HG03548", "HG00149"])
+        plot_sv_short_long_reads(
+            "HGSV_1289",
+            ["HG00537", "NA19383", "NA19350"],
+            skip_evidence_plot=True,
+        )
 
     # Figure 5
-    # plot_af_delta_histogram()
-    # compare_sv_ancestry_by_mode(by="population")
+    if 5 in figures:
+        plot_af_delta_histogram()
+        compare_sv_ancestry_by_mode(by="population")
 
     # Print SV stats
-    print_sv_stats("biased_d")
+    if 6 in figures:
+        print_sv_stats("biased_d")

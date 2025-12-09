@@ -346,8 +346,8 @@ def r_accuracy_test(
             else:
                 weights = [[1.0 / len(svs) for _ in range(len(svs))]]
             for weight in weights:
-                # run each case 10 times and average at the end
-                for _ in range(50):
+                # run each case 20 times and average at the end
+                for _ in range(20):
                     args.append((case, r, svs, weight, n_samples, results))
 
         p.starmap(run_gmm, args)
