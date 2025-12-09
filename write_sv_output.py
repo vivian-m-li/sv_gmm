@@ -97,23 +97,31 @@ def init_sv_stat_row(
 def get_raw_data(
     row, sample_set: Set[str], stem: str = "1kgp"
 ) -> Tuple[Dict[str, np.ndarray[float]], int]:
-    """Gets the samples and evidence for an SV. Filters out samples that are homozygous for the reference allele."""
+    """
+    Gets the samples and evidence for an SV. Filters out samples that are homozygous for the reference allele.
+    The STIX index and paths are hardcoded for query_stix.
+    """
     start = giggle_format(str(row["chr"]), row["start"])
     end = giggle_format(str(row["chr"]), row["stop"])
-    squiggle_data = query_stix(
+    processed_data = query_stix(
         l=start,
         r=end,
         input_dir="1kgp",
+        output_dir="",  # project home directory
         run_gmm=False,
         filter_reference=False,
+        stix_bin="/Users/vili4418/sv/stix/bin/stix",
+        stix_index="/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
+        stix_database="/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
+        num_stix_shards=8,
     )
-    num_samples = len(squiggle_data)
+    num_samples = len(processed_data)
 
-    reference_samples = get_reference_samples(row, sample_set, squiggle_data)
+    reference_samples = get_reference_samples(row, sample_set, processed_data)
     for ref in reference_samples:
-        squiggle_data.pop(ref, None)
+        processed_data.pop(ref, None)
 
-    return squiggle_data, num_samples
+    return processed_data, num_samples
 
 
 def write_sv_stats(
