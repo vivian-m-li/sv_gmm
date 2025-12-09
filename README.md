@@ -8,12 +8,14 @@ This tool is designed to analyze genetic data, determining the number of structu
   * If running on Fiji, use `module load python/3.11.3`
 
 ### Python packages
-* Create a python environment and install the packages listed in requirements
+* Create a python environment and install the packages listed in the minimum requirements file.
 ```
 python -m venv venv
 source venv/bin/activate
-pip3 install -r requirements.txt
+pip3 install -r min_requirements.txt
 ```
+
+* If you have any problems, feel free to refer to the `requirements.txt` file to see the full list of packages used in the paper. 
 
 ### STIX
 If you need will be providing a STIX database instead of processed read support, you will need to follow STIX download instructions from this [Github](https://github.com/ryanlayer/stix/tree/master). 
