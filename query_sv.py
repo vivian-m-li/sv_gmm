@@ -455,7 +455,7 @@ def query_stix(
     processed_file_dir = f"{output_dir}/{PROCESSED_FILE_DIR}"
     plot_dir = f"{output_dir}/{PLOT_DIR}"
 
-    for directory in [output_file_dir, processed_file_dir, plot_dir]:
+    for directory in [output_dir, output_file_dir, processed_file_dir, plot_dir]:
         if not os.path.exists(directory):
             os.mkdir(directory)
 
@@ -473,6 +473,7 @@ def query_stix(
             processed_output_file = f"{dir}/{file_name}.csv"
             break
     if processed_output_file is not None:
+        print("Using previously-processed data from", processed_output_file)
         processed_data = load_processed_data(processed_output_file)
     else:
         # check if this SV evidence has already been queried for in the home directory
@@ -489,6 +490,7 @@ def query_stix(
                 break
 
         if output_file is None:
+            print("This variant has not been previously quiered or processed. Using STIX to do this now.")
             # stix path is required if the SV evidence has not been queried for yet
             if stix_bin is None or stix_index is None or stix_database is None:
                 raise FileNotFoundError("Missing STIX executable, index, or database path.")
@@ -504,8 +506,8 @@ def query_stix(
                 stix_database,
                 num_stix_shards,
             )
-
-
+        
+        print("Using previously-queried data from", output_file)
         # write the processed output file
         processed_data = write_processed_output(
             output_file,

@@ -1284,10 +1284,10 @@ def draw_conceptual_clusters(
     for i, points in enumerate(clusters):
         ax2.scatter(points[:, 0], points[:, 1], color=COLORS[i], s=10)
 
-    # draw lines between centroids
+    # draw lines between centroids -- midpoint between sv1 and sv2 used otherwise
     center1 = (
         centroids[0] if case != "E" else (100500, 2278)
-    )  # midpoint between sv1 and sv2
+    )  
     center2 = centroids[1] if len(centroids) == 2 else centroids[2]
     ax2.plot(
         [center1[0], center2[0]],

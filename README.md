@@ -2,7 +2,7 @@
 
 This tool is designed to analyze genetic data, determining the number of structural variants in a reading frame using statistical inference.
 
-## Requirements
+## Dependencies
 * Tested with python version 3.11.3 and 3.12.10. 
   * If running on Fiji, use `module load python/3.11.3`
 * Create a python environment and install the packages listed in requirements
@@ -12,7 +12,91 @@ source venv/bin/activate
 pip3 install -r requirements.txt
 ```
 
+If you need...
 
+## Required Inputs
+* Structural Variant coordinates or 1000 Genomes ID
+Files in Input_Dir
+* sv_lookup: Data which has the SV information from samples. Can be provided as a vcf (or vcf.gz) or a comma-delimited file (details below). If a VCF is provided, one of the outputs saved is the sv_lookup file as "deletions.csv"
+  * Example sv_lookup file (deletions.csv in assets/)
+  * CSV with the columns id, chr, start, stop, svlen, ref, alt, qual, filter, af, info, sample1, ..., sampleN, num_samples
+  * info is a python dictionary
+```
+id,chr,start,stop,svlen,ref,alt,qual,filter,af,info,HG00118,HG00119,num_samples
+HGSV_3,1,39999,107150,67151,N,<DEL>,120.0,['PASS'],0.11301916932907348,"{'SVTYPE': 'DEL', 'CHR2': 'chr1', 'SVLEN': -67150, 'ALGORITHMS': ('depth',), 'EVIDENCE': ('BAF', 'RD'), 'AC': (566,), 'AN': 4016, 'SOURCE': 'gatksv', 'ORIGIN_SVID': ('1KGP_2504_and_698_with_GIAB_DEL_chr1_1',), 'AF': (0.14177699387073517,), 'N_BI_GENOS': 2578, 'N_HOMREF': 2002, 'N_HET': 421, 'N_HOMALT': 155, 'FREQ_HOMREF': 0.7765709757804871, 'FREQ_HET': 0.16330499947071075, 'FREQ_HOMALT': 0.060124099254608154, 'MALE_AN': 2568, 'MALE_AC': (360,), 'MALE_AF': (0.14018699526786804,), 'MALE_N_BI_GENOS': 1284, 'MALE_N_HOMREF': 1003, 'MALE_N_HET': 202, 'MALE_N_HOMALT': 79, 'MALE_FREQ_HOMREF': 0.7811530232429504, 'MALE_FREQ_HET': 0.1573210060596466, 'MALE_FREQ_HOMALT': 0.061526499688625336, 'FEMALE_AN': 2588, 'FEMALE_AC': (371,), 'FEMALE_AF': (0.14335399866104126,), ...'SAN_FEMALE_FREQ_HOMALT': 0.04035869985818863, 'POPMAX_AF': 0.3734019994735718}","(0,0)","(0,1)",2
+```
+* insert_sizes: Provides the mean insert size for the samples to be used in the algorithm. If the file is not provided, a default of 450 is used.
+```
+sample_id,mean_insert_size
+NA20509,440
+HG02941,436
+```
+
+
+## Arguments
+```
+usage: query_sv.py [-h] [-l L] [-r R] [-id ID] [-p [P]] [-d [D]] [-lr [LR]] [-ref REF] [--input_dir INPUT_DIR] [--output_dir OUTPUT_DIR]
+                   [--sv_lookup SV_LOOKUP] [--insert_size_file INSERT_SIZE_FILE] [--stix_bin STIX_BIN] [--stix_index STIX_INDEX]
+                   [--stix_database STIX_DATABASE] [--num_stix_shards NUM_STIX_SHARDS]
+```
+
+```
+Required arguments:
+    --l                           Leftmost coordinate of SV (format is chr:Num) (Required if svid not used)
+    --r                           Rightmost coordinate of SV (format is chr:Num) (Required if svid not used)
+    OR
+    --id                          Structural variant id from 1000Genomes Project (Required if l and r not provided)
+
+Directory Paths:
+    --input_dir                   path to where the sv_lookup and insert_size files are (default = "assets/")
+    --output_dir                  path to where the processed outputs are saved (if None then uses input_dir)  
+
+Input Options:
+    --sv_lookup                   name of sv_lookup file in input directory. Can be vcf, vcf.gz, or csv with format described in Required Inputs (default = deletions.csv)
+    --insert_size_file            name of file with insert sizes in input directory. Format shown in Inputs (*Optional -- if None provided will use default insert size of 450)
+    --ref                         reference genome used (default = grch38)
+
+Processing Flags: 
+    -p                           If include then will plot the Length and L-coordinate of each sample
+    -d                           If include then will continue to rerun algorithm until acheives ≥ 80% confidence          
+
+Required if running STIX to get related data
+    --stix_bin                    path to STIX executable (e.g. "~/stix/bin/stix")
+    --stix_index                  path to STIX index -- what used for parameter -i in STIX (e.g. "alt_sort_b")
+    --stix_database               path to STIX database -- what used for parameter -d in STIX (e.g. "1kg.ped.db")
+    --num_stix_shards             number of stix shards used (default = 1)
+  
+```
+
+## Output
+Intermediate Files saved to input directory (if not already provided):
+* deletions.csv (refer to Required Input Files)
+* chr:start-chr:end.csv 
+  * CSV file with the FULLY processed evidence for a given SV from each of the samples
+  * Format is comma-seperated file with columns Sample, XXXX
+  ```
+  HG00102,173522744,173524280,173522761,173524248,173522840,173524340,173522842,173524369,173522861,173524496,173522862,173524445,173522866,173524347,173522888,173524262
+  HG00103,173522759,173524359,173522762,173524364,173522879,173524244,173522885,173524384,173522898,173524299
+  HG00110,173522816,173524440,173522826,173524457,173522837,173524327,173522878,173524414,173522884,173524303
+  HG00122,173522849,173524318,173522873,173524255,173522881,173524392
+  HG00149,173522763,173524247,173522838,173524265
+  ```
+* chr:start-chr:end.txt
+  * tab-delimited file with data queried from a STIX database.
+  * Format is tab-delimited file with columns File ID, File Name, Chr, Left Start, Left End, Chr, Right Start, Right End, whether based on Paired or Split reads
+  ```
+  3	bed_0/HG00122.bed.gz	3	173522849	173522939	3	173524168	173524318	paired
+  3	bed_0/HG00122.bed.gz	3	173522873	173522939	3	173524105	173524255	paired
+  ```
+
+* sv_lookup.csv?????
+```
+id,chr,start,stop,svlen,af
+HGSV_3,1,39999,107150,67151,0.11301916932907348
+HGSV_22,1,586987,670994,84007,0.04792332268370607
+```
+
+# Ignore below for now
 
 ## 1. Get the Sample SV evidence coordinates
 
