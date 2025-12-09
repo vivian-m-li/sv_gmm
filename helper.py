@@ -19,22 +19,26 @@ PROCESSED_SVS_DIR = "processed_svs"
 
 def get_deletions_df(stem: str = "1kgp"):
     """Returns a dataframe of all SVs and genotypes for each sample."""
-    return pd.read_csv(f"{stem}/deletions.csv", low_memory=False)
+    file = os.path.join(stem, "deletions.csv")
+    return pd.read_csv(file, low_memory=False)
 
 
 def get_sv_stats_df(stem: str = "1kgp"):
     """DEPRECATED: use get_sv_stats_collapsed_df instead. Used for pre-dirichlet analysis."""
-    return pd.read_csv(f"{stem}/sv_stats.csv")
+    file = os.path.join(stem, "sv_stats.csv")
+    return pd.read_csv(file)
 
 
 def get_sv_stats_converge_df(stem: str = "1kgp"):
     """Returns a dataframe of all SVs and GMM results for each run of the SV."""
-    return pd.read_csv(f"{stem}/sv_stats_converge.csv", low_memory=False)
+    file = os.path.join(stem, "sv_stats_converge.csv")
+    return pd.read_csv(file, low_memory=False)
 
 
 def get_sv_stats_collapsed_df(stem: str = "1kgp"):
     """Returns a dataframe of all SVs and GMM results after collapsing to consensus results."""
-    return pd.read_csv(f"{stem}/sv_stats_collapsed.csv")
+    file = os.path.join(stem, "sv_stats_collapsed.csv")
+    return pd.read_csv(file)
 
 
 def get_sample_ids(file_root: str = "1kgp"):
@@ -48,7 +52,8 @@ def get_sample_ids(file_root: str = "1kgp"):
 
 def get_sv_lookup(stem: str = "1kgp"):
     """Get a dataframe mapping sv_id to chr, start, stop."""
-    return pd.read_csv(f"{stem}/sv_lookup.csv")
+    file = os.path.join(stem, "sv_lookup.csv")
+    return pd.read_csv(file)
 
 
 def get_sv_chr(sv_id: str):

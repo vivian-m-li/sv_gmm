@@ -98,20 +98,27 @@ def plot_sv_coordinate_space(ax, n_svs, xcoords, svcoords, y, height, **kwargs):
     return [left_ellipse, right_ellipse, rect, top_border, bottom_border]
 
 
-def load_synthetic_data_results(sample_size: int) -> pd.DataFrame:
-    results_file = "synthetic_data/results.csv"
-    add_file = f"synthetic_data/resultsn={sample_size}.csv"
-    df = pd.read_csv(results_file)
-    add_df = pd.read_csv(add_file)
-    add_df = add_df[add_df["gmm_model"] == "2d"]
-    combined_df = pd.concat([df, add_df], ignore_index=True)
+def load_synthetic_data_results(
+    sample_size: int, *, path: str = "", add_gatk_results: bool = True
+) -> pd.DataFrame:
+    split_file = os.path.join(
+        "synthetic_data", path, f"resultsn={sample_size}.csv"
+    )
+    split_df = pd.read_csv(split_file)
+    split_df = split_df[split_df["gmm_model"] == "2d"]
+    if not add_gatk_results:
+        return split_df
+
+    gatk_file = "synthetic_data/results.csv"
+    gatk_df = pd.read_csv(gatk_file)
+    combined_df = pd.concat([gatk_df, split_df], ignore_index=True)
     return combined_df
 
 
 def plot_reciprocal_overlap_svlen(
-    case: str, sample_size: int, *, y_axis: str = "accuracy"
+    case: str, sample_size: int, *, y_axis: str = "accuracy", path: str = ""
 ):
-    df = load_synthetic_data_results(sample_size)
+    df = load_synthetic_data_results(sample_size, path=path)
     df = df[(df["case"] == case)]
 
     models = ["2d", "gatk_MAX_CLIQUE", "gatk_SINGLE_LINKAGE"]
@@ -159,14 +166,25 @@ def plot_reciprocal_overlap_svlen(
     plt.show()
 
 
-def parameter_sweep(case: str = "B"):
-    sample_sizes = [11, 21, 66, 206, 313]
-    svlens = [51, 167, 802, 3377, 17352][::-1]
+def parameter_sweep(case: str = "B", path: str = ""):
+    sample_sizes = []
+    for file in os.listdir(os.path.join("synthetic_data", path)):
+        if "resultsn=" in file:
+            sample_size = int(file.strip("resultsn=").strip(".csv"))
+            sample_sizes.append(sample_size)
+    sample_sizes = sorted(sample_sizes)
+    file = load_synthetic_data_results(
+        sample_sizes[-1], path=path, add_gatk_results=False
+    )
+    svlens = sorted(file["svlen"].unique())
+
     tprs = np.zeros((len(sample_sizes), len(svlens)))
     fprs = np.zeros((len(sample_sizes), len(svlens)))
     ros = np.zeros((len(sample_sizes), len(svlens)))
     for i, sample_size in enumerate(sample_sizes):
-        df = load_synthetic_data_results(sample_size)
+        df = load_synthetic_data_results(
+            sample_size, path=path, add_gatk_results=False
+        )
         df = df[(df["gmm_model"] == "2d") & (df["case"] == case)]
         for j, svlen in enumerate(svlens):
             subset_df = df[df["svlen"] == svlen]
@@ -225,16 +243,16 @@ def parameter_sweep(case: str = "B"):
         fig.colorbar(im, ax=axs[i])
 
     plt.tight_layout()
-    plt.savefig(f"plots/parameter_sweep_heatmaps_case{case}.pdf")
+    plt.savefig(
+        f"plots/parameter_sweep_heatmaps_case{case}{'_'if path else ''}{path}.pdf"
+    )
     plt.show()
 
 
-def synthetic_data_fig():
+def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
     """Synthetic data results comparison: my method vs. GATK clustering methods"""
     cases = ["B", "C", "D"]
-    sample_size = 66  # 11, 21, 66, 206, 313
-    svlen = 51  # 51, 167, 802, 3377, 17352
-    df = load_synthetic_data_results(sample_size)
+    df = load_synthetic_data_results(sample_size, path=path)
     df = df[df["svlen"] == svlen]
 
     models = ["2d", "gatk_MAX_CLIQUE", "gatk_SINGLE_LINKAGE"]
@@ -778,8 +796,9 @@ def find_example_svs():
             print("skipping", sv_id)
 
 
-def get_all_svs_df():
-    full_df = get_sv_stats_collapsed_df()
+def get_all_svs_df(path: str = "") -> pd.DataFrame:
+    filepath = os.path.join("results", path)
+    full_df = get_sv_stats_collapsed_df(filepath)
     full_df["num_samples_run"] = full_df["num_samples"] - (
         full_df["num_pruned"] + full_df["num_reference"]
     )
@@ -794,14 +813,14 @@ def get_all_svs_df():
             "modes",
         ]
     ]
-    df = pd.read_csv("1kgp/svs_n_modes.csv")
+    df = pd.read_csv(f"{filepath}/svs_n_modes.csv")
     df = df.merge(full_df, on="sv_id")
     return df
 
 
-def plot_sv_breakdown():
+def plot_sv_breakdown(path: str = ""):
     """Figure 4 - horizontal bar charts of the breakdown of SVs by number of modes"""
-    df = get_all_svs_df()
+    df = get_all_svs_df(path)
     sv_lookup = get_sv_lookup()
     svs_not_enough_evidence = df[
         (df["num_samples_run"] > 0) & (df["num_samples_run"] <= 10)
@@ -1132,9 +1151,9 @@ def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
     plt.show()
 
 
-def print_sv_stats():
+def print_sv_stats(path: str = ""):
     """Compares various statistics between split SVs and all SVs."""
-    df = get_all_svs_df()
+    df = get_all_svs_df(path)
 
     # load breakpoint precision info
     # 9367 rows have cipos info
@@ -1195,13 +1214,14 @@ if __name__ == "__main__":
     # )
 
     # Figure 2
+    # path = "biased_d"
     # for case in ["B", "C", "D"]:
-    #     parameter_sweep(case)
-    # synthetic_data_fig()
+    #     parameter_sweep(case, path)
+    # synthetic_data_fig(66, 802, path)
     # synthetic_data_additional_svs()
 
     # Figure 3
-    # plot_sv_breakdown()
+    # plot_sv_breakdown("biased_d")
 
     # Figure 4
     # plot_sv_short_long_reads("HGSV_776", ["HG00096"])
@@ -1215,4 +1235,4 @@ if __name__ == "__main__":
     # compare_sv_ancestry_by_mode(by="population")
 
     # Print SV stats
-    print_sv_stats()
+    print_sv_stats("biased_d")
