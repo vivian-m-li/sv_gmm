@@ -14,6 +14,11 @@ pip3 install -r requirements.txt
 
 If you need...
 
+## Test
+Test if you can successfully run with `test_run.sh`
+You should get the following outputs:
+
+
 ## Required Inputs
 * Structural Variant coordinates or 1000 Genomes ID
 Files in Input_Dir
