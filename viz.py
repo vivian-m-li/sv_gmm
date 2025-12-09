@@ -420,8 +420,9 @@ def plot_2d_coords(
     size_by: str = "num_evidence",
     show_mode_stats: bool = True,
     show_1d_distributions: bool = True,
+    insert_size_file: None,
 ):
-    insert_sizes_df = pd.read_csv("1kgp/insert_sizes.csv")
+    insert_sizes_df = pd.read_csv(insert_size_file)
     for i, mode in enumerate(evidence_by_mode):
         x = []
         num_evidence = []

@@ -144,7 +144,7 @@ def run_trial(squiggle_data, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
 
 
 def run_dirichlet(
-    squiggle_data, **kwargs
+    squiggle_data, insert_size_file, output_dir, **kwargs
 ) -> Tuple[List[GMM], List[np.ndarray]]:
     """
     Runs the Dirichlet process until convergence or max iterations.
@@ -203,6 +203,9 @@ def run_dirichlet(
             break
 
     if display_output:
+        # get the file name of the plot
+        file_name = kwargs["file_name"]
+        print(f"Saving plot to {file_name}")
         # show the last L-len plot
         fig, ax = plt.subplots(figsize=(6, 4))
         plot_2d_coords(
@@ -216,9 +219,11 @@ def run_dirichlet(
             size_by="",
             show_mode_stats=True,
             show_1d_distributions=True,
+            insert_size_file=insert_size_file
         )
         plt.tight_layout()
         plt.show()
+        plt.savefig(f"{file_name}.png", dpi=200)
 
         # animate_dirichlet_heatmap(alphas)
         # animate_dirichlet(posterior_distributions)

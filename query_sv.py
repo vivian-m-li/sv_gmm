@@ -539,7 +539,7 @@ def query_stix(
         if single_trial:
             run_viz_gmm(
                 processed_data,
-                file_name=f"{PLOT_DIR}/{file_name}",
+                file_name=f"{plot_dir}/{file_name}",
                 chr=chr,
                 L=start,
                 R=stop,
@@ -551,9 +551,10 @@ def query_stix(
             )
         else:
             run_dirichlet(
-                processed_data,
+                processed_data, insert_size_file=f"{input_dir}/{insert_size_file}",
+                output_dir=output_dir,
                 **{
-                    "file_name": f"{PLOT_DIR}/{file_name}",
+                    "file_name": f"{plot_dir}/{file_name}",
                     "chr": chr,
                     "L": start,
                     "R": stop,
@@ -681,6 +682,8 @@ def main():
     l = parse_input(args.l) if args.l is not None else ""  # noqa741
     r = parse_input(args.r) if args.r is not None else ""
     sv_id = args.id or ""
+
+    print("Using the following arguments:", args)
 
     query_stix(
         l=l,
