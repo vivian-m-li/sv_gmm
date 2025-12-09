@@ -74,7 +74,7 @@ def run_dirichlet_wrapper(
         print(f"Error processing SV {row['id']}: {e}")
 
 
-@break_after(hours=27, minutes=00)
+@break_after(hours=40, minutes=00)
 def run_svs_until_convergence(stem: str, run_subset: bool = False):
     deletions_df = get_deletions_df(stem)
     sample_ids = set(get_sample_ids(stem))
