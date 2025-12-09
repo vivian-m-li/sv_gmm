@@ -421,10 +421,7 @@ def plot_2d_coords(
     show_mode_stats: bool = True,
     show_1d_distributions: bool = True,
 ):
-    scatter_cm = cm.get_cmap("tab20").colors + cm.get_cmap("tab20b").colors
-    seq_center_df = get_sample_sequencing_centers()
     insert_sizes_df = pd.read_csv("1kgp/insert_sizes.csv")
-    color_lookup = {}
     for i, mode in enumerate(evidence_by_mode):
         x = []
         num_evidence = []
@@ -448,23 +445,7 @@ def plot_2d_coords(
             sem_ax1.append(sem(ax1_vals))
             sem_ax2.append(sem(ax2_vals))
 
-            try:
-                seq_centers = ", ".join(
-                    seq_center_df[
-                        seq_center_df["SAMPLE_NAME"] == evidence.sample.id
-                    ]["CENTER_NAME"].values[0]
-                )
-            except IndexError:
-                seq_centers = "Unknown"  # to handle synthetic data
-
-            scatter_labels.append(seq_centers)
-            if color_by == "mode":
-                scatter_colors.append(COLORS[i])
-            elif color_by == "sequencing_center":
-                if seq_centers not in color_lookup:
-                    color = scatter_cm[len(color_lookup) % len(scatter_cm)]
-                    color_lookup[seq_centers] = color
-                scatter_colors.append(color_lookup[seq_centers])
+            scatter_colors.append(COLORS[i])
 
             try:
                 mean_insert_size = insert_sizes_df[
