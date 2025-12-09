@@ -129,7 +129,7 @@ def write_sv_lookup(dir: str, df: pd.DataFrame):
     sv_lookup_df.to_csv(f"{dir}/sv_lookup.csv", index=False)
 
 
-def write_svs_by_chr(dir: str, df: pd.DataFrame, chr: Optional[str]):
+def write_svs_by_chr(dir: str, df: pd.DataFrame, chr: Optional[str] = None):
     """Splits the SVs into separate files by chromosome for easier access during querying."""
     if not os.path.isdir(f"{dir}/svs_by_chr"):
         os.mkdir(f"{dir}/svs_by_chr")
@@ -156,8 +156,10 @@ def process_input_files(
 
     if sv_lookup_file.endswith(".vcf") or sv_lookup_file.endswith(".vcf.gz"):
         df = load_vcf(dir, sv_lookup_file)
-    else:
+        write_svs_by_chr(dir, df)
+    elif not os.path.isdir(os.path.join(dir, "svs_by_chr")):
         df = pd.read_csv(os.path.join(dir, sv_lookup_file))
+        write_svs_by_chr(dir, df)
 
     if not os.path.isfile(os.path.join(dir, "sample_ids.txt")):
         sample_ids = write_sample_ids_file(dir, df)
@@ -175,7 +177,7 @@ def process_input_files(
             os.path.join(dir, insert_size_file)
         )
 
-    return df, insert_size_lookup
+    return insert_size_lookup
 
 
 def txt_to_df(filename: str) -> pd.DataFrame:
@@ -412,7 +414,7 @@ def query_stix(
         raise FileNotFoundError(f"SV lookup file {sv_lookup_file} not found.")
 
     # write input files that will be used later on during querying
-    df, insert_size_lookup = process_input_files(
+    insert_size_lookup = process_input_files(
         input_dir, sv_lookup_file, insert_size_file
     )
 
@@ -422,12 +424,6 @@ def query_stix(
         r = giggle_format(chr, stop)
     else:
         chr, start, stop = reverse_giggle_format(l, r)
-
-    # finish setting up directories and file paths
-    if not os.path.isfile(
-        os.path.join(input_dir, "svs_by_chr", f"chr{chr}.csv")
-    ):
-        write_svs_by_chr(input_dir, df, chr)
 
     # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
     if chr.lower() in ["x", "y"]:
@@ -476,7 +472,9 @@ def query_stix(
         if output_file is None:
             # stix path is required if the SV evidence has not been queried for yet
             if stix_bin is None or stix_index is None or stix_database is None:
-                raise FileNotFoundError("Missing STIX executable, index, or database path.")
+                raise FileNotFoundError(
+                    "Missing STIX executable, index, or database path."
+                )
 
             # run the bash script to query stix
             output_file = query_stix_bash(
@@ -489,7 +487,6 @@ def query_stix(
                 stix_database,
                 num_stix_shards,
             )
-
 
         # write the processed output file
         processed_data = write_processed_output(
@@ -600,7 +597,7 @@ def main():
         "-d",
         type=bool,
         help="Rerun the SV until >= 80% confident in the outcome",
-        default=True,
+        default=False,
         nargs="?",
         const=True,
     )
