@@ -6,32 +6,31 @@ from gmm_types import GMM2D, EstimatedGMM2D
 from typing import Tuple, List, Optional
 
 RESPONSIBILITY_THRESHOLD = 1e-10
-INCLUDE_HINGE_LOSS = True  # set this to false when testing with synthetic data
 
 """
 GMM/EM helper functions
 """
 
 
-def calc_hinge_loss_d(num_samples: int, mu: List[np.ndarray]) -> float:
+def hinge_loss_distance(
+    mu: List[np.ndarray], *, alpha=0.046, scale=500
+) -> float:
     """Adds a penalty to the log-likelihood to prevent cluster centroids from getting too close to each other (decreasing d), accounting for sequencing noise."""
     # c - alpha * d(mu_i, mu_j)
     # alpha is the slope
     # 0 at d(mu_i, mu_j) = 141, which is 2 SD
     # c1 = -ln n -- max penalty
-    # maybe scale it to make it larger
-    hinge_loss = 0
     num_modes = len(mu)
-    if num_modes > 1:
-        for i in range(num_modes):
-            for j in range(i + 1, num_modes):
-                dist = np.linalg.norm(
-                    mu[i] - mu[j]
-                )  # add a large penalty for mus that are too close to each other
-                # old hinge loss b term was -0.045
-                penalty = (500 * np.log(num_samples)) * (np.exp(-0.073 * dist))
-                hinge_loss += penalty
-    return hinge_loss
+    if num_modes <= 1:
+        return 0.0
+
+    loss = 0
+    for i in range(num_modes):
+        for j in range(i + 1, num_modes):
+            # add a large penalty for mus that are too close to each other
+            dist = np.linalg.norm(mu[i] - mu[j])
+            loss += scale * np.exp(-alpha * dist)
+    return loss
 
 
 def get_sv_from_mu(mu: np.ndarray, L: int, R: int) -> Tuple[int, int]:
@@ -42,24 +41,37 @@ def get_sv_from_mu(mu: np.ndarray, L: int, R: int) -> Tuple[int, int]:
     return sv_L, sv_R
 
 
-def calc_hinge_loss(
-    num_samples: int, mu: List[np.ndarray], L: int, R: int
+def hinge_loss_overlap(
+    mu: List[np.ndarray], L: int, R: int, *, beta=0.2, scale=372.0
 ) -> float:
     """Adds a penalty to the log-likelihood to prevent high reciprocal overlap and avoid over-clustering."""
-    hinge_loss = 0
     num_modes = len(mu)
-    if num_modes > 1:
-        for i in range(num_modes):
-            for j in range(i + 1, num_modes):
-                sv1, sv2 = get_sv_from_mu(mu[i], L, R), get_sv_from_mu(
-                    mu[j], L, R
-                )
-                r = reciprocal_overlap(sv1, sv2)
-                r_scaled = (1 - r) * 100
-                # TODO: keep adjusting these parameters depending on the desired dropoff in accuracy
-                penalty = (95 * np.log(num_samples)) * (np.exp(-0.3 * r_scaled))
-                hinge_loss += penalty
-    return hinge_loss
+    if num_modes <= 1:
+        return 0.0
+
+    loss = 0
+    for i in range(num_modes):
+        for j in range(i + 1, num_modes):
+            sv1, sv2 = get_sv_from_mu(mu[i], L, R), get_sv_from_mu(mu[j], L, R)
+            r = reciprocal_overlap(sv1, sv2)
+            r_scaled = (1 - r) * 100
+            loss += scale * np.exp(-beta * r_scaled)
+    return loss
+
+
+def model_penalty(
+    mu: list[np.ndarray],
+    L: int,
+    R: int,
+    dist_weight: float = 0.5,
+    overlap_weight: float = 0.5,
+):
+    """
+    Aggregate model penalties from distance and reciprocal overlap into a single score.
+    """
+    d_penalty = hinge_loss_distance(mu, len=R - L)
+    r_penalty = hinge_loss_overlap(mu, L, R)
+    return 2 * (dist_weight * d_penalty + overlap_weight * r_penalty)
 
 
 def calc_log_likelihood(
@@ -85,15 +97,12 @@ def calc_log_likelihood(
                     cov[k] += np.eye(cov[k].shape[0]) * 1e-6
             pdf.append(pdf_i)
         likelihood_i = np.sum(pdf)
-        logL += np.log(likelihood_i)
+        logL += np.log(likelihood_i + 1e-300)  # avoid log(0)
 
-    if INCLUDE_HINGE_LOSS:
-        hinge_loss_d = calc_hinge_loss_d(len(x), mu)
-        hinge_loss = calc_hinge_loss(len(x), mu, L, R)
-        # use both criteria to determine hinge loss - clusters need to be far apart in L-length space and have low reciprocal overlap
-        # reduce the hinge loss from high reciprocal overlap
-        logL -= (0.75 * hinge_loss_d) + (0.25 * hinge_loss)
-    return logL
+    # calculate final penalized logL
+    n = len(x)
+    penalized_logL = logL - np.log(n) * model_penalty(mu, L, R)
+    return penalized_logL
 
 
 def calc_aic(
@@ -314,7 +323,6 @@ def run_gmm(
             all_params.append(params)
             iterations.append(num_iterations)
             aic_vals.append(aic)
-            # print(num_modes, params[-1].logL, aic)
         min_aic_idx = aic_vals.index(min(aic_vals))
         opt_params = all_params[min_aic_idx]
         num_iterations_final = iterations[min_aic_idx]

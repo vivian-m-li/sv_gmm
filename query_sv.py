@@ -129,7 +129,7 @@ def write_sv_lookup(dir: str, df: pd.DataFrame):
     sv_lookup_df.to_csv(f"{dir}/sv_lookup.csv", index=False)
 
 
-def write_svs_by_chr(dir: str, df: pd.DataFrame, chr: Optional[str]):
+def write_svs_by_chr(dir: str, df: pd.DataFrame, chr: Optional[str] = None):
     """Splits the SVs into separate files by chromosome for easier access during querying."""
     if not os.path.isdir(f"{dir}/svs_by_chr"):
         os.mkdir(f"{dir}/svs_by_chr")
@@ -156,8 +156,10 @@ def process_input_files(
 
     if sv_lookup_file.endswith(".vcf") or sv_lookup_file.endswith(".vcf.gz"):
         df = load_vcf(dir, sv_lookup_file)
-    else:
+        write_svs_by_chr(dir, df)
+    elif not os.path.isdir(os.path.join(dir, "svs_by_chr")):
         df = pd.read_csv(os.path.join(dir, sv_lookup_file))
+        write_svs_by_chr(dir, df)
 
     if not os.path.isfile(os.path.join(dir, "sample_ids.txt")):
         sample_ids = write_sample_ids_file(dir, df)
@@ -175,7 +177,7 @@ def process_input_files(
             os.path.join(dir, insert_size_file)
         )
 
-    return df, insert_size_lookup
+    return insert_size_lookup
 
 
 def txt_to_df(filename: str) -> pd.DataFrame:
@@ -311,14 +313,6 @@ def query_stix_bash(
     data within the defined coordinate space.
     NOT SURE IF THIS ALSO ONLY GETS THE DELETION EVIDENCE (e.g. split or discordant pairs)
     """
-    bash_file = "query_stix.sh"
-    if long_reads:
-        bash_file = "query_stix_lr.sh"
-    elif multi_files:
-        bash_file = "query_stix_multifile.sh"
-
-    if multi_files or long_reads:
-        output_file = f"{output_dir}/partial_outputs/{file_name}"
     if num_shards > 1:
         if not os.path.exists(f"{output_dir}/partial_outputs"):
             os.mkdir(f"{output_dir}/partial_outputs")
@@ -327,7 +321,7 @@ def query_stix_bash(
         stix_output_file = f"{output_dir}/{file_name}"
 
     stix_path = "/".join(index_path.split("/")[:-1])
-    results = subprocess.run(
+    subprocess.run(
         ["bash", "query_stix.sh"]
         + [
             l,
@@ -342,8 +336,6 @@ def query_stix_bash(
         capture_output=True,
         text=True,
     )
-    print(results.stdout)
-    print(results.stderr)
 
     # the query output from each shard was written to a different file, and we want to write them to the same file
     if num_shards > 1:
@@ -426,7 +418,7 @@ def query_stix(
         raise FileNotFoundError(f"SV lookup file {sv_lookup_file} not found.")
 
     # write input files that will be used later on during querying
-    df, insert_size_lookup = process_input_files(
+    insert_size_lookup = process_input_files(
         input_dir, sv_lookup_file, insert_size_file
     )
 
@@ -437,12 +429,6 @@ def query_stix(
         r = giggle_format(chr, stop)
     else:
         chr, start, stop = reverse_giggle_format(l, r)
-
-    # finish setting up directories and file paths
-    if not os.path.isfile(
-        os.path.join(input_dir, "svs_by_chr", f"chr{chr}.csv")
-    ):
-        write_svs_by_chr(input_dir, df, chr)
 
     # Note: x/y chromosomes are ignored in the analysis and are not queried by the script
     if chr.lower() in ["x", "y"]:
@@ -455,7 +441,12 @@ def query_stix(
     processed_file_dir = f"{output_dir}/{PROCESSED_FILE_DIR}"
     plot_dir = f"{output_dir}/{PLOT_DIR}"
 
-    for directory in [output_dir, output_file_dir, processed_file_dir, plot_dir]:
+    for directory in [
+        output_dir,
+        output_file_dir,
+        processed_file_dir,
+        plot_dir,
+    ]:
         if not os.path.exists(directory):
             os.mkdir(directory)
 
@@ -490,10 +481,14 @@ def query_stix(
                 break
 
         if output_file is None:
-            print("This variant has not been previously quiered or processed. Using STIX to do this now.")
+            print(
+                "This variant has not been previously quiered or processed. Using STIX to do this now."
+            )
             # stix path is required if the SV evidence has not been queried for yet
             if stix_bin is None or stix_index is None or stix_database is None:
-                raise FileNotFoundError("Missing STIX executable, index, or database path.")
+                raise FileNotFoundError(
+                    "Missing STIX executable, index, or database path."
+                )
 
             # run the bash script to query stix
             output_file = query_stix_bash(
@@ -506,8 +501,10 @@ def query_stix(
                 stix_database,
                 num_stix_shards,
             )
-        
-        print("Using previously-queried data from", output_file)
+
+        else:
+            print("Using previously-queried data from", output_file)
+
         # write the processed output file
         processed_data = write_processed_output(
             output_file,
@@ -551,7 +548,8 @@ def query_stix(
             )
         else:
             run_dirichlet(
-                processed_data, insert_size_file=f"{input_dir}/{insert_size_file}",
+                processed_data,
+                insert_size_file=f"{input_dir}/{insert_size_file}",
                 output_dir=output_dir,
                 **{
                     "file_name": f"{plot_dir}/{file_name}",
@@ -618,7 +616,7 @@ def main():
         "-d",
         type=bool,
         help="Rerun the SV until >= 80% confident in the outcome",
-        default=True,
+        default=False,
         nargs="?",
         const=True,
     )
