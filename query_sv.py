@@ -284,6 +284,7 @@ def parse_input(input: str) -> str:
 
 
 def get_reference_samples(
+    # Gets the samples with the homozygous reference genotype (0, 0)
     squiggle_data: Dict[str, np.ndarray[float]],
     chr: str,
     start: int,
@@ -307,15 +308,24 @@ def query_stix_bash(
     database_path: str,
     num_shards: int,
 ):
+    """
+    Runs a bash query file to query STIX for all the read (paired-end and split
+    data within the defined coordinate space.
+    num_shards: number of shards the stix index and database are split into
+    - this must be defined properly to pull all of the relevant data
+    """
+    partial_outputs_dir = os.path.join(output_dir, "partial_outputs")
     if num_shards > 1:
-        if not os.path.exists(f"{output_dir}/partial_outputs"):
-            os.mkdir(f"{output_dir}/partial_outputs")
-        stix_output_file = f"{output_dir}/partial_outputs/{file_name}"
+        if not os.path.exists(partial_outputs_dir):
+            os.mkdir(partial_outputs_dir)
+        stix_output_file = os.path.join(
+            output_dir, "partial_outputs", file_name
+        )
     else:
-        stix_output_file = f"{output_dir}/{file_name}"
+        stix_output_file = os.path.join(output_dir, file_name)
 
     stix_path = "/".join(index_path.split("/")[:-1])
-    results = subprocess.run(
+    subprocess.run(
         ["bash", "query_stix.sh"]
         + [
             l,
@@ -330,23 +340,22 @@ def query_stix_bash(
         capture_output=True,
         text=True,
     )
-    print(results.stdout)
-    print(results.stderr)
 
     # the query output from each shard was written to a different file, and we want to write them to the same file
     if num_shards > 1:
-        output_file = f"{output_dir}/{file_name}.txt"
+        output_file = os.path.join(output_dir, f"{file_name}.txt")
         with open(output_file, "w") as out_file:
             for i in range(num_shards):
-                with open(
-                    f"{output_dir}/partial_outputs/{file_name}_{i}.txt", "r"
-                ) as partial_file:
+                temp_file = os.path.join(
+                    partial_outputs_dir, f"{file_name}_{i}.txt"
+                )
+                with open(temp_file, "r") as partial_file:
                     # write the partial file to the main file
                     out_file.write(partial_file.read())
 
                 # remove partial file
-                os.remove(f"{output_dir}/partial_outputs/{file_name}_{i}.txt")
-        os.rmdir(f"{output_dir}/partial_outputs")
+                os.remove(temp_file)
+        os.rmdir(partial_outputs_dir)
     else:
         output_file = f"{stix_output_file}.txt"
 
@@ -418,6 +427,7 @@ def query_stix(
         input_dir, sv_lookup_file, insert_size_file
     )
 
+    # if an SV id is provided, then get the chromosomes for that
     if sv_id != "":
         chr, start, stop = lookup_sv_position(sv_id, input_dir)
         l = giggle_format(chr, start)  # noqa741
@@ -432,11 +442,16 @@ def query_stix(
     # set filepaths
     if output_dir is None:
         output_dir = input_dir
-    output_file_dir = f"{output_dir}/{FILE_DIR}"
-    processed_file_dir = f"{output_dir}/{PROCESSED_FILE_DIR}"
-    plot_dir = f"{output_dir}/{PLOT_DIR}"
+    output_file_dir = os.path.join(output_dir, FILE_DIR)
+    processed_file_dir = os.path.join(output_dir, PROCESSED_FILE_DIR)
+    plot_dir = os.path.join(output_dir, PLOT_DIR)
 
-    for directory in [output_file_dir, processed_file_dir, plot_dir]:
+    for directory in [
+        output_dir,
+        output_file_dir,
+        processed_file_dir,
+        plot_dir,
+    ]:
         if not os.path.exists(directory):
             os.mkdir(directory)
 
@@ -447,13 +462,14 @@ def query_stix(
     for dir in [
         input_dir,
         output_dir,
-        f"{input_dir}/{PROCESSED_FILE_DIR}",
+        os.path.join(input_dir, PROCESSED_FILE_DIR),
         processed_file_dir,
     ]:
         if os.path.isfile(f"{dir}/{file_name}.csv"):
             processed_output_file = f"{dir}/{file_name}.csv"
             break
     if processed_output_file is not None:
+        print("Using previously-processed data from", processed_output_file)
         processed_data = load_processed_data(processed_output_file)
     else:
         # check if this SV evidence has already been queried for in the home directory
@@ -462,7 +478,7 @@ def query_stix(
         for dir in [
             input_dir,
             output_dir,
-            f"{input_dir}/{FILE_DIR}",
+            os.path.join(input_dir, FILE_DIR),
             output_file_dir,
         ]:
             if os.path.isfile(f"{dir}/{file_name}.txt"):
@@ -470,6 +486,9 @@ def query_stix(
                 break
 
         if output_file is None:
+            print(
+                "This variant has not been previously quiered or processed. Using STIX to do this now."
+            )
             # stix path is required if the SV evidence has not been queried for yet
             if stix_bin is None or stix_index is None or stix_database is None:
                 raise FileNotFoundError(
@@ -487,6 +506,9 @@ def query_stix(
                 stix_database,
                 num_stix_shards,
             )
+
+        else:
+            print("Using previously-queried data from", output_file)
 
         # write the processed output file
         processed_data = write_processed_output(
@@ -519,7 +541,7 @@ def query_stix(
         if single_trial:
             run_viz_gmm(
                 processed_data,
-                file_name=f"{PLOT_DIR}/{file_name}",
+                file_name=f"{plot_dir}/{file_name}",
                 chr=chr,
                 L=start,
                 R=stop,
@@ -532,8 +554,9 @@ def query_stix(
         else:
             run_dirichlet(
                 processed_data,
+                insert_size_file=f"{input_dir}/{insert_size_file}",
                 **{
-                    "file_name": f"{PLOT_DIR}/{file_name}",
+                    "file_name": f"{plot_dir}/{file_name}",
                     "chr": chr,
                     "L": start,
                     "R": stop,
@@ -661,6 +684,8 @@ def main():
     l = parse_input(args.l) if args.l is not None else ""  # noqa741
     r = parse_input(args.r) if args.r is not None else ""
     sv_id = args.id or ""
+
+    print("Using the following arguments:", args)
 
     query_stix(
         l=l,

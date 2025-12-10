@@ -30,6 +30,7 @@ def run_dirichlet_inner(
     squiggle_data, num_samples = get_raw_data(row, sample_set, stem)
 
     if len(squiggle_data) == 0:
+        # if no samples have any data supporting the SV then not included
         gmms, alphas, posterior_distributions = [(None, [])], [], []
     else:
         gmms, alphas, posterior_distributions = run_dirichlet(
