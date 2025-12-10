@@ -582,14 +582,13 @@ def process_data(
             mean_r = int(np.mean([paired_end[1] for paired_end in paired_ends]))
             # here, the intercept is just the length of the segment between the paired-end reads
             # subtract the insert size to get the length of the supposed deletion.
-            # Isn't insert size not applicable for long read data?
             b = (
                 mean_r - mean_l - insert_size_lookup[sample_id]
             )  # R - L (including read length)
             sv_evidence.append(
                 Evidence(
                     sample=Sample(id=sample_id),
-                    intercept=b, 
+                    intercept=b,
                     mean_l=mean_l,
                     removed=0,  # deprecated - a flag used to indicate which step of the pre-processing removed a data point
                     paired_ends=paired_ends,

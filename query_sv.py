@@ -309,9 +309,10 @@ def query_stix_bash(
     num_shards: int,
 ):
     """
-    Runs the appropriate bash query file which simply uses STIX to get all the read
+    Runs a bash query file to query STIX for all the read (paired-end and split
     data within the defined coordinate space.
-    NOT SURE IF THIS ALSO ONLY GETS THE DELETION EVIDENCE (e.g. split or discordant pairs)
+    num_shards: number of shards the stix index and database are split into
+    - this must be defined properly to pull all of the relevant data
     """
     if num_shards > 1:
         if not os.path.exists(f"{output_dir}/partial_outputs"):
@@ -550,7 +551,6 @@ def query_stix(
             run_dirichlet(
                 processed_data,
                 insert_size_file=f"{input_dir}/{insert_size_file}",
-                output_dir=output_dir,
                 **{
                     "file_name": f"{plot_dir}/{file_name}",
                     "chr": chr,
