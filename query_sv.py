@@ -309,16 +309,20 @@ def query_stix_bash(
     num_shards: int,
 ):
     """
-    Runs the appropriate bash query file which simply uses STIX to get all the read
+    Runs a bash query file to query STIX for all the read (paired-end and split
     data within the defined coordinate space.
-    NOT SURE IF THIS ALSO ONLY GETS THE DELETION EVIDENCE (e.g. split or discordant pairs)
+    num_shards: number of shards the stix index and database are split into
+    - this must be defined properly to pull all of the relevant data
     """
+    partial_outputs_dir = os.path.join(output_dir, "partial_outputs")
     if num_shards > 1:
-        if not os.path.exists(f"{output_dir}/partial_outputs"):
-            os.mkdir(f"{output_dir}/partial_outputs")
-        stix_output_file = f"{output_dir}/partial_outputs/{file_name}"
+        if not os.path.exists(partial_outputs_dir):
+            os.mkdir(partial_outputs_dir)
+        stix_output_file = os.path.join(
+            output_dir, "partial_outputs", file_name
+        )
     else:
-        stix_output_file = f"{output_dir}/{file_name}"
+        stix_output_file = os.path.join(output_dir, file_name)
 
     stix_path = "/".join(index_path.split("/")[:-1])
     subprocess.run(
@@ -339,18 +343,19 @@ def query_stix_bash(
 
     # the query output from each shard was written to a different file, and we want to write them to the same file
     if num_shards > 1:
-        output_file = f"{output_dir}/{file_name}.txt"
+        output_file = os.path.join(output_dir, f"{file_name}.txt")
         with open(output_file, "w") as out_file:
             for i in range(num_shards):
-                with open(
-                    f"{output_dir}/partial_outputs/{file_name}_{i}.txt", "r"
-                ) as partial_file:
+                temp_file = os.path.join(
+                    partial_outputs_dir, f"{file_name}_{i}.txt"
+                )
+                with open(temp_file, "r") as partial_file:
                     # write the partial file to the main file
                     out_file.write(partial_file.read())
 
                 # remove partial file
-                os.remove(f"{output_dir}/partial_outputs/{file_name}_{i}.txt")
-        os.rmdir(f"{output_dir}/partial_outputs")
+                os.remove(temp_file)
+        os.rmdir(partial_outputs_dir)
     else:
         output_file = f"{stix_output_file}.txt"
 
@@ -437,9 +442,9 @@ def query_stix(
     # set filepaths
     if output_dir is None:
         output_dir = input_dir
-    output_file_dir = f"{output_dir}/{FILE_DIR}"
-    processed_file_dir = f"{output_dir}/{PROCESSED_FILE_DIR}"
-    plot_dir = f"{output_dir}/{PLOT_DIR}"
+    output_file_dir = os.path.join(output_dir, FILE_DIR)
+    processed_file_dir = os.path.join(output_dir, PROCESSED_FILE_DIR)
+    plot_dir = os.path.join(output_dir, PLOT_DIR)
 
     for directory in [
         output_dir,
@@ -457,7 +462,7 @@ def query_stix(
     for dir in [
         input_dir,
         output_dir,
-        f"{input_dir}/{PROCESSED_FILE_DIR}",
+        os.path.join(input_dir, PROCESSED_FILE_DIR),
         processed_file_dir,
     ]:
         if os.path.isfile(f"{dir}/{file_name}.csv"):
@@ -473,7 +478,7 @@ def query_stix(
         for dir in [
             input_dir,
             output_dir,
-            f"{input_dir}/{FILE_DIR}",
+            os.path.join(input_dir, FILE_DIR),
             output_file_dir,
         ]:
             if os.path.isfile(f"{dir}/{file_name}.txt"):
@@ -550,7 +555,6 @@ def query_stix(
             run_dirichlet(
                 processed_data,
                 insert_size_file=f"{input_dir}/{insert_size_file}",
-                output_dir=output_dir,
                 **{
                     "file_name": f"{plot_dir}/{file_name}",
                     "chr": chr,

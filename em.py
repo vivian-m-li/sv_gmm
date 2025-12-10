@@ -69,7 +69,7 @@ def model_penalty(
     """
     Aggregate model penalties from distance and reciprocal overlap into a single score.
     """
-    d_penalty = hinge_loss_distance(mu, len=R - L)
+    d_penalty = hinge_loss_distance(mu, scale=R - L)
     r_penalty = hinge_loss_overlap(mu, L, R)
     return 2 * (dist_weight * d_penalty + overlap_weight * r_penalty)
 
