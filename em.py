@@ -67,7 +67,6 @@ def model_penalty(mu: list[np.ndarray], L: int, R: int):
     # penalty decreases with sv size since clusters will be closer together due to noise in read data
     d_penalty = hinge_loss_distance(mu, scale=svlen)
     r_penalty = hinge_loss_overlap(mu, L, R)
-    print(f"Distance penalty: {d_penalty}, Overlap penalty: {r_penalty}")
 
     # weight the two penalties based on sv length
     # shorter SVs -> more weight on overlap penalty since noise can cause clusters to be closer in distance
