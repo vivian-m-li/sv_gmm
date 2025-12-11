@@ -624,14 +624,15 @@ def process_data(
         if group.shape[0] < min_pairs:
             continue  # skip samples with too few reads
 
+        # take the innermost bounds of the reads
         ls = group["l_end"].tolist()
-        rs = group["r_end"].tolist()
+        rs = group["r_start"].tolist()
         paired_ends = [[l, r] for l, r in zip(ls, rs)]  # noqaE741
 
         # duplicate rows where the type is "split" to weight them more heavily
         ls_split = group[group["type"] == "split"]["l_end"].tolist()
         ls += ls_split
-        rs_split = group[group["type"] == "split"]["r_end"].tolist()
+        rs_split = group[group["type"] == "split"]["r_start"].tolist()
         rs += rs_split
 
         # we should be able to rely on STIX to return only relevant reads

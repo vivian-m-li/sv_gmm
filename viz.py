@@ -444,14 +444,8 @@ def plot_2d_coords(
         scatter_labels = []
         scatter_sizes = []
         for evidence in mode:
-            ax1_vals = [
-                GMM_AXES[axis1](x, evidence.mean_insert_size)
-                for x in evidence.paired_ends
-            ]
-            ax2_vals = [
-                GMM_AXES[axis2](x, evidence.mean_insert_size)
-                for x in evidence.paired_ends
-            ]
+            ax1_vals = [GMM_AXES[axis1](x) for x in evidence.paired_ends]
+            ax2_vals = [GMM_AXES[axis2](x) for x in evidence.paired_ends]
             x.append([np.mean(ax1_vals), np.mean(ax2_vals)])
             num_evidence.append(len(evidence.paired_ends))
             sem_ax1.append(sem(ax1_vals))
