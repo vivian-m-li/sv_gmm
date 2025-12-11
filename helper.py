@@ -10,7 +10,6 @@ from gmm_types import Evidence, SVStat, SVInfoGMM, SUPERPOPULATIONS
 from dataclasses import fields
 from typing import List, Optional, Tuple, Dict
 
-PROCESSED_STIX_DIR = "processed_stix_output"
 PROCESSED_SVS_DIR = "processed_svs"
 
 """Get commonly used dataframes"""
@@ -173,15 +172,11 @@ def df_to_bed(
 
 
 def find_missing_sample_ids():
-    """Gets sample ids that are in the STIX databse but are not in the original deletions VCF file"""
+    """Gets sample ids that are in the STIX database but are not in the original deletions VCF file"""
     sample_ids = set()
-    for file in os.listdir(PROCESSED_STIX_DIR):
-        with open(f"{PROCESSED_STIX_DIR}/{file}") as f:
-            for line in f:
-                sample_id = line.strip().split(",")[0]
-                if sample_id[0].isalpha():
-                    sample_ids.add(sample_id)
-
+    for file in os.listdir("stix_output"):
+        df = stix_output_to_df(f"stix_output/{file}")
+        sample_ids = sample_ids | set(df["sample_id"].tolist())
     deletions_df = get_deletions_df()
     missing = sample_ids - set(deletions_df.columns[11:-1])
 
@@ -285,15 +280,10 @@ def get_mean_coverage():
         chr = sv["chr"]
         L = sv["start"]
         R = sv["stop"]
-        file = f"{PROCESSED_STIX_DIR}/{chr}:{L}-{L}_{chr}:{R}-{R}.csv"
-        squiggle_data = {}
-        with open(file, newline="") as csvfile:
-            reader = csv.reader(csvfile)
-            for row in reader:
-                squiggle_data[row[0]] = np.array([float(x) for x in row[1:]])
+        reads = stix_output_to_df(f"stix_output/{chr}:{L}_{chr}:{R}.txt")
         for mode in modes:
             coverage = [
-                int(len(squiggle_data[sample_id]) / 2)
+                reads[reads["sample_id"] == sample_id].shape[0]
                 for sample_id in mode["sample_ids"]
             ]
 

@@ -344,6 +344,7 @@ def write_processed_output(
     r_col: str = "r_start",
 ) -> Dict[str, np.ndarray[float]]:
     """
+    DEPRECATED: reads are now handled directly from the raw read file in the stix_output directory
     Parses the raw stix output (from the patched -g version) into pairs of coordinates for each sample. Each pair represents the start/stop of the deletion.
     Uses l_end and r_start (the tightest bounds of the left/right reads) to calculate the deletion.
     For short reads, split reads are weighted above discordant read pairs due to their higher accuracy in defining breakpoints.
