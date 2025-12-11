@@ -11,7 +11,7 @@ from write_sv_output import (
 )
 from run_dirichlet import run_dirichlet
 from helper import get_deletions_df, get_sample_ids, write_post_processed_files
-from typing import Set, Dict
+from typing import Dict
 from timeout import break_after
 
 
@@ -23,18 +23,17 @@ OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 def run_dirichlet_inner(
     row: Dict,
     population_size: int,
-    sample_set: Set[int],
     stem: str,
 ):
     sv_id = row["id"]
-    squiggle_data, num_samples = get_raw_data(row, sample_set, stem)
+    reads, num_samples = get_raw_data(row, stem)
 
-    if len(squiggle_data) == 0:
+    if reads.empty:
         # if no samples have any data supporting the SV then not included
         gmms, alphas, posterior_distributions = [(None, [])], [], []
     else:
         gmms, alphas, posterior_distributions = run_dirichlet(
-            squiggle_data,
+            reads,
             **{
                 "chr": row["chr"],
                 "L": row["start"],
@@ -48,7 +47,7 @@ def run_dirichlet_inner(
         sv_stat = init_sv_stat_row(
             row,
             num_samples=num_samples,
-            num_reference=num_samples - len(squiggle_data),
+            num_reference=num_samples - reads["sample_id"].nunique(),
         )
         write_sv_stats(
             sv_stat, gmm, evidence_by_mode, population_size, SCRATCH_FILE_DIR, i
@@ -63,11 +62,10 @@ def run_dirichlet_inner(
 def run_dirichlet_wrapper(
     row: Dict,
     population_size: int,
-    sample_set: Set[int],
     stem: str,
 ):
     try:
-        run_dirichlet_inner(row, population_size, sample_set, stem)
+        run_dirichlet_inner(row, population_size, stem)
     except Exception as e:
         print(f"Error processing SV {row['id']}: {e}")
 
@@ -92,7 +90,7 @@ def run_svs_until_convergence(stem: str, run_subset: bool = False):
             if run_subset:
                 if row["id"] not in svs_to_run:
                     continue
-            args.append((row.to_dict(), population_size, sample_ids, stem))
+            args.append((row.to_dict(), population_size, stem))
         p.starmap(run_dirichlet_wrapper, args)
         p.close()
         p.join()

@@ -10,28 +10,26 @@ from write_sv_output import (
     concat_multi_processed_sv_files,
 )
 from helper import get_deletions_df
-from typing import Set, Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple
 
 FILE_DIR = "processed_svs"
 SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
 OUTPUT_FILE_NAME = "sv_stats.csv"
 
 
-def run_all_sv_wrapper(
-    row: Dict, population_size: int, sample_set: Set[int], iteration: int = 0
-):
-    squiggle_data, num_samples = get_raw_data(row, sample_set)
+def run_all_sv_wrapper(row: Dict, population_size: int, iteration: int = 0):
+    reads, num_samples = get_raw_data(row)
     sv_stat = init_sv_stat_row(
         row,
         num_samples=num_samples,
-        num_reference=num_samples - len(squiggle_data),
+        num_reference=num_samples - reads["sample_id"].nunique(),
     )
 
-    if len(squiggle_data) == 0:
+    if reads.empty:
         gmm, evidence_by_mode = None, []
     else:
         gmm, evidence_by_mode = run_viz_gmm(
-            squiggle_data,
+            reads,
             chr=row["chr"],
             L=row["start"],
             R=row["stop"],
@@ -59,8 +57,6 @@ def run_all_sv(
     deletions_df = get_deletions_df()
 
     population_size = deletions_df.shape[1] - 12
-    sample_ids = set(deletions_df.columns[11:-1])  # 2504 samples
-
     if subset is not None:
         for chr, start, stop in subset:
             row = deletions_df[
@@ -68,7 +64,7 @@ def run_all_sv(
                 & (deletions_df["start"] == start)
                 & (deletions_df["stop"] == stop)
             ].iloc[0]
-            write_sv_stats(row.to_dict(), population_size, sample_ids)
+            run_all_sv_wrapper(row.to_dict(), population_size)
     else:
         if rerun_all_svs:
             processed_sv_ids = set()
@@ -100,7 +96,7 @@ def run_all_sv(
                 if row.id in processed_sv_ids:
                     continue
                 for i in range(1, num_iterations + 1):
-                    args.append((row.to_dict(), population_size, sample_ids, i))
+                    args.append((row.to_dict(), population_size, i))
             p.starmap(run_all_sv_wrapper, args)
             p.close()
             p.join()

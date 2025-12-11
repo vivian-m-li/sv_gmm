@@ -14,7 +14,13 @@ from viz import plot_2d_coords, plot_single_sv
 from query_sv import query_stix
 from process_data import process_data, get_evidence_by_mode, run_viz_gmm
 from em import run_gmm
-from helper import get_sv_stats_collapsed_df, get_sv_lookup, get_sv_chr, calc_af
+from helper import (
+    get_sv_stats_collapsed_df,
+    get_sv_lookup,
+    get_sv_chr,
+    calc_af,
+    write_fake_stix_data,
+)
 from gmm_types import COLORS, SUPERPOPULATIONS, SUBPOPULATIONS, ANCESTRY_COLORS
 from matplotlib.gridspec import GridSpec
 
@@ -569,10 +575,11 @@ def methods_clustered(ax, svs, reads, insert_size_lookup, num_modes):
     """Figure 2c - Visualizes the clustered reads in length vs. read L position space."""
 
     sv_avg = (np.mean([sv[0] for sv in svs]), np.mean([sv[1] for sv in svs]))
-    squiggle_data = {sample_id: [reads[sample_id]] for sample_id in reads}
+    reads_df = write_fake_stix_data(reads)
+
     L, R = sv_avg[0], sv_avg[1]
     points, sv_evidence = process_data(
-        squiggle_data,
+        reads_df,
         file_name="",
         L=L,
         R=R,
@@ -597,7 +604,7 @@ def methods_clustered(ax, svs, reads, insert_size_lookup, num_modes):
         size_by="",
         show_mode_stats=False,
         show_1d_distributions=False,
-        insert_sizes_df=insert_size_lookup,
+        insert_size_lookup=insert_size_lookup,
     )
 
     ax.set_xticks([])

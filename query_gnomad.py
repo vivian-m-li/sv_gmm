@@ -7,18 +7,14 @@ import multiprocessing
 import pandas as pd
 import matplotlib.pyplot as plt
 from gmm_types import CHR_LENGTHS
-from query_sv import (
-    giggle_format,
-    query_stix,
-    load_squiggle_data,
-    PROCESSED_FILE_DIR,
-)
+from query_sv import giggle_format, query_stix, FILE_DIR
+from helper import stix_output_to_df
 from process_data import process_data
 from typing import Dict
 
 # for human genome assembly GRCh37, https://www.ncbi.nlm.nih.gov/grc/human/data?asm=GRCh37
 URL = "https://gnomad.broadinstitute.org/api/"
-FILE_DIR = "gnomad_svs"
+INPUT_DIR = "gnomad_svs"
 
 
 def query_gnomad(chr: str, start: int, stop: int):
@@ -48,7 +44,7 @@ def query_gnomad(chr: str, start: int, stop: int):
         dels, key=lambda x: x["af"], reverse=True
     )  # sort by allele frequency
 
-    filename = f"{FILE_DIR}/{chr}.csv"
+    filename = f"{INPUT_DIR}/{chr}.csv"
     with open(filename, "w", newline="") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fields)
         writer.writeheader()
@@ -66,7 +62,7 @@ def get_all_sv():
 def query_gnomad_stix():
     for chr in CHR_LENGTHS.keys():
         start = time.time()
-        df = pd.read_csv(f"{FILE_DIR}/{chr}.csv")
+        df = pd.read_csv(f"{INPUT_DIR}/{chr}.csv")
         with multiprocessing.Manager():
             p = multiprocessing.Pool(multiprocessing.cpu_count())
             args = []
@@ -91,14 +87,16 @@ def query_gnomad_stix():
 def get_num_samples(row_index: int, row, chr: str, lookup: Dict[int, int]):
     start = giggle_format(chr, row.pos)
     end = giggle_format(chr, row.end)
-    squiggle_data = load_squiggle_data(
-        f"{PROCESSED_FILE_DIR}/{start}_{end}.csv"
-    )
-    if len(squiggle_data) > 0:
-        intercepts, _ = process_data(
-            squiggle_data, file_name=None, L=row.pos, R=row.end
+    reads = stix_output_to_df(f"{FILE_DIR}/{start}-{end}.txt")
+    if not reads.empty:
+        # set default sample size
+        insert_size_lookup = {
+            sample_id: 450 for sample_id in reads["sample_id"].unique()
+        }
+        points, _ = process_data(
+            reads, L=row.pos, R=row.end, insert_size_lookup=insert_size_lookup
         )
-        lookup[row_index] = len(intercepts)
+        lookup[row_index] = len(points)
 
 
 def plot_af_num_samples(chr: str, df: pd.DataFrame):
@@ -112,7 +110,7 @@ def plot_af_num_samples(chr: str, df: pd.DataFrame):
 
 def get_num_sv():
     for chr in CHR_LENGTHS.keys():
-        filename = f"{FILE_DIR}/{chr}.csv"
+        filename = f"{INPUT_DIR}/{chr}.csv"
         df = pd.read_csv(filename)
         if "num_samples" not in df.columns:
             df["num_samples"] = 0
@@ -135,8 +133,8 @@ def get_num_sv():
 
 
 def main():
-    if not os.path.exists(FILE_DIR):
-        os.mkdir(FILE_DIR)
+    if not os.path.exists(INPUT_DIR):
+        os.mkdir(INPUT_DIR)
         get_all_sv()
         query_gnomad_stix()
     get_num_sv()

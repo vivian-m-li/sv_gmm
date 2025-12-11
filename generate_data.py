@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 from process_data import run_viz_gmm
+from helper import write_fake_stix_data
 from collections import defaultdict
 from typing import List, Tuple, Optional, Dict
 
@@ -310,10 +311,6 @@ def generate_synthetic_sv_data(
     weights = generate_weights(num_svs) if p is None else p
     modes = assign_modes(weights, samples)
 
-    # print(
-    #     f"{num_samples} total samples, {[modes.count(i) for i in range(num_svs)]} samples per mode"
-    # )
-
     insert_size_df = pd.read_csv(
         "1kgp/insert_sizes.csv", dtype={"mean_insert_size": int}
     )
@@ -334,9 +331,10 @@ def generate_synthetic_sv_data(
             split = random.randint(
                 int(read_length / 2) - 100, int(read_length / 2) + 100
             )
-            evidence_start = mode_start - split
-            evidence_stop = mode_end + (read_length - split)
-            evidence[sample].extend([evidence_start, evidence_stop])
+            read_start = mode_start - split
+            read_stop = mode_end + (read_length - split)
+            evidence[sample].extend([read_start, read_stop])
+    reads = write_fake_stix_data(evidence)
 
     # Pass synthetic data through SV analysis pipeline
     L = np.mean([start for start, _ in svs])
@@ -345,13 +343,12 @@ def generate_synthetic_sv_data(
 
     if plot_reads:
         plt.figure()
-        for reads in evidence.values():
-            plt.scatter(
-                reads[::2],
-                reads[1::2],
-                color="blue",
-                alpha=0.6,
-            )
+        plt.scatter(
+            reads["l_end"].tolist(),
+            reads["r_start"].tolist(),
+            color="blue",
+            alpha=0.6,
+        )
         plt.xlabel("L")
         plt.ylabel("R")
         plt.show()
@@ -361,13 +358,11 @@ def generate_synthetic_sv_data(
 
     if run_gmm:
         gmm, evidence_by_mode = run_viz_gmm(
-            evidence,
-            file_name=None,
+            reads,
             chr=str(chr),
             L=L,
             R=R,
             plot=plot,
-            plot_bokeh=False,
             synthetic_data=True,
             gmm_model=gmm_model,
             insert_size_lookup=insert_size_lookup,
@@ -388,4 +383,5 @@ if __name__ == "__main__":
         n_samples=25,
         p=[0.5, 0.5],
         plot=True,
+        plot_reads=True,
     )

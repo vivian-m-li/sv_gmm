@@ -420,11 +420,20 @@ def plot_2d_coords(
     size_by: str = "num_evidence",
     show_mode_stats: bool = True,
     show_1d_distributions: bool = True,
-    insert_sizes_df: Optional[pd.DataFrame] = None,
+    insert_size_lookup: Optional[pd.DataFrame] = None,
     insert_size_file: Optional[str] = None,
 ):
-    if insert_sizes_df is None:
+    if insert_size_lookup is None:
         insert_sizes_df = pd.read_csv(insert_size_file)
+    else:
+        insert_sizes_df = pd.DataFrame(
+            columns=["sample_id", "mean_insert_size"]
+        )
+        for sample_id, mean_insert_size in insert_size_lookup.items():
+            insert_sizes_df.loc[len(insert_sizes_df)] = [
+                sample_id,
+                mean_insert_size,
+            ]
     for i, mode in enumerate(evidence_by_mode):
         x = []
         num_evidence = []
@@ -588,12 +597,12 @@ def plot_2d_coords(
         ax_main.tick_params(axis="x", labelrotation=15)
 
 
-def plot_2d_coords_fig(evidence_by_mode, **kwargs):
+def plot_2d_coords_fig(evidence_by_mode, plot_file, **kwargs):
     fig, ax = plt.subplots(figsize=(6, 4))
     plot_2d_coords(ax, evidence_by_mode, **kwargs)
     plt.tight_layout()
-    if kwargs["plot_file"]:
-        plt.savefig(kwargs["plot_file"])
+    if plot_file:
+        plt.savefig(plot_file)
     else:
         plt.show()
 

@@ -1,5 +1,4 @@
 import os
-import re
 import ast
 import subprocess
 import pandas as pd
@@ -9,7 +8,7 @@ from scipy.spatial.distance import braycurtis
 from collections import defaultdict, Counter
 from gmm_types import Evidence, SVStat, SVInfoGMM, SUPERPOPULATIONS
 from dataclasses import fields
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 
 PROCESSED_STIX_DIR = "processed_stix_output"
 PROCESSED_SVS_DIR = "processed_svs"
@@ -137,6 +136,24 @@ def stix_output_to_df(
         r".*([A-Z]{2}\d{5}).*", expand=False
     )
     return df
+
+
+def write_fake_stix_data(reads: Dict[str, List[int]]):
+    reads_df = stix_output_to_df("", write_empty_file=True)
+    for sample_id, read_list in reads.items():
+        for l, r in zip(read_list[::2], read_list[1::2]):  # noqaE741
+            reads_df.loc[len(reads_df)] = [
+                0,
+                sample_id,
+                1,
+                l,
+                l,
+                1,
+                r,
+                r,
+                "paired",
+            ]
+    return reads_df
 
 
 def df_to_bed(
@@ -365,45 +382,6 @@ def reciprocal_overlap(sv1: Tuple[int, int], sv2: Tuple[int, int]) -> float:
     sv1_length = end1 - start1
     sv2_length = end2 - start2
     return min(overlap_length / sv1_length, overlap_length / sv2_length)
-
-
-"""
-Handle errors that may arise when running the pipeline on all SVs
-"""
-
-
-def get_unprocessed_svs():
-    """Get SVs that have not yet been processed."""
-    df = get_deletions_df()
-    svs = set(
-        [
-            (row["chr"].lower(), str(row["start"]), str(row["stop"]))
-            for _, row in df.iterrows()
-        ]
-    )
-
-    processed_files = os.listdir("processed_stix_output")
-    pattern = r"([\w]+):(\d+)-\d+_[\w]+:(\d+)-\d+.csv"
-    processed_svs = set(
-        [re.search(pattern, file).groups for file in processed_files]
-    )
-
-    unprocessed_svs = svs - processed_svs
-    with open("1kgp/unprocessed_svs.txt", "w") as f:
-        for chr, start, stop in unprocessed_svs:
-            f.write(f"{chr.upper()},{start},{stop}\n")
-
-
-def get_med_low_confidence_svs():
-    """Get SVs that have medium or low confidence."""
-    df = get_sv_stats_converge_df()
-    grouped = df.groupby("id")
-    # get how many times we saw each id in df
-    counts = grouped.size()
-    counts.sort_values(ascending=False, inplace=True)
-    with open("1kgp/med_low_confidence_svs.txt", "w") as f:
-        for sv_id in counts[counts > 8].index:
-            f.write(f"{sv_id}\n")
 
 
 """

@@ -716,6 +716,7 @@ def run_viz_gmm(
     if plot:
         plot_2d_coords_fig(
             evidence_by_mode,
+            plot_file,
             **{
                 "L": L,
                 "R": R,
@@ -724,8 +725,7 @@ def run_viz_gmm(
                 "size_by": "",
                 "show_mode_stats": False,
                 "show_1d_distributions": False,
-                "insert_sizes_df": insert_size_lookup,
-                "plot_file": plot_file,
+                "insert_size_lookup": insert_size_lookup,
             },
         )
         # plot_single_sv(
