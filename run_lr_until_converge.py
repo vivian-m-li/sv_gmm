@@ -60,14 +60,12 @@ def run_lr_dirichlet_wrapper(
         gmms, alphas, posterior_distributions = run_dirichlet(
             squiggle_data,
             **{
-                "file_name": None,
                 "chr": row["chr"],
                 "L": row["start"],
                 "R": row["stop"],
-                "plot": False,
-                "plot_bokeh": False,
                 "insert_size_lookup": insert_size_lookup,
                 "min_pairs": 1,  # reduce number of points required per sample - long read data is sparse and "more accurate"
+                "plot": False,
             },
         )
 

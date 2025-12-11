@@ -597,6 +597,7 @@ def methods_clustered(ax, svs, reads, insert_size_lookup, num_modes):
         size_by="",
         show_mode_stats=False,
         show_1d_distributions=False,
+        insert_sizes_df=insert_size_lookup,
     )
 
     ax.set_xticks([])
@@ -692,19 +693,16 @@ def plot_sv_short_long_reads(sv_id, sample_ids, skip_evidence_plot=False):
     chr, start, stop = get_sv_chr(sv_id)
 
     if not skip_evidence_plot:
-        squiggle_data = query_stix(sv_id=sv_id, input_dir="1kgp", run_gmm=False)
+        reads = query_stix(sv_id=sv_id, input_dir="1kgp", run_gmm=False)
         gmm, evidence_by_mode = run_viz_gmm(
-            squiggle_data,
-            file_name="",
+            reads,
             chr=chr,
             L=start,
             R=stop,
             plot=False,
-            sv_id=sv_id,
         )
         plot_single_sv(
             evidence_by_mode,
-            sv_id=sv_id,
             L=start,
             R=stop,
             axis1="L",
@@ -1219,12 +1217,11 @@ if __name__ == "__main__":
 
     # Figure 2
     if 2 in figures:
-        path = "biased_d"
-        # for case in ["B", "C", "D"]:
-        #     parameter_sweep(case, path)
-        synthetic_data_fig(100, 453, path)
-        # synthetic_data_fig(66, 802, path)
-        synthetic_data_additional_svs()
+        path = ""
+        for case in ["B", "C", "D"]:
+            parameter_sweep(case, path)
+        synthetic_data_fig(66, 802, path)
+        # synthetic_data_additional_svs()
 
     # Figure 3
     if 3 in figures:

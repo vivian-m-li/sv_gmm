@@ -18,7 +18,7 @@ from brokenaxes import brokenaxes
 from matplotlib.ticker import FixedLocator, StrMethodFormatter
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from collections import Counter, defaultdict
-from typing import List
+from typing import List, Optional
 from em import run_em
 from em_1d import run_em as run_em1d, get_scatter_data
 from helper import (
@@ -420,9 +420,11 @@ def plot_2d_coords(
     size_by: str = "num_evidence",
     show_mode_stats: bool = True,
     show_1d_distributions: bool = True,
-    insert_size_file: None,
+    insert_sizes_df: Optional[pd.DataFrame] = None,
+    insert_size_file: Optional[str] = None,
 ):
-    insert_sizes_df = pd.read_csv(insert_size_file)
+    if insert_sizes_df is None:
+        insert_sizes_df = pd.read_csv(insert_size_file)
     for i, mode in enumerate(evidence_by_mode):
         x = []
         num_evidence = []
@@ -590,7 +592,10 @@ def plot_2d_coords_fig(evidence_by_mode, **kwargs):
     fig, ax = plt.subplots(figsize=(6, 4))
     plot_2d_coords(ax, evidence_by_mode, **kwargs)
     plt.tight_layout()
-    plt.show()
+    if kwargs["plot_file"]:
+        plt.savefig(kwargs["plot_file"])
+    else:
+        plt.show()
 
 
 def plot_single_sv(
@@ -1274,9 +1279,7 @@ def draw_conceptual_clusters(
         ax2.scatter(points[:, 0], points[:, 1], color=COLORS[i], s=10)
 
     # draw lines between centroids -- midpoint between sv1 and sv2 used otherwise
-    center1 = (
-        centroids[0] if case != "E" else (100500, 2278)
-    )  
+    center1 = centroids[0] if case != "E" else (100500, 2278)
     center2 = centroids[1] if len(centroids) == 2 else centroids[2]
     ax2.plot(
         [center1[0], center2[0]],

@@ -32,16 +32,19 @@ def run_all_sv_wrapper(
     else:
         gmm, evidence_by_mode = run_viz_gmm(
             squiggle_data,
-            file_name=None,
             chr=row["chr"],
             L=row["start"],
             R=row["stop"],
             plot=False,
-            plot_bokeh=False,
         )
 
     write_sv_stats(
-        sv_stat, gmm, evidence_by_mode, population_size, SCRATCH_FILE_DIR, iteration
+        sv_stat,
+        gmm,
+        evidence_by_mode,
+        population_size,
+        SCRATCH_FILE_DIR,
+        iteration,
     )
 
 
@@ -106,7 +109,9 @@ def run_all_sv(
 
     # move files from scratch to home dir
     for file in os.listdir(SCRATCH_FILE_DIR):
-        shutil.move(os.path.join(SCRATCH_FILE_DIR, file), os.path.join(FILE_DIR, file))
+        shutil.move(
+            os.path.join(SCRATCH_FILE_DIR, file), os.path.join(FILE_DIR, file)
+        )
 
 
 if __name__ == "__main__":

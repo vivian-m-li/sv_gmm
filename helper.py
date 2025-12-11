@@ -110,6 +110,35 @@ def calc_af(n_homozygous, n_heterozygous, population_size):
     return ((n_homozygous * 2) + n_heterozygous) / (population_size * 2)
 
 
+def stix_output_to_df(
+    filename: str, *, write_empty_file: bool = False
+) -> pd.DataFrame:
+    """
+    Parses the raw stix output into a dataframe.
+    Be aware that file_id is not a unique identifier if there are multiple shards for an index.
+    """
+    column_names = [
+        "file_id",
+        "sample_id",
+        "l_chr",
+        "l_start",
+        "l_end",
+        "r_chr",
+        "r_start",
+        "r_end",
+        "type",
+    ]
+    # check if file is empty
+    if write_empty_file or os.stat(filename).st_size == 0:
+        return pd.DataFrame(columns=column_names)
+
+    df = pd.read_csv(filename, names=column_names, sep=r"\s+")
+    df["sample_id"] = df["sample_id"].str.extract(
+        r".*([A-Z]{2}\d{5}).*", expand=False
+    )
+    return df
+
+
 def df_to_bed(
     *,
     out_file: str,

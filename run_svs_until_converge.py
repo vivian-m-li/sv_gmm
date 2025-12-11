@@ -36,12 +36,10 @@ def run_dirichlet_inner(
         gmms, alphas, posterior_distributions = run_dirichlet(
             squiggle_data,
             **{
-                "file_name": None,
                 "chr": row["chr"],
                 "L": row["start"],
                 "R": row["stop"],
                 "plot": False,
-                "plot_bokeh": False,
                 "stem": stem,
             },
         )
