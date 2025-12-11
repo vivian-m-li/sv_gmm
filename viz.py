@@ -586,6 +586,13 @@ def plot_2d_coords(
         ax_main.tick_params(axis="x", labelrotation=15)
 
 
+def plot_2d_coords_fig(evidence_by_mode, **kwargs):
+    fig, ax = plt.subplots(figsize=(6, 4))
+    plot_2d_coords(ax, evidence_by_mode, **kwargs)
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_single_sv(
     evidence_by_mode: List[List[Evidence]],
     *,

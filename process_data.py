@@ -6,7 +6,7 @@ from bokeh.plotting import figure, output_file, save
 from bokeh.models import HoverTool, ColumnDataSource, NumeralTickFormatter
 from typing import Optional, List, Tuple, Dict
 from em import run_gmm
-from viz import plot_single_sv
+from viz import plot_2d_coords_fig
 from gmm_types import Evidence, Sample, EstimatedGMM
 
 
@@ -661,16 +661,29 @@ def run_viz_gmm(
         gmm, sv_evidence, L, R, gmm_model=gmm_model
     )
     if plot:
-        plot_single_sv(
+        plot_2d_coords_fig(
             evidence_by_mode,
-            sv_id=sv_id,
-            L=L,
-            R=R,
-            axis1="L",
-            axis2="Length",
-            add_error_bars=False,
-            size_by="insert_size",
-            color_by="mode",
+            **{
+                "L": L,
+                "R": R,
+                "axis1": "L",
+                "axis2": "R",
+                "size_by": "",
+                "show_mode_stats": False,
+                "show_1d_distributions": False,
+                "insert_size_file": f"{stem}/insert_sizes.csv",
+            },
         )
+        # plot_single_sv(
+        #     evidence_by_mode,
+        #     sv_id=sv_id,
+        #     L=L,
+        #     R=R,
+        #     axis1="L",
+        #     axis2="Length",
+        #     add_error_bars=False,
+        #     size_by="insert_size",
+        #     color_by="mode",
+        # )
 
     return gmm, evidence_by_mode

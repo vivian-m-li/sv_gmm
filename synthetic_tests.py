@@ -259,7 +259,7 @@ def generate_data_r(case: str, svlen: int):
             # two nested SVs
             for r in np.arange(0.05, 1.05, 0.05):
                 midpoint = SV1_L + (0.5 * svlen)
-                sv2_len = int(r * svlen)
+                sv2_len = int(svlen / r)
                 data.append(
                     [
                         case,

@@ -328,11 +328,12 @@ def generate_synthetic_sv_data(
         insert_size_lookup[sample] = insert_size
 
         for _ in range(num_evidence):
-            read_length = min(550, max(350, int(random.gauss(insert_size, 25))))
+            read_length = min(500, max(400, int(random.gauss(insert_size, 10))))
             # split = random.randint(1, read_length - 1) # the split can be anywhere
+            # split the read roughly in half, with some noise
             split = random.randint(
                 int(read_length / 2) - 100, int(read_length / 2) + 100
-            )  # to prevent the read from being filtered out (too far from the y=x line)
+            )
             evidence_start = mode_start - split
             evidence_stop = mode_end + (read_length - split)
             evidence[sample].extend([evidence_start, evidence_stop])
@@ -380,7 +381,11 @@ if __name__ == "__main__":
     # generate_reference_files("synthetic_data/reference", ["1:200000"])
     generate_synthetic_sv_data(
         1,
-        [(100000, 100167), (100067, 100067 + 33)],
-        n_samples=50,
+        [(100000, 100100), (100050, 100150)],  # 100 bp sv, r = 0.5
+        # [(100000, 100200), (100100, 100300)],  # 200 bp sv
+        # [(100000, 100400), (100200, 100600)],  # 400 bp sv
+        # [(100000, 101000), (100500, 101500)],  # 1000 bp sv
+        n_samples=25,
         p=[0.5, 0.5],
+        plot=True,
     )
