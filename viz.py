@@ -18,7 +18,7 @@ from brokenaxes import brokenaxes
 from matplotlib.ticker import FixedLocator, StrMethodFormatter
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from collections import Counter, defaultdict
-from typing import List, Optional
+from typing import List, Optional, Dict
 from em import run_em
 from em_1d import run_em as run_em1d, get_scatter_data
 from helper import (
@@ -420,15 +420,17 @@ def plot_2d_coords(
     size_by: str = "num_evidence",
     show_mode_stats: bool = True,
     show_1d_distributions: bool = True,
-    insert_size_lookup: Optional[pd.DataFrame] = None,
+    insert_size_lookup: Optional[Dict] = None,
     insert_size_file: Optional[str] = None,
 ):
-    if insert_size_lookup is None:
+    if insert_size_lookup is None and insert_size_file is not None:
         insert_sizes_df = pd.read_csv(insert_size_file)
     else:
         insert_sizes_df = pd.DataFrame(
             columns=["sample_id", "mean_insert_size"]
         )
+        if insert_size_lookup is None:
+            insert_size_lookup = {}
         for sample_id, mean_insert_size in insert_size_lookup.items():
             insert_sizes_df.loc[len(insert_sizes_df)] = [
                 sample_id,

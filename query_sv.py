@@ -432,21 +432,21 @@ def query_stix(
         output_file_dir,
         plot_dir,
     ]:
-        if not os.path.exists(directory):
+        if not os.path.exists(directory) and directory != "":
             os.mkdir(directory)
 
     file_name = f"{l}_{r}"  # base file name
     # check if this SV has already been queried for in STIX
     # check multiple locations for this file
     output_file = None
-    for dir in [
+    for directory in [
         input_dir,
         output_dir,
         os.path.join(input_dir, FILE_DIR),
         output_file_dir,
     ]:
-        if os.path.isfile(f"{dir}/{file_name}.txt"):
-            output_file = f"{dir}/{file_name}.txt"
+        if os.path.isfile(f"{directory}/{file_name}.txt"):
+            output_file = f"{directory}/{file_name}.txt"
             break
     if output_file is None:
         print(

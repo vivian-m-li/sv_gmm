@@ -199,6 +199,7 @@ class SVInfoGMM:
     # info: dict
     num_samples: int
     num_pruned: int  # number of samples pruned by the GMM. Samples can also be dropped if they're reference samples, don't have enough evidence, or aren't in the vcf index but aren't counted here
+    num_samples_run: int
     num_reference: int
     svlen_post: int
     num_modes: int

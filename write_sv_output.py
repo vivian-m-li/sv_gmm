@@ -76,6 +76,7 @@ def init_sv_stat_row(
         qual=row["qual"],
         af=row["af"],
         num_samples=num_samples,
+        num_samples_run=0,
         num_pruned=0,
         num_reference=num_reference,
         svlen_post=0,
@@ -144,9 +145,11 @@ def write_sv_stats(
     )
 
     mode_coords = []
+    num_samples_run = 0
     for i, mode in enumerate(evidence_by_mode):
         sample_ids = [e.sample.id for e in mode]
         num_samples = len(sample_ids)
+        num_samples_run += num_samples
         num_homozygous = len(
             [e.sample for e in mode if e.sample.allele == "(1, 1)"]
         )
@@ -193,6 +196,7 @@ def write_sv_stats(
             af=af,
         )
         sv_stat.modes.append(mode_stat)
+    sv_stat.num_samples_run = num_samples_run
 
     if gmm.num_modes > 1:
         for i in range(len(evidence_by_mode) - 1):

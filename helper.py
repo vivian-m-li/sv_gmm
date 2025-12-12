@@ -500,7 +500,7 @@ def get_n_modes(input_dir: str, output_dir: str):
     for sv_id in svs:
         rows = df[df["id"] == sv_id]
 
-        # if the sv_id didn't run (due to lack of evidence in long read analysis), skip the row
+        # if the sv_id didn't run due to lack of evidence, skip the row
         if len(rows) == 0:
             continue
 
@@ -508,8 +508,8 @@ def get_n_modes(input_dir: str, output_dir: str):
         # or GMM defaulted to 1 mode because there were too few samples
         # label it as 1 mode inconclusively
         if (len(rows) == 1 and rows["num_iterations"].values[0] == 0) or rows[
-            "num_samples"
-        ].values[0] < 10:
+            "num_samples_run"
+        ].values[0] <= 10:
             sv_df.loc[len(sv_df)] = [sv_id, 1, "inconclusive", np.nan]
             continue
 
