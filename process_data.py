@@ -722,7 +722,7 @@ def run_viz_gmm(
                 "L": L,
                 "R": R,
                 "axis1": "L",
-                "axis2": "R",
+                "axis2": "Length",
                 "size_by": "",
                 "show_mode_stats": False,
                 "show_1d_distributions": False,
