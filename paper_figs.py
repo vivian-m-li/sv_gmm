@@ -14,7 +14,13 @@ from viz import plot_2d_coords, plot_single_sv
 from query_sv import query_stix
 from process_data import process_data, get_evidence_by_mode, run_viz_gmm
 from em import run_gmm
-from helper import get_sv_stats_collapsed_df, get_sv_lookup, get_sv_chr, calc_af
+from helper import (
+    get_sv_stats_collapsed_df,
+    get_sv_lookup,
+    get_sv_chr,
+    calc_af,
+    write_fake_stix_data,
+)
 from gmm_types import COLORS, SUPERPOPULATIONS, SUBPOPULATIONS, ANCESTRY_COLORS
 from matplotlib.gridspec import GridSpec
 
@@ -569,10 +575,11 @@ def methods_clustered(ax, svs, reads, insert_size_lookup, num_modes):
     """Figure 2c - Visualizes the clustered reads in length vs. read L position space."""
 
     sv_avg = (np.mean([sv[0] for sv in svs]), np.mean([sv[1] for sv in svs]))
-    squiggle_data = {sample_id: [reads[sample_id]] for sample_id in reads}
+    reads_df = write_fake_stix_data(reads)
+
     L, R = sv_avg[0], sv_avg[1]
     points, sv_evidence = process_data(
-        squiggle_data,
+        reads_df,
         file_name="",
         L=L,
         R=R,
@@ -597,6 +604,7 @@ def methods_clustered(ax, svs, reads, insert_size_lookup, num_modes):
         size_by="",
         show_mode_stats=False,
         show_1d_distributions=False,
+        insert_size_lookup=insert_size_lookup,
     )
 
     ax.set_xticks([])
@@ -692,19 +700,16 @@ def plot_sv_short_long_reads(sv_id, sample_ids, skip_evidence_plot=False):
     chr, start, stop = get_sv_chr(sv_id)
 
     if not skip_evidence_plot:
-        squiggle_data = query_stix(sv_id=sv_id, input_dir="1kgp", run_gmm=False)
+        reads = query_stix(sv_id=sv_id, input_dir="1kgp", run_gmm=False)
         gmm, evidence_by_mode = run_viz_gmm(
-            squiggle_data,
-            file_name="",
+            reads,
             chr=chr,
             L=start,
             R=stop,
             plot=False,
-            sv_id=sv_id,
         )
         plot_single_sv(
             evidence_by_mode,
-            sv_id=sv_id,
             L=start,
             R=stop,
             axis1="L",
@@ -1219,12 +1224,11 @@ if __name__ == "__main__":
 
     # Figure 2
     if 2 in figures:
-        path = "biased_d"
-        # for case in ["B", "C", "D"]:
-        #     parameter_sweep(case, path)
-        synthetic_data_fig(100, 453, path)
-        # synthetic_data_fig(66, 802, path)
-        synthetic_data_additional_svs()
+        path = ""
+        for case in ["B", "C", "D"]:
+            parameter_sweep(case, path)
+        synthetic_data_fig(66, 802, path)
+        # synthetic_data_additional_svs()
 
     # Figure 3
     if 3 in figures:

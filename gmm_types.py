@@ -71,9 +71,9 @@ GMM_MODELS = ["1d_len", "1d_L", "2d"]
 MODEL_NAMES = ["Length-only", "L-only", "Length-L"]
 
 GMM_AXES = {
-    "L": lambda x, _: x[0],
-    "R": lambda x, _: x[1],
-    "Length": lambda x, y: x[1] - x[0] - y,
+    "L": lambda x: x[0],
+    "R": lambda x: x[1],
+    "Length": lambda x: x[1] - x[0],
 }
 
 SYNTHETIC_DATA_CENTROIDS = {
@@ -157,7 +157,6 @@ class Evidence:
     intercept: float
     mean_l: int  # mean L-coordinate
     paired_ends: List[List[float]]
-    removed: int  # 0 if not removed, 1 if removed due to 1 paired end only, 2 if removed due to 2 paired ends, 3 if removed due to deviation from y=x+b line
     mean_insert_size: int
     start_y: float = 0  # this is not used anywhere
 

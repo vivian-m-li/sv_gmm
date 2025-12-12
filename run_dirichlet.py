@@ -135,16 +135,15 @@ def animate_dirichlet_history(df):
     animate_dirichlet_heatmap(alphas)
 
 
-def run_trial(squiggle_data, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
+def run_trial(reads, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
     """Runs a single trial of Gaussian Mixture Model."""
     kwargs["plot"] = False
-    kwargs["plot_bokeh"] = False
-    gmm, evidence_by_mode = run_viz_gmm(squiggle_data, **kwargs)
+    gmm, evidence_by_mode = run_viz_gmm(reads, **kwargs)
     return gmm, evidence_by_mode
 
 
 def run_dirichlet(
-    squiggle_data, insert_size_file, **kwargs
+    reads, insert_size_file, **kwargs
 ) -> Tuple[List[GMM], List[np.ndarray]]:
     """
     Runs the Dirichlet process until convergence or max iterations.
@@ -170,7 +169,7 @@ def run_dirichlet(
         n += 1  # number of trials
 
         # Run the model to get the next outcome
-        gmm, evidence_by_mode = run_trial(squiggle_data, **kwargs)
+        gmm, evidence_by_mode = run_trial(reads, **kwargs)
         if gmm is None:  # all samples are filtered out
             gmms.append((None, []))
             print(f"{chr}:{L}-{R} - stopping due to gmm = None")
@@ -204,8 +203,8 @@ def run_dirichlet(
 
     if display_output:
         # get the file name of the plot
-        file_name = kwargs["file_name"]
-        print(f"Saving plot to {file_name}")
+        plot_file = kwargs["plot_file"]
+        print(f"\nSaving plot to {plot_file}\n")
         # show the last L-len plot
         fig, ax = plt.subplots(figsize=(6, 4))
         plot_2d_coords(
@@ -222,7 +221,7 @@ def run_dirichlet(
             insert_size_file=insert_size_file,
         )
         plt.tight_layout()
-        plt.savefig(f"{file_name}.png", dpi=200)
+        plt.savefig(f"{plot_file}.png", dpi=200)
 
         # animate_dirichlet_heatmap(alphas)
         # animate_dirichlet(posterior_distributions)

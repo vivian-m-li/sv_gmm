@@ -11,9 +11,8 @@ from write_sv_output import (
     concat_multi_processed_sv_files,
 )
 from download_long_read_evidence import get_samples_to_redo
-from query_sv import load_squiggle_data
 from run_dirichlet import run_dirichlet
-from helper import get_deletions_df
+from helper import get_deletions_df, stix_output_to_df
 from typing import Set, Dict
 from timeout import break_after
 
@@ -43,31 +42,26 @@ def run_lr_dirichlet_wrapper(
             filtered_sample_ids.append(sample_id)
 
     # load deletions for the SV from the home dir, not scratch
-    squiggle_data = load_squiggle_data(f"long_reads/evidence/{sv_id}.csv")
+    # refactor note: unsure where the downloaded long read evidence files are stored, might need to change this path
+    reads = stix_output_to_df(f"long_reads/evidence/{sv_id}.csv")
 
     # remove samples to skip
-    for sample_id in samples_to_skip:
-        if sample_id in squiggle_data:
-            del squiggle_data[sample_id]
-
-    num_samples = len(squiggle_data)
-
-    if len(squiggle_data) == 0:
+    reads = reads[~reads["sample_id"].isin(samples_to_skip)]
+    num_samples = reads["sample_id"].nunique()
+    if reads.empty:
         # no samples were found with evidence for this SV
         gmms, alphas, posterior_distributions = [(None, [])], [], []
     else:
         # run the dirichlet process
         gmms, alphas, posterior_distributions = run_dirichlet(
-            squiggle_data,
+            reads,
             **{
-                "file_name": None,
                 "chr": row["chr"],
                 "L": row["start"],
                 "R": row["stop"],
-                "plot": False,
-                "plot_bokeh": False,
                 "insert_size_lookup": insert_size_lookup,
                 "min_pairs": 1,  # reduce number of points required per sample - long read data is sparse and "more accurate"
+                "plot": False,
             },
         )
 
@@ -76,10 +70,7 @@ def run_lr_dirichlet_wrapper(
         sv_stat = init_sv_stat_row(
             row,
             num_samples=num_samples,
-            num_reference=num_samples
-            - len(  # noqa: 503
-                squiggle_data
-            ),  # this will be 0 since we are pre-filtering them out
+            num_reference=0,  # these are pre-filtered out when we download data
         )
         write_sv_stats(
             sv_stat, gmm, evidence_by_mode, population_size, SCRATCH_FILE_DIR, i

@@ -8,7 +8,7 @@ from dataclasses import fields, asdict
 from query_sv import query_stix, giggle_format
 from helper import get_svlen, calc_af
 from gmm_types import SVInfoGMM, GMM, Evidence, ModeStat
-from typing import Set, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 def concat_processed_sv_files(
@@ -51,16 +51,10 @@ def write_sv_file(sv: SVInfoGMM, file_dir: str, iteration: int):
         csv_writer.writerow(asdict(sv))
 
 
-def get_reference_samples(
-    row: pd.Series,
-    sample_set: Set[int],
-    squiggle_data: Dict[str, np.ndarray[float]],
-) -> List[str]:
+def get_reference_samples(row: pd.Series, reads: pd.DataFrame) -> List[str]:
     """Returns the samples with evidence that are actually homozygous for the reference allele (0, 0)."""
-    samples = [
-        sample_id for sample_id in sample_set if sample_id in squiggle_data
-    ]
-    ref_samples = [col for col in samples if row[col] == "(0, 0)"]
+    samples_with_reads = set(reads["sample_id"].tolist())
+    ref_samples = [col for col in samples_with_reads if row[col] == "(0, 0)"]
     return ref_samples
 
 
@@ -95,7 +89,7 @@ def init_sv_stat_row(
 
 
 def get_raw_data(
-    row, sample_set: Set[str], stem: str = "1kgp"
+    row, input_dir: str = "1kgp"
 ) -> Tuple[Dict[str, np.ndarray[float]], int]:
     """
     Gets the samples and evidence for an SV. Filters out samples that are homozygous for the reference allele.
@@ -103,10 +97,10 @@ def get_raw_data(
     """
     start = giggle_format(str(row["chr"]), row["start"])
     end = giggle_format(str(row["chr"]), row["stop"])
-    processed_data = query_stix(
+    reads = query_stix(
         l=start,
         r=end,
-        input_dir="1kgp",
+        input_dir=input_dir,
         output_dir="",  # project home directory
         run_gmm=False,
         filter_reference=False,
@@ -115,13 +109,12 @@ def get_raw_data(
         stix_database="/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
         num_stix_shards=8,
     )
-    num_samples = len(processed_data)
+    num_samples = reads["sample_id"].nunique()
 
-    reference_samples = get_reference_samples(row, sample_set, processed_data)
-    for ref in reference_samples:
-        processed_data.pop(ref, None)
+    reference_samples = get_reference_samples(row, reads)
+    reads = reads[~reads["sample_id"].isin(reference_samples)]
 
-    return processed_data, num_samples
+    return reads, num_samples
 
 
 def write_sv_stats(

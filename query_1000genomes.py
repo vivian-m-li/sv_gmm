@@ -4,19 +4,19 @@ import pandas as pd
 import pysam
 import multiprocessing
 from typing import Dict
-from query_sv import giggle_format, query_stix, load_vcf, PROCESSED_FILE_DIR
+from query_sv import giggle_format, query_stix, load_vcf, FILE_DIR
 from process_data import (
     process_data,
     get_insert_size_lookup,
 )
 from timeout import break_after
 
-FILE_DIR = "1kgp"
+INPUT_DIR = "1kgp"
 
 
 def prune_genes_bed():
-    with open(f"{FILE_DIR}/grch38.genes.bed", "r") as infile, open(
-        f"{FILE_DIR}/genes.bed", "w"
+    with open(f"{INPUT_DIR}/grch38.genes.bed", "r") as infile, open(
+        f"{INPUT_DIR}/genes.bed", "w"
     ) as outfile:
         for line in infile:
             fields = line.strip().split("\t")
@@ -32,8 +32,8 @@ def prune_genes_bed():
 
 
 def vcf_to_bed():
-    vcf_in = pysam.VariantFile(f"{FILE_DIR}/1kg.subset.vcf.gz")
-    with open(f"{FILE_DIR}/deletions.bed", "w") as f:
+    vcf_in = pysam.VariantFile(f"{INPUT_DIR}/1kg.subset.vcf.gz")
+    with open(f"{INPUT_DIR}/deletions.bed", "w") as f:
         for record in vcf_in.fetch():
             info = dict(record.info)
             if info["SVTYPE"] != "DEL":
@@ -44,7 +44,7 @@ def vcf_to_bed():
 
 
 def write_cipos():
-    vcf_in = pysam.VariantFile(f"{FILE_DIR}/1kg.subset.vcf.gz")
+    vcf_in = pysam.VariantFile(f"{INPUT_DIR}/1kg.subset.vcf.gz")
     df = pd.DataFrame(columns=["id", "cipos", "ciend"])
     # a record will have all 4 fields cipos, cipos95, ciend, and ciend95 or none of the above
     n_missing = 0
@@ -63,7 +63,7 @@ def write_cipos():
             n_missing += 1
 
     print(f"Number of records without CIPOS: {n_missing}")  # 74886 records
-    df.to_csv(f"{FILE_DIR}/cipos.csv", index=False)  # 11522 rows
+    df.to_csv(f"{INPUT_DIR}/cipos.csv", index=False)  # 11522 rows
 
 
 def get_num_samples(
@@ -71,20 +71,19 @@ def get_num_samples(
 ):
     start = giggle_format(str(row.chr), row.start)
     end = giggle_format(str(row.chr), row.stop)
-    squiggle_data = query_stix(
+    reads = query_stix(
         l=start,
         r=end,
         input_dir="1kgp",
         run_gmm=False,
         plot=False,
-        scratch=True,
+        output_dir="/scratch/Users/vili4418/",
         long_reads=long_reads,
     )
-    if len(squiggle_data) > 0:
+    if not reads.empty:
         insert_size_lookup = get_insert_size_lookup("1kgp/insert_sizes.csv")
         points, _ = process_data(
-            squiggle_data,
-            file_name=None,
+            reads,
             L=row.start,
             R=row.stop,
             insert_size_lookup=insert_size_lookup,
@@ -94,14 +93,14 @@ def get_num_samples(
 
 @break_after(hours=167, minutes=55)  # break before the job is cancelled
 def get_num_sv(long_reads: bool = False):
-    filename = f"{FILE_DIR}/deletions.csv"
+    filename = f"{INPUT_DIR}/deletions.csv"
     df = pd.read_csv(filename, low_memory=False)
 
-    processed_files = os.listdir(PROCESSED_FILE_DIR)
+    files = os.listdir(FILE_DIR)
     processed_svs = []
-    pattern = r"([\w]+):(\d+)-\d+_[\w]+:(\d+)-\d+.csv"
+    pattern = r"([\w]+):(\d+)_[\w]+:(\d+).csv"
 
-    for file in processed_files:
+    for file in files:
         match = re.search(pattern, file)
         chr, start, stop = match.groups()
         processed_svs.append((chr, int(start), int(stop)))
@@ -126,8 +125,8 @@ def get_num_sv(long_reads: bool = False):
 
 
 def main():
-    if not os.path.isfile(f"{FILE_DIR}/deletions.csv"):
-        load_vcf(FILE_DIR, "1kg.subset.vcf.gz")
+    if not os.path.isfile(f"{INPUT_DIR}/deletions.csv"):
+        load_vcf(INPUT_DIR, "1kg.subset.vcf.gz")
     get_num_sv(True)
 
 

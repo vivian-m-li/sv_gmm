@@ -240,8 +240,6 @@ def filter_and_plot_sequences_bokeh(
                     sample=Sample(id=sample_id),
                     intercept=b,
                     mean_l=mean_l,
-                    # removed=3 if sdl < 2 else 0, # this line checks which step of the pre-processing removes a data point
-                    removed=0,
                     paired_ends=paired_ends,
                     mean_insert_size=insert_size_lookup[sample_id],
                 )
@@ -273,7 +271,6 @@ def filter_and_plot_sequences_bokeh(
                     sample=Sample(id=sample_id),
                     intercept=0,
                     mean_l=mean_l,
-                    removed=len(z) / 2,
                     paired_ends=paired_ends,
                     mean_insert_size=insert_size_lookup[sample_id],
                 )
@@ -546,7 +543,7 @@ def get_intercepts(
     return points, sv_evidence
 
 
-def process_data(
+def process_squiggle_data(
     squiggle_data: Dict[str, np.ndarray[float]],
     *,
     L: int,
@@ -557,6 +554,7 @@ def process_data(
     file_name: Optional[str],  # deprecated - used for plotting
 ):
     """
+    DEPRECATED: processes data in the old format (sample_id, paired-end reads as a flat array)
     Processes and filters samples and paired-end reads to be used in clustering.
     Paired-end data is filtered out if points are 0 or nan.
     Samples are filtered out if too few paired-end reads are present (< min_pairs). Long reads require fewer reads to support an SV.
@@ -590,13 +588,72 @@ def process_data(
                     sample=Sample(id=sample_id),
                     intercept=b,
                     mean_l=mean_l,
-                    removed=0,  # deprecated - a flag used to indicate which step of the pre-processing removed a data point
                     paired_ends=paired_ends,
                     mean_insert_size=insert_size_lookup[sample_id],
                 )
             )
             # scale this by the SV coordinates so that the points are closer together
             points.append((b - (R - L), mean_l - L))  # (length, L-coordinate)
+
+    return np.array(points), sv_evidence
+
+
+def process_data(
+    reads: pd.DataFrame,
+    *,
+    L: int,
+    R: int,
+    insert_size_lookup: Dict[str, int],
+    min_pairs: int = 2,  # minimum number of paired end reads for a sample needed to keep the sample
+):
+    """
+    Processes and filters samples and paired-end reads to be used in clustering.
+    Paired-end data is filtered out if points are 0 or nan.
+    Samples are filtered out if too few paired-end reads are present (< min_pairs). Long reads require fewer reads to support an SV.
+    Returns a list of points to cluster and a list of Evidence objects for the samples that passed filtering.
+    """
+    # list of evidence to keep after filtering
+    sv_evidence = []
+
+    # list of points to cluster in the shape [[intercept, mean_l], ...]
+    points = []
+
+    # reads: DataFrame with columns: sample_id, left, right, type
+    # group reads by sample id
+    for sample_id, group in reads.groupby("sample_id"):
+        if group.shape[0] < min_pairs:
+            continue  # skip samples with too few reads
+
+        # take the innermost bounds of the reads
+        ls = group["l_end"].tolist()
+        rs = group["r_start"].tolist()
+        paired_ends = [[l, r] for l, r in zip(ls, rs)]  # noqaE741
+
+        # duplicate rows where the type is "split" to weight them more heavily
+        ls_split = group[group["type"] == "split"]["l_end"].tolist()
+        ls += ls_split
+        rs_split = group[group["type"] == "split"]["r_start"].tolist()
+        rs += rs_split
+
+        # we should be able to rely on STIX to return only relevant reads
+        # taking the mean of the coordinates will average out noise in the reads
+        mean_l = int(np.mean(ls))
+        mean_r = int(np.mean(rs))
+
+        # don't subtract insert size anymore; this is already taken into account in the read coordinates
+        svlen = mean_r - mean_l
+
+        sv_evidence.append(
+            Evidence(
+                sample=Sample(id=sample_id),
+                intercept=svlen,
+                mean_l=mean_l,
+                paired_ends=paired_ends,
+                mean_insert_size=insert_size_lookup[sample_id],
+            )
+        )
+        # scale this by the SV coordinates so that the points are closer together
+        points.append((svlen - (R - L), mean_l - L))  # (length, L-coordinate)
 
     return np.array(points), sv_evidence
 
@@ -614,20 +671,18 @@ def get_insert_size_lookup(filename) -> Dict[str, int]:
 
 
 def run_viz_gmm(
-    squiggle_data: Dict[str, np.ndarray[float]],
+    reads: pd.DataFrame,
     *,
     chr: str,
     L: int,  # sv start
     R: int,  # sv stop
-    file_name: str = "",
-    plot: bool = True,
-    plot_bokeh: bool = False,  # these functions are deprecated
+    min_pairs: int = 2,
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
     insert_size_lookup: Optional[Dict[str, int]] = None,
-    min_pairs: int = 2,
-    sv_id: Optional[str] = None,
     stem: str = "1kgp",
+    plot: bool = True,
+    plot_file: Optional[str] = None,
 ):
     """Runs the GMM pipeline and visualizes the results."""
     if insert_size_lookup is None:
@@ -635,8 +690,7 @@ def run_viz_gmm(
 
     # transforms data to cluster
     points, sv_evidence = process_data(
-        squiggle_data,
-        file_name=file_name,
+        reads,
         L=L,
         R=R,
         insert_size_lookup=insert_size_lookup,
@@ -663,6 +717,7 @@ def run_viz_gmm(
     if plot:
         plot_2d_coords_fig(
             evidence_by_mode,
+            plot_file,
             **{
                 "L": L,
                 "R": R,
@@ -671,7 +726,7 @@ def run_viz_gmm(
                 "size_by": "",
                 "show_mode_stats": False,
                 "show_1d_distributions": False,
-                "insert_size_file": f"{stem}/insert_sizes.csv",
+                "insert_size_lookup": insert_size_lookup,
             },
         )
         # plot_single_sv(

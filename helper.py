@@ -1,5 +1,4 @@
 import os
-import re
 import ast
 import subprocess
 import pandas as pd
@@ -9,9 +8,8 @@ from scipy.spatial.distance import braycurtis
 from collections import defaultdict, Counter
 from gmm_types import Evidence, SVStat, SVInfoGMM, SUPERPOPULATIONS
 from dataclasses import fields
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 
-PROCESSED_STIX_DIR = "processed_stix_output"
 PROCESSED_SVS_DIR = "processed_svs"
 
 """Get commonly used dataframes"""
@@ -110,6 +108,53 @@ def calc_af(n_homozygous, n_heterozygous, population_size):
     return ((n_homozygous * 2) + n_heterozygous) / (population_size * 2)
 
 
+def stix_output_to_df(
+    filename: str, *, write_empty_file: bool = False
+) -> pd.DataFrame:
+    """
+    Parses the raw stix output into a dataframe.
+    Be aware that file_id is not a unique identifier if there are multiple shards for an index.
+    """
+    column_names = [
+        "file_id",
+        "sample_id",
+        "l_chr",
+        "l_start",
+        "l_end",
+        "r_chr",
+        "r_start",
+        "r_end",
+        "type",
+    ]
+    # check if file is empty
+    if write_empty_file or os.stat(filename).st_size == 0:
+        return pd.DataFrame(columns=column_names)
+
+    df = pd.read_csv(filename, names=column_names, sep=r"\s+")
+    df["sample_id"] = df["sample_id"].str.extract(
+        r".*([A-Z]{2}\d{5}).*", expand=False
+    )
+    return df
+
+
+def write_fake_stix_data(reads: Dict[str, List[int]]):
+    reads_df = stix_output_to_df("", write_empty_file=True)
+    for sample_id, read_list in reads.items():
+        for l, r in zip(read_list[::2], read_list[1::2]):  # noqaE741
+            reads_df.loc[len(reads_df)] = [
+                0,
+                sample_id,
+                1,
+                l,
+                l,
+                1,
+                r,
+                r,
+                "paired",
+            ]
+    return reads_df
+
+
 def df_to_bed(
     *,
     out_file: str,
@@ -127,15 +172,11 @@ def df_to_bed(
 
 
 def find_missing_sample_ids():
-    """Gets sample ids that are in the STIX databse but are not in the original deletions VCF file"""
+    """Gets sample ids that are in the STIX database but are not in the original deletions VCF file"""
     sample_ids = set()
-    for file in os.listdir(PROCESSED_STIX_DIR):
-        with open(f"{PROCESSED_STIX_DIR}/{file}") as f:
-            for line in f:
-                sample_id = line.strip().split(",")[0]
-                if sample_id[0].isalpha():
-                    sample_ids.add(sample_id)
-
+    for file in os.listdir("stix_output"):
+        df = stix_output_to_df(f"stix_output/{file}")
+        sample_ids = sample_ids | set(df["sample_id"].tolist())
     deletions_df = get_deletions_df()
     missing = sample_ids - set(deletions_df.columns[11:-1])
 
@@ -239,15 +280,10 @@ def get_mean_coverage():
         chr = sv["chr"]
         L = sv["start"]
         R = sv["stop"]
-        file = f"{PROCESSED_STIX_DIR}/{chr}:{L}-{L}_{chr}:{R}-{R}.csv"
-        squiggle_data = {}
-        with open(file, newline="") as csvfile:
-            reader = csv.reader(csvfile)
-            for row in reader:
-                squiggle_data[row[0]] = np.array([float(x) for x in row[1:]])
+        reads = stix_output_to_df(f"stix_output/{chr}:{L}_{chr}:{R}.txt")
         for mode in modes:
             coverage = [
-                int(len(squiggle_data[sample_id]) / 2)
+                reads[reads["sample_id"] == sample_id].shape[0]
                 for sample_id in mode["sample_ids"]
             ]
 
@@ -336,45 +372,6 @@ def reciprocal_overlap(sv1: Tuple[int, int], sv2: Tuple[int, int]) -> float:
     sv1_length = end1 - start1
     sv2_length = end2 - start2
     return min(overlap_length / sv1_length, overlap_length / sv2_length)
-
-
-"""
-Handle errors that may arise when running the pipeline on all SVs
-"""
-
-
-def get_unprocessed_svs():
-    """Get SVs that have not yet been processed."""
-    df = get_deletions_df()
-    svs = set(
-        [
-            (row["chr"].lower(), str(row["start"]), str(row["stop"]))
-            for _, row in df.iterrows()
-        ]
-    )
-
-    processed_files = os.listdir("processed_stix_output")
-    pattern = r"([\w]+):(\d+)-\d+_[\w]+:(\d+)-\d+.csv"
-    processed_svs = set(
-        [re.search(pattern, file).groups for file in processed_files]
-    )
-
-    unprocessed_svs = svs - processed_svs
-    with open("1kgp/unprocessed_svs.txt", "w") as f:
-        for chr, start, stop in unprocessed_svs:
-            f.write(f"{chr.upper()},{start},{stop}\n")
-
-
-def get_med_low_confidence_svs():
-    """Get SVs that have medium or low confidence."""
-    df = get_sv_stats_converge_df()
-    grouped = df.groupby("id")
-    # get how many times we saw each id in df
-    counts = grouped.size()
-    counts.sort_values(ascending=False, inplace=True)
-    with open("1kgp/med_low_confidence_svs.txt", "w") as f:
-        for sv_id in counts[counts > 8].index:
-            f.write(f"{sv_id}\n")
 
 
 """

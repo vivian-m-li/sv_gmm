@@ -12,7 +12,8 @@ from parse_long_reads import (
     read_cigars_from_file,
     remove_bam_file,
 )
-from query_sv import load_squiggle_data, txt_to_df, giggle_format
+from query_sv import giggle_format
+from helper import stix_output_to_df
 from timeout import break_after
 from typing import List
 
@@ -25,20 +26,6 @@ def write_completed_sample(sample_id: str):
     file = "long_reads/completed_samples.txt"
     with open(file, "a") as f:
         f.write(f"{sample_id}\n")
-
-
-def find_failing_sv():
-    """Finds the svs that are failing to be processed by attempting to load them with load_squiggle_data."""
-    error_file = "long_reads/svs_to_redo.txt"
-    with open(error_file, "w") as f:
-        files = os.listdir("long_reads/evidence")
-        for file in files:
-            try:
-                load_squiggle_data(
-                    f"long_reads/evidence/{file}", rewrite_file=True
-                )
-            except ValueError as e:
-                f.write(f"{file}: {e}\n")
 
 
 def get_svs_by_sample():
@@ -82,10 +69,10 @@ def get_sample_sv_reads():
         print(f"File {i}/{len(files)}", end="\r")
         sys.stdout.flush()
 
-        stix_output = txt_to_df(os.path.join(dir, file), True)
+        stix_output = stix_output_to_df(os.path.join(dir, file), True)
+        sv_id = file.strip(".txt")
         for _, row in stix_output.iterrows():
             sample_id = row["sample_id"]
-            sv_id = file.strip(".txt")
 
             # check that lookup has this sample_id, sv_id pair
             if (
@@ -204,7 +191,7 @@ def process_sample_evidence_inner(
         STIX_DATA_DIR,
         f"{giggle_format(sv_chr, sv_start)}_{giggle_format(sv_chr, sv_stop)}.txt",
     )
-    stix_output = txt_to_df(stix_output_file, True)
+    stix_output = stix_output_to_df(stix_output_file, True)
     reads = stix_output[stix_output["sample_id"] == sample_id]
 
     deletions = [sample_id]
@@ -364,20 +351,10 @@ def download_sample_evidence_http(
 
 @break_after(hours=335, minutes=30)  # takes about 14 days to run all SVs
 def download_sv_subset():
-    """Download long read evidence for a subset of svs that are failing."""
-    sv_ids = set()
-    with open("long_reads/svs_to_redo.txt", "r") as f:
-        for line in f.readlines():
-            if line.strip() == "":
-                continue
-            row = line.split(" ")
-            sv_id = row[0].strip(".csv")
-            sv_ids.add(sv_id)
-
+    """Download long read evidence for all SVs."""
     sample_sv_lookup = pd.read_csv("long_reads/sample_sv_lookup.csv")
-    sample_ids = sample_sv_lookup[sample_sv_lookup["sv_id"].isin(sv_ids)][
-        "sample_id"
-    ].unique()
+    sample_ids = sample_sv_lookup["sample_id"].unique()
+    sv_ids = sample_sv_lookup["sv_id"].unique()
 
     long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
     long_read_samples = long_read_samples[

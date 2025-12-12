@@ -9,14 +9,13 @@ import pandas as pd
 import numpy as np
 from process_data import run_viz_gmm, get_insert_size_lookup
 from run_dirichlet import run_dirichlet
-from helper import get_sample_ids, get_deletions_df, calc_af
+from helper import stix_output_to_df, get_sample_ids, get_deletions_df, calc_af
 from typing import List, Dict, Optional
 
 # Increase the field size limit to avoid triggering the error
 csv.field_size_limit(sys.maxsize)
 
 FILE_DIR = "stix_output"
-PROCESSED_FILE_DIR = "processed_stix_output"
 PLOT_DIR = "plots"
 
 """File processing functions to convert user-provided SV files into a format taken by SPLIT"""
@@ -180,41 +179,19 @@ def process_input_files(
     return insert_size_lookup
 
 
-def txt_to_df(filename: str) -> pd.DataFrame:
-    """
-    Parses the raw stix output into a dataframe.
-    Be aware that file_id is not a unique identifier if there are multiple shards for an index.
-    """
-    column_names = [
-        "file_id",
-        "sample_id",
-        "l_chr",
-        "l_start",
-        "l_end",
-        "r_chr",
-        "r_start",
-        "r_end",
-        "type",
-    ]
-    # check if file is empty
-    if os.stat(filename).st_size == 0:
-        return pd.DataFrame(columns=column_names)
-
-    df = pd.read_csv(filename, names=column_names, sep=r"\s+")
-    df["sample_id"] = df["sample_id"].str.extract(
-        r".*([A-Z]{2}\d{5}).*", expand=False
-    )
-    return df
-
-
 def giggle_format(chromosome: str, position: int):
-    return f"{chromosome.lower()}:{position}-{position}"
+    return f"{chromosome.lower()}:{position}"
+
+
+def stix_format(s: str):
+    chr, pos = s.split(":")
+    return f"{chr}:{pos}-{pos}"
 
 
 def reverse_giggle_format(l: str, r: str):  # noqa741
     chr = l.split(":")[0]
-    start = int(l.split("-")[1])
-    stop = int(r.split("-")[1])
+    start = int(l.split(":")[1])
+    stop = int(r.split(":")[1])
     return chr, start, stop
 
 
@@ -231,6 +208,7 @@ def lookup_sv_position(sv_id: str, dir: str = "1kgp"):
 
 
 def load_processed_data(filename: str, rewrite_file: bool = False):
+    """DEPRECATED: Loads previously-processed STIX output from a CSV file into a dictionary mapping sample IDs to arrays of SV evidence coordinates. Use stix_output_to_df instead."""
     squiggle_data = {}
     if not os.path.isfile(filename):
         return squiggle_data
@@ -285,7 +263,7 @@ def parse_input(input: str) -> str:
 
 def get_reference_samples(
     # Gets the samples with the homozygous reference genotype (0, 0)
-    squiggle_data: Dict[str, np.ndarray[float]],
+    reads: pd.DataFrame,
     chr: str,
     start: int,
     stop: int,
@@ -293,8 +271,10 @@ def get_reference_samples(
 ) -> List[str]:
     df = pd.read_csv(f"{input_dir}/svs_by_chr/chr{chr}.csv")
     row = df[(df["start"] == start) & (df["stop"] == stop)]
-    samples = squiggle_data.keys()
-    ref_samples = [col for col in samples if row.iloc[0][col] == "(0, 0)"]
+    samples = reads["sample_id"].tolist()
+    ref_samples = [
+        sample_id for sample_id in samples if row.iloc[0][sample_id] == "(0, 0)"
+    ]
     return ref_samples
 
 
@@ -328,8 +308,8 @@ def query_stix_bash(
     subprocess.run(
         ["bash", "query_stix.sh"]
         + [
-            l,
-            r,
+            stix_format(l),
+            stix_format(r),
             stix_path,
             index_path,
             database_path,
@@ -365,15 +345,17 @@ def query_stix_bash(
 def write_processed_output(
     output_file: str,
     processed_output_file: str,
-    l_col: str = "l_start",
-    r_col: str = "r_end",
+    l_col: str = "l_end",
+    r_col: str = "r_start",
 ) -> Dict[str, np.ndarray[float]]:
     """
+    DEPRECATED: reads are now handled directly from the raw read file in the stix_output directory
     Parses the raw stix output (from the patched -g version) into pairs of coordinates for each sample. Each pair represents the start/stop of the deletion.
-    For short reads, use l_start and r_end since the breakpoints are calculated from the clustering of paired-end reads.
-    For long reads, use l_end and r_start to calculate the deletion. All long reads returned from stix are split reads, so the l_start and r_end coordinates capture the entire read length (not just the deletion).
+    Uses l_end and r_start (the tightest bounds of the left/right reads) to calculate the deletion.
+    For short reads, split reads are weighted above discordant read pairs due to their higher accuracy in defining breakpoints.
+    All long reads returned from stix are split reads, so the l_start and r_end coordinates capture the entire read length (not just the deletion).
     """
-    df = txt_to_df(output_file)
+    df = stix_output_to_df(output_file)
 
     grouped = df.groupby("sample_id")
     squiggle_data = {}
@@ -443,130 +425,97 @@ def query_stix(
     if output_dir is None:
         output_dir = input_dir
     output_file_dir = os.path.join(output_dir, FILE_DIR)
-    processed_file_dir = os.path.join(output_dir, PROCESSED_FILE_DIR)
     plot_dir = os.path.join(output_dir, PLOT_DIR)
 
     for directory in [
         output_dir,
         output_file_dir,
-        processed_file_dir,
         plot_dir,
     ]:
         if not os.path.exists(directory):
             os.mkdir(directory)
 
     file_name = f"{l}_{r}"  # base file name
-    # check if this SV evidence has already been queried for and processed in the home directory
+    # check if this SV has already been queried for in STIX
     # check multiple locations for this file
-    processed_output_file = None
+    output_file = None
     for dir in [
         input_dir,
         output_dir,
-        os.path.join(input_dir, PROCESSED_FILE_DIR),
-        processed_file_dir,
+        os.path.join(input_dir, FILE_DIR),
+        output_file_dir,
     ]:
-        if os.path.isfile(f"{dir}/{file_name}.csv"):
-            processed_output_file = f"{dir}/{file_name}.csv"
+        if os.path.isfile(f"{dir}/{file_name}.txt"):
+            output_file = f"{dir}/{file_name}.txt"
             break
-    if processed_output_file is not None:
-        print("Using previously-processed data from", processed_output_file)
-        processed_data = load_processed_data(processed_output_file)
-    else:
-        # check if this SV evidence has already been queried for in the home directory
-        output_file = None
-        processed_output_file = f"{processed_file_dir}/{file_name}.csv"
-        for dir in [
-            input_dir,
-            output_dir,
-            os.path.join(input_dir, FILE_DIR),
-            output_file_dir,
-        ]:
-            if os.path.isfile(f"{dir}/{file_name}.txt"):
-                output_file = f"{dir}/{file_name}.txt"
-                break
-
-        if output_file is None:
-            print(
-                "This variant has not been previously quiered or processed. Using STIX to do this now."
-            )
-            # stix path is required if the SV evidence has not been queried for yet
-            if stix_bin is None or stix_index is None or stix_database is None:
-                raise FileNotFoundError(
-                    "Missing STIX executable, index, or database path."
-                )
-
-            # run the bash script to query stix
-            output_file = query_stix_bash(
-                l,
-                r,
-                output_file_dir,
-                file_name,
-                stix_bin,
-                stix_index,
-                stix_database,
-                num_stix_shards,
-            )
-
-        else:
-            print("Using previously-queried data from", output_file)
-
-        # write the processed output file
-        processed_data = write_processed_output(
-            output_file,
-            processed_output_file,
-            l_col="l_end" if long_reads else "l_start",
-            r_col="r_start" if long_reads else "r_end",
+    if output_file is None:
+        print(
+            "This variant has not been previously quiered or processed. Using STIX to do this now.\n"
         )
+        # stix path is required if the SV evidence has not been queried for yet
+        if stix_bin is None or stix_index is None or stix_database is None:
+            raise FileNotFoundError(
+                "Missing STIX executable, index, or database path."
+            )
 
-    # remove samples queried by stix but missing in the 1000genomes columns
-    # this happens because the extended high coverage dataset includes samples that did not appear in the original study
+        # run the bash script to query stix
+        output_file = query_stix_bash(
+            l,
+            r,
+            output_file_dir,
+            file_name,
+            stix_bin,
+            stix_index,
+            stix_database,
+            num_stix_shards,
+        )
+    else:
+        print("Using previously-queried data from", output_file, "\n")
+
+    # load the data as a dataframe
+    reads = stix_output_to_df(output_file)
+
+    # remove samples queried by STIX but missing in the vcf/csv
+    # in 1KG, this happens because the extended high coverage dataset includes samples that did not appear in the original study
     sample_ids = get_sample_ids(input_dir)
-    missing_keys = set(processed_data.keys()) - sample_ids
-    for key in missing_keys:
-        processed_data.pop(key, None)
+    reads = reads[reads["sample_id"].isin(sample_ids)]
 
     # remove samples with a genotype of (0, 0)
     if filter_reference:
-        ref_samples = get_reference_samples(
-            processed_data, chr, start, stop, input_dir
-        )
-        for ref in ref_samples:
-            processed_data.pop(ref, None)
+        ref_samples = get_reference_samples(reads, chr, start, stop, input_dir)
+        reads = reads[~reads["sample_id"].isin(ref_samples)]
 
     if run_gmm:
-        if len(processed_data) == 0:
+        if reads.empty:
             print("No evidence for structural variants found in this region.")
             return
 
         if single_trial:
             run_viz_gmm(
-                processed_data,
-                file_name=f"{plot_dir}/{file_name}",
+                reads,
                 chr=chr,
                 L=start,
                 R=stop,
                 plot=plot,
-                plot_bokeh=False,
-                sv_id=sv_id,
                 stem=input_dir,
+                plot_file=f"{plot_dir}/{file_name}",
                 insert_size_lookup=insert_size_lookup,
             )
         else:
             run_dirichlet(
-                processed_data,
+                reads,
                 insert_size_file=f"{input_dir}/{insert_size_file}",
                 **{
-                    "file_name": f"{plot_dir}/{file_name}",
                     "chr": chr,
                     "L": start,
                     "R": stop,
-                    "plot": plot,
-                    "plot_bokeh": False,
                     "stem": input_dir,
+                    "plot": plot,
+                    "plot_file": f"{plot_dir}/{file_name}",
                 },
             )
 
-    return processed_data
+    return reads
 
 
 def main():
@@ -685,7 +634,7 @@ def main():
     r = parse_input(args.r) if args.r is not None else ""
     sv_id = args.id or ""
 
-    print("Using the following arguments:", args)
+    print("Using the following arguments:", args, "\n")
 
     query_stix(
         l=l,
