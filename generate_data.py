@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 from process_data import run_viz_gmm
-from helper import write_fake_stix_data
+from helper import stix_output_to_df
 from collections import defaultdict
 from typing import List, Tuple, Optional, Dict
 
@@ -288,6 +288,77 @@ def generate_synthetic_sv_vcf(
     return vcf_df
 
 
+def generate_mapped_pairs_for_sv(
+    mode_start: int,
+    mode_end: int,
+    insert_mean: int,
+    n_pairs: int = 10,
+    read_length_mean: int = 150,
+    read_length_sd: int = 5,
+    mapped_is_sd: float = 20.0,
+    left_jitter: int = 20,
+    right_jitter: int = 20,
+):
+    """
+    Return a list of tuples (l_start, l_end, r_start, r_end) representing
+    mapped coordinates on the reference for discordant pairs supporting
+    a deletion between mode_start and mode_end.
+
+    - insert_mean: per-sample mean insert size (from your insert_size_df).
+    - We simulate the *mapped* insert size = insert_mean + deletion_length + gaussian noise.
+    - read length sampled ~ N(read_length_mean, read_length_sd) and clipped.
+    - left mate placed so its *end* sits a small jitter upstream of mode_start.
+    """
+    deletion_len = mode_end - mode_start
+    pairs = []
+
+    for _ in range(n_pairs):
+        # sample read length
+        L = int(
+            max(50, min(600, random.gauss(read_length_mean, read_length_sd)))
+        )
+
+        # sample mapped insert size
+        target_is = int(
+            max(
+                2 * L + 1,
+                random.gauss(insert_mean + deletion_len, mapped_is_sd),
+            )
+        )
+
+        # sample left mate end near the left breakpoint
+        left_end = mode_start - int(random.gauss(0, left_jitter))
+        left_start = left_end - (L - 1)
+
+        # sample right mate start near the right breakpoint
+        right_start = mode_end + int(random.gauss(0, right_jitter))
+        right_end = right_start + (L - 1)
+
+        # enforce approximate mapped insert size:
+        # current_is = right_end - left_start + 1
+        current_is = right_end - left_start + 1
+        delta = target_is - current_is
+
+        # We correct half the delta on each side so noise stays symmetric.
+        adjust = delta // 2
+
+        # shift left mate leftwards (negative adjust) or rightwards (positive)
+        left_start -= adjust
+        left_end = left_start + (L - 1)
+
+        # shift right mate in the opposite direction
+        right_start += delta - adjust
+        right_end = right_start + (L - 1)
+
+        # discard impossible mappings
+        if left_start < 1 or right_start <= left_start:
+            continue
+
+        pairs.append((left_start, left_end, right_start, right_end))
+
+    return pairs
+
+
 def generate_synthetic_sv_data(
     chr: int,  # chromosome number (does not support X/Y), as a str
     svs: List[Tuple[int, int]],  # List of (start, stop) for each SV
@@ -316,25 +387,36 @@ def generate_synthetic_sv_data(
     )
 
     # For each sample, generate random evidence
+    reads = stix_output_to_df("", write_empty_file=True)
     evidence = defaultdict(list)
     insert_size_lookup = {}
     for sample, mode in zip(samples, modes):
         num_evidence = random.randint(2, 30)
         mode_start, mode_end = svs[mode]
-        insert_size = insert_size_df.sample()["mean_insert_size"].values[0]
+
+        # sample a per-sample mean insert size from your table
+        insert_size = int(insert_size_df["mean_insert_size"].sample().values[0])
         insert_size_lookup[sample] = insert_size
 
-        for _ in range(num_evidence):
-            read_length = min(500, max(400, int(random.gauss(insert_size, 10))))
-            # split = random.randint(1, read_length - 1) # the split can be anywhere
-            # split the read roughly in half, with some noise
-            split = random.randint(
-                int(read_length / 2) - 100, int(read_length / 2) + 100
-            )
-            read_start = mode_start - split
-            read_stop = mode_end + (read_length - split)
-            evidence[sample].extend([read_start, read_stop])
-    reads = write_fake_stix_data(evidence)
+        pairs = generate_mapped_pairs_for_sv(
+            mode_start=mode_start,
+            mode_end=mode_end,
+            insert_mean=insert_size,
+            n_pairs=num_evidence,
+        )
+        for pair in pairs:
+            reads.loc[len(reads)] = [
+                0,
+                sample,
+                1,
+                pair[0],
+                pair[1],
+                1,
+                pair[2],
+                pair[3],
+                "paired",
+            ]
+            evidence[sample].extend([pair[1], pair[2]])  # l_end, r_start
 
     # Pass synthetic data through SV analysis pipeline
     L = np.mean([start for start, _ in svs])
@@ -380,7 +462,7 @@ if __name__ == "__main__":
         # [(100000, 100200), (100100, 100300)],  # 200 bp sv
         # [(100000, 100400), (100200, 100600)],  # 400 bp sv
         # [(100000, 101000), (100500, 101500)],  # 1000 bp sv
-        n_samples=25,
+        n_samples=11,
         p=[0.5, 0.5],
         plot=True,
         plot_reads=True,

@@ -8,7 +8,7 @@ from scipy.spatial.distance import braycurtis
 from collections import defaultdict, Counter
 from gmm_types import Evidence, SVStat, SVInfoGMM, SUPERPOPULATIONS
 from dataclasses import fields
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple
 
 PROCESSED_SVS_DIR = "processed_svs"
 
@@ -135,24 +135,6 @@ def stix_output_to_df(
         r".*([A-Z]{2}\d{5}).*", expand=False
     )
     return df
-
-
-def write_fake_stix_data(reads: Dict[str, List[int]]):
-    reads_df = stix_output_to_df("", write_empty_file=True)
-    for sample_id, read_list in reads.items():
-        for l, r in zip(read_list[::2], read_list[1::2]):  # noqaE741
-            reads_df.loc[len(reads_df)] = [
-                0,
-                sample_id,
-                1,
-                l,
-                l,
-                1,
-                r,
-                r,
-                "paired",
-            ]
-    return reads_df
 
 
 def df_to_bed(
