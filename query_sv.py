@@ -183,6 +183,11 @@ def giggle_format(chromosome: str, position: int):
     return f"{chromosome.lower()}:{position}"
 
 
+def stix_format(s: str):
+    chr, pos = s.split(":")
+    return f"{chr}:{pos}-{pos}"
+
+
 def reverse_giggle_format(l: str, r: str):  # noqa741
     chr = l.split(":")[0]
     start = int(l.split(":")[1])
@@ -303,8 +308,8 @@ def query_stix_bash(
     subprocess.run(
         ["bash", "query_stix.sh"]
         + [
-            l,
-            r,
+            stix_format(l),
+            stix_format(r),
             stix_path,
             index_path,
             database_path,
@@ -445,7 +450,7 @@ def query_stix(
             break
     if output_file is None:
         print(
-            "This variant has not been previously quiered or processed. Using STIX to do this now."
+            "This variant has not been previously quiered or processed. Using STIX to do this now.\n"
         )
         # stix path is required if the SV evidence has not been queried for yet
         if stix_bin is None or stix_index is None or stix_database is None:
@@ -465,7 +470,7 @@ def query_stix(
             num_stix_shards,
         )
     else:
-        print("Using previously-queried data from", output_file)
+        print("Using previously-queried data from", output_file, "\n")
 
     # load the data as a dataframe
     reads = stix_output_to_df(output_file)
@@ -629,7 +634,7 @@ def main():
     r = parse_input(args.r) if args.r is not None else ""
     sv_id = args.id or ""
 
-    print("Using the following arguments:", args)
+    print("Using the following arguments:", args, "\n")
 
     query_stix(
         l=l,

@@ -204,7 +204,7 @@ def run_dirichlet(
     if display_output:
         # get the file name of the plot
         plot_file = kwargs["plot_file"]
-        print(f"Saving plot to {plot_file}")
+        print(f"\nSaving plot to {plot_file}\n")
         # show the last L-len plot
         fig, ax = plt.subplots(figsize=(6, 4))
         plot_2d_coords(
