@@ -19,10 +19,11 @@ from helper import (
     get_sv_lookup,
     get_sv_chr,
     calc_af,
-    write_fake_stix_data,
+    stix_output_to_df,
 )
 from gmm_types import COLORS, SUPERPOPULATIONS, SUBPOPULATIONS, ANCESTRY_COLORS
 from matplotlib.gridspec import GridSpec
+from typing import Dict, List
 
 
 def plot_sv_coordinate_space(ax, n_svs, xcoords, svcoords, y, height, **kwargs):
@@ -569,6 +570,24 @@ def methods_lr(ax, reads_plotted):
     ax.set_yticks([])
     ax.set_xlabel("L-coordinate", fontsize=16)
     ax.set_ylabel("R-coordinate", fontsize=16)
+
+
+def write_fake_stix_data(reads: Dict[str, List[int]]):
+    reads_df = stix_output_to_df("", write_empty_file=True)
+    for sample_id, read_list in reads.items():
+        for l, r in zip(read_list[::2], read_list[1::2]):  # noqaE741
+            reads_df.loc[len(reads_df)] = [
+                0,
+                sample_id,
+                1,
+                l,
+                l,
+                1,
+                r,
+                r,
+                "paired",
+            ]
+    return reads_df
 
 
 def methods_clustered(ax, svs, reads, insert_size_lookup, num_modes):
