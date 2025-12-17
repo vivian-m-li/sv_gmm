@@ -351,3 +351,22 @@ def reciprocal_overlap(sv1: Tuple[int, int], sv2: Tuple[int, int]) -> float:
     sv1_length = end1 - start1
     sv2_length = end2 - start2
     return min(overlap_length / sv1_length, overlap_length / sv2_length)
+
+
+def copy_stix_output_from_fiji(sv_id: str):
+    lookup = get_sv_lookup()
+    sv_row = lookup[lookup["id"] == sv_id]
+    chr = str(sv_row["chr"].values[0])
+    start = str(int(sv_row["start"].values[0]))
+    stop = str(int(sv_row["stop"].values[0]))
+    subprocess.run(
+        [
+            "scp",
+            f"vili4418@fiji.colorado.edu:/Users/vili4418/sv/sv_gmm/stix_output/{chr}:{start}_{chr}:{stop}.txt",
+            "assets/stix_output/",
+        ]
+    )
+
+
+if __name__ == "__main__":
+    copy_stix_output_from_fiji("HGSV_81050")

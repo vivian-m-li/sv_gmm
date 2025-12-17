@@ -8,9 +8,10 @@ from write_sv_output import (
     write_sv_stats,
     write_posterior_distributions,
     concat_multi_processed_sv_files,
+    write_post_processed_files,
 )
 from run_dirichlet import run_dirichlet
-from helper import get_deletions_df, get_sample_ids, write_post_processed_files
+from helper import get_deletions_df, get_sample_ids
 from typing import Dict
 from timeout import break_after
 
@@ -70,9 +71,9 @@ def run_dirichlet_wrapper(
         print(f"Error processing SV {row['id']}: {e}")
 
 
-@break_after(hours=64, minutes=00)
+@break_after(hours=30, minutes=00)
 def run_svs_until_convergence(stem: str):
-    deletions_df = get_deletions_df(stem).head(50)
+    deletions_df = get_deletions_df(stem)
     sample_ids = set(get_sample_ids(stem))
     population_size = len(sample_ids)
 
