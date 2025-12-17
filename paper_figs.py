@@ -1177,11 +1177,10 @@ def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
 
 
 def print_sv_stats(path: str = ""):
-    """Compares various statistics between split SVs and all SVs."""
+    """Compares various statistics between split SVs and all SVs and plots boxplots."""
     df = get_all_svs_df(path)
 
     # load breakpoint precision info
-    # 9367 rows have cipos info
     bp_df = pd.read_csv("1kgp/cipos.csv")
     bp_df.rename(columns={"id": "sv_id"}, inplace=True)
     bp_df["bp_precision"] = bp_df["ciend"].apply(
@@ -1193,16 +1192,15 @@ def print_sv_stats(path: str = ""):
     df = df[df["num_samples_run"] > 10]
     split = df[df["num_modes"] > 1]
 
+    stats = {}
     for field in ["af", "svlen", "num_samples_run", "bp_precision"]:
         # filter by non-nan values
         filtered_df = df[~df[field].isna()]
         filtered_split = split[~split[field].isna()]
-        print(
-            f"{field} (all): {pd.DataFrame(filtered_df[field].values).describe()}"
-        )
-        print(
-            f"{field} (split): {pd.DataFrame(filtered_split[field].values).describe()}\n"
-        )
+        stats[field] = {
+            "all": filtered_df[field],
+            "split": filtered_split[field],
+        }
 
     # print what % of SVs were split per chromosome
     split_counts = split["chr"].value_counts().sort_index()
@@ -1226,13 +1224,50 @@ def print_sv_stats(path: str = ""):
                 union = max(R1, R2) - min(L1, L2)
                 ro = overlap / union if union > 0 else 0
                 reciprocal_overlaps.append(ro)
-    print("reciprocal overlap", pd.DataFrame(reciprocal_overlaps).describe())
+    stats["reciprocal_overlap"] = {
+        "all": np.nan,  # Not applicable for "all" since it's only for split SVs
+        "split": pd.Series(reciprocal_overlaps),
+    }
 
-    # gene overlapping proportion
+    # plot side by side boxplots
+    fields = [
+        "af",
+        "svlen",
+        "num_samples_run",
+        "bp_precision",
+        "reciprocal_overlap",
+    ]
+    labels = [
+        "Allele Frequency",
+        "SV Length",
+        "# Samples Run",
+        "BP Precision",
+        "Reciprocal Overlap",
+    ]
+
+    data_all = [stats[field]["all"] for field in fields]
+    data_split = [stats[field]["split"] for field in fields]
+
+    fig, axs = plt.subplots(1, len(fields), figsize=(20, 5), sharey=False)
+    for i, ax in enumerate(axs):
+        ax.boxplot(
+            [data_all[i], data_split[i]],
+            positions=[1, 2],
+            widths=0.6,
+            patch_artist=True,
+        )
+        ax.set_xticks([1, 2])
+        ax.set_xticklabels(["All SVs", "Split SVs"], fontsize=10)
+        ax.set_title(labels[i], fontsize=12)
+
+    fig.suptitle("Comparison of Pre-Split and Post-Split SV Stats", fontsize=16)
+    plt.tight_layout()
+    plt.savefig("plots/sv_stats_comparison_boxplots.pdf")
+    plt.show()
 
 
 if __name__ == "__main__":
-    figures = [2]
+    figures = [6]
 
     # Figure 1
     if 1 in figures:
@@ -1243,10 +1278,10 @@ if __name__ == "__main__":
 
     # Figure 2
     if 2 in figures:
-        path = ""
+        path = "poly_loss"
         for case in ["B", "C", "D"]:
             parameter_sweep(case, path)
-        synthetic_data_fig(66, 802, path)
+        synthetic_data_fig(100, 200, path)
         # synthetic_data_additional_svs()
 
     # Figure 3
@@ -1270,4 +1305,4 @@ if __name__ == "__main__":
 
     # Print SV stats
     if 6 in figures:
-        print_sv_stats("biased_d")
+        print_sv_stats()
