@@ -13,7 +13,7 @@ GMM/EM helper functions
 
 
 def hinge_loss_distance(
-    mu: List[np.ndarray], *, alpha=0.046, scale=500
+    mu: List[np.ndarray], *, cutoff=100, max_penalty=100
 ) -> float:
     """Adds a penalty to the log-likelihood to prevent cluster centroids from getting too close to each other (decreasing d), accounting for sequencing noise."""
     # c - alpha * d(mu_i, mu_j)
@@ -29,7 +29,8 @@ def hinge_loss_distance(
         for j in range(i + 1, num_modes):
             # add a large penalty for mus that are too close to each other
             dist = np.linalg.norm(mu[i] - mu[j])
-            loss += scale * np.exp(-alpha * dist)
+            d_norm = np.maximum(0, cutoff - dist) / cutoff
+            loss += max_penalty * (d_norm**2)
     return loss
 
 
@@ -42,7 +43,7 @@ def get_sv_from_mu(mu: np.ndarray, L: int, R: int) -> Tuple[int, int]:
 
 
 def hinge_loss_overlap(
-    mu: List[np.ndarray], L: int, R: int, *, beta=0.2, scale=372.0
+    mu: List[np.ndarray], L: int, R: int, *, cutoff=0.8, max_penalty=100
 ) -> float:
     """Adds a penalty to the log-likelihood to prevent high reciprocal overlap and avoid over-clustering."""
     num_modes = len(mu)
@@ -54,8 +55,8 @@ def hinge_loss_overlap(
         for j in range(i + 1, num_modes):
             sv1, sv2 = get_sv_from_mu(mu[i], L, R), get_sv_from_mu(mu[j], L, R)
             r = reciprocal_overlap(sv1, sv2)
-            r_scaled = (1 - r) * 100
-            loss += scale * np.exp(-beta * r_scaled)
+            r_norm = np.maximum(0, r - cutoff) / (1 - cutoff)
+            loss += max_penalty * (r_norm**2)
     return loss
 
 
@@ -65,7 +66,7 @@ def model_penalty(mu: list[np.ndarray], L: int, R: int):
     """
     svlen = R - L
     # penalty decreases with sv size since clusters will be closer together due to noise in read data
-    d_penalty = hinge_loss_distance(mu, scale=svlen)
+    d_penalty = hinge_loss_distance(mu)
     r_penalty = hinge_loss_overlap(mu, L, R)
 
     # weight the two penalties based on sv length
@@ -121,15 +122,15 @@ def calc_log_likelihood(
 
 
 def calc_aic(
-    logL: float, num_modes: int, mu: np.ndarray, cov: List[np.ndarray], L, R
+    logL: float, num_modes: int, mu: np.ndarray, cov: List[np.ndarray], L, R, n
 ) -> float:
     """Calculates the penalized log-likelihood using AIC."""
     num_params = (
         (num_modes * 2) + (num_modes * 3) + (num_modes - 1)
     )  # number of parameters for mu + cov + p - 1
-    penalty = model_penalty(mu, L, R)
+    penalty = np.log(n) * model_penalty(mu, L, R)
     # only count the model penalty once
-    aic = (2 * num_params) - (2 * (logL + penalty)) + penalty  # scale the AIC
+    aic = (2 * num_params) - (2 * logL) - penalty  # scale the AIC
     return aic
 
 
@@ -335,7 +336,13 @@ def run_gmm(
         for num_modes in mode_options:
             params, num_iterations = run_em(x, num_modes, L, R, plot)
             aic = calc_aic(
-                params[-1].logL, num_modes, params[-1].mu, params[-1].cov, L, R
+                params[-1].logL,
+                num_modes,
+                params[-1].mu,
+                params[-1].cov,
+                L,
+                R,
+                len(x),
             )
             all_params.append(params)
             iterations.append(num_iterations)
