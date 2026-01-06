@@ -1,4 +1,5 @@
 import os
+import subprocess
 import argparse
 import pandas as pd
 from query_sv import load_vcf
@@ -93,7 +94,46 @@ def pick_svs(
     out_file = os.path.join(input_dir, "singles.csv")
     out_df.to_csv(out_file, index=False)
     print(f"Wrote single SVs for calibration test to {out_file}")
-    pass
+
+
+def run_bedtools_intersect(
+    df: pd.DataFrame, *, bedtools_path: str, input_dir: str, out_file: str
+) -> pd.DataFrame:
+    """Run bedtools intersect to find SVs with >= 30% reciprocal overlap."""
+
+    # convert csv to bed file
+    with open("deletions.bed", "w") as bed_f:
+        for _, row in df.iterrows():
+            bed_f.write(
+                f"{row['chr']}\t{row['start']}\t{row['stop']}\t{row['sv_id']}\n"
+            )
+
+    # run bedtools to get overlaps
+    # keep overlaps with >= 30% reciprocal overlap
+    intersect_file = os.path.join(input_dir, "intersect.bed")
+    subprocess.run(
+        [
+            bedtools_path,
+            f"intersect -a deletions.bed -b deletions.bed -wao -f 0.3 -r > {intersect_file}",
+        ]
+    )
+
+    # convert bed back to csv and remove self-overlaps
+    overlaps_df = pd.DataFrame(columns=["sv1_id", "sv2_id", "r"])
+    for line in open(intersect_file, "r"):
+        fields = line.strip().split("\t")
+        sv1_id = fields[3]
+        sv2_id = fields[7]
+        overlap_len = int(fields[8])
+        sv1_len = df[df["sv_id"] == sv1_id]["svlen"].values[0]
+        sv2_len = df[df["sv_id"] == sv2_id]["svlen"].values[0]
+        r = overlap_len / min(sv1_len, sv2_len)
+        if sv1_id != sv2_id:
+            overlaps_df.loc[len(overlaps_df)] = [sv1_id, sv2_id, r]
+
+    overlaps_df.to_csv(out_file, index=False)
+    print(f"Wrote overlaps to {out_file}")
+    return overlaps_df
 
 
 def filter_svs(
@@ -138,7 +178,7 @@ def subset_svs(
     sv_lookup_file: str,
     filtered: bool,
     sample_ids_file: Optional[str],
-    samtools_path: str,
+    bedtools_path: str,
     n_svs: int,
 ):
     # read the sv lookup file
@@ -152,24 +192,46 @@ def subset_svs(
     if not filtered:
         df = filter_svs(df, input_dir, sample_ids_file)
 
-    # run samtools to get SVs with >= 30% reciprocal overlap
-    if not os.path.exists(os.path.join(input_dir, "overlaps.csv")):
-        # run samtools to generate this file
-        # might need to convert csv back into vcf first
-        # overlapping SVs will have cols sv1_id, sv2_id, reciprocal_overlap
-        overlaps = ""
+    # run bedtools to get SVs with >= 30% reciprocal overlap
+    overlaps_file = os.path.join(input_dir, "overlaps.csv")
+    if not os.path.exists(overlaps_file):
+        overlaps = run_bedtools_intersect(
+            df,
+            bedtools_path=bedtools_path,
+            input_dir=input_dir,
+            out_file=overlaps_file,
+        )
         pass
     else:
-        overlaps = pd.read_csv(os.path.join(input_dir, "overlaps.csv"))
+        overlaps = pd.read_csv(overlaps_file)
 
     pairs = pick_pairs(
         df, overlaps, n_pairs=int(n_svs / 2), input_dir=input_dir
     )
     svs = pick_svs(df, pairs, n_svs=int(n_svs / 2), input_dir=input_dir)
 
-    # write the subset of SVs to a new file
-    # dataframe with cols chr, start, stop, n_svs_actual
-    print("Wrote subset of SVs to subset_svs.csv")
+    subset_df = pd.DataFrame(columns=["chr", "start", "stop", "n_svs_actual"])
+    for sv in svs["sv_id"]:
+        row = df[df["sv_id"] == sv].iloc[0]
+        subset_df.loc[len(subset_df)] = [
+            row["chr"],
+            row["start"],
+            row["stop"],
+            1,
+        ]
+    for sv1, sv2 in pairs:
+        row1 = df[df["sv_id"] == sv1].iloc[0]
+        row2 = df[df["sv_id"] == sv2].iloc[0]
+        subset_df.loc[len(subset_df)] = [
+            row1["chr"],
+            # get outer bounds of the two SVs
+            min(row1["start"], row2["start"]),
+            max(row1["stop"], row2["stop"]),
+            2,
+        ]
+    subset_path = os.path.join(input_dir, "subset_svs.csv")
+    subset_df.to_csv(subset_path, index=False)
+    print(f"Wrote subset of SVs to f{subset_path}")
 
 
 def main():
@@ -202,10 +264,10 @@ def main():
         const=True,
     )
     parser.add_argument(
-        "--samtools_path",
+        "--bedtools_path",
         type=str,
-        help="Path to samtools executable",
-        default="samtools",
+        help="Path to bedtools executable",
+        default="bedtools",
     )
     parser.add_argument(
         "-n",
@@ -220,7 +282,7 @@ def main():
         sv_lookup_file=args.sv_lookup,
         filtered=args.f,
         sample_ids_file=args.sample_ids,
-        samtools_path=args.samtools_path,
+        bedtools_path=args.bedtools_path,
         n_svs=args.n,
     )
 
