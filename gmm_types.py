@@ -185,17 +185,18 @@ class ModeStat:
 
 
 @dataclass
+# Optional fields are for compatibility with calibration test output
 class SVInfoGMM:
-    id: str
+    id: Optional[str]
     chr: str
     start: int
     stop: int
-    svlen: int
-    ref: str
-    alt: str
-    qual: str
+    svlen: Optional[int]
+    ref: Optional[str]
+    alt: Optional[str]
+    qual: Optional[str]
     # filter: List[str]
-    af: str
+    af: Optional[str]
     # info: dict
     num_samples: int
     num_pruned: int  # number of samples pruned by the GMM. Samples can also be dropped if they're reference samples, don't have enough evidence, or aren't in the vcf index but aren't counted here

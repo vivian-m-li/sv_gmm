@@ -83,15 +83,15 @@ def init_sv_stat_row(
 ) -> SVInfoGMM:
     """Initializes a row for the SV output file."""
     sv_stat = SVInfoGMM(
-        id=row["id"],
+        id=row.get("id"),
         chr=row["chr"],
         start=row["start"],
         stop=row["stop"],
-        svlen=row["svlen"],
-        ref=row["ref"],
-        alt=row["alt"],
-        qual=row["qual"],
-        af=row["af"],
+        svlen=row.get("svlen"),
+        ref=row.get("ref"),
+        alt=row.get("alt"),
+        qual=row.get("qual"),
+        af=row.get("af"),
         num_samples=num_samples,
         num_samples_run=0,
         num_pruned=0,
@@ -107,7 +107,7 @@ def init_sv_stat_row(
 
 
 def get_raw_data(
-    row, input_dir: str = "1kgp"
+    row, input_dir: str = "1kgp", *, filter_reference_samples: bool = True
 ) -> Tuple[Dict[str, np.ndarray[float]], int]:
     """
     Gets the samples and evidence for an SV. Filters out samples that are homozygous for the reference allele.
@@ -129,8 +129,9 @@ def get_raw_data(
     )
     num_samples = reads["sample_id"].nunique()
 
-    reference_samples = get_reference_samples(row, reads)
-    reads = reads[~reads["sample_id"].isin(reference_samples)]
+    if filter_reference_samples:
+        reference_samples = get_reference_samples(row, reads)
+        reads = reads[~reads["sample_id"].isin(reference_samples)]
 
     return reads, num_samples
 
