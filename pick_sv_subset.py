@@ -43,9 +43,9 @@ def pick_pairs(
         ]
     )
     for sv1, sv2 in pairs:
-        sv1_row = df[df["sv_id"] == sv1].iloc[0]
-        sv2_row = df[df["sv_id"] == sv2].iloc[0]
-        out_df[len(out_df)] = [
+        sv1_row = df[df["id"] == sv1].iloc[0]
+        sv2_row = df[df["id"] == sv2].iloc[0]
+        out_df.loc[len(out_df)] = [
             sv1,
             sv2,
             sv1_row["chr"],
@@ -74,7 +74,7 @@ def pick_svs(
     svs = set()
     while len(svs) < n_svs:
         row = df.sample(n=1).iloc[0]
-        sv_id = row["sv_id"]
+        sv_id = row["id"]
 
         # don't pick svs already in pairs or already picked
         if sv_id in svs or sv_id in seen:
@@ -83,29 +83,32 @@ def pick_svs(
 
     out_df = pd.DataFrame(columns=["sv_id", "chr", "start", "stop", "svlen"])
     for sv in svs:
-        sv_row = df[df["sv_id"] == sv].iloc[0]
-        out_df[len(out_df)] = [
+        sv_row = df[df["id"] == sv].iloc[0]
+        out_df.loc[len(out_df)] = [
             sv,
             sv_row["chr"],
             sv_row["start"],
             sv_row["stop"],
             sv_row["svlen"],
         ]
+
     out_file = os.path.join(input_dir, "singles.csv")
     out_df.to_csv(out_file, index=False)
     print(f"Wrote single SVs for calibration test to {out_file}")
+
+    return svs
 
 
 def run_bedtools_intersect(
     df: pd.DataFrame, *, bedtools_path: str, input_dir: str, out_file: str
 ) -> pd.DataFrame:
     """Run bedtools intersect to find SVs with >= 30% reciprocal overlap."""
-
     # convert csv to bed file
-    with open("deletions.bed", "w") as bed_f:
+    bed_file = os.path.join(input_dir, "deletions.bed")
+    with open(bed_file, "w") as bed_f:
         for _, row in df.iterrows():
             bed_f.write(
-                f"{row['chr']}\t{row['start']}\t{row['stop']}\t{row['sv_id']}\n"
+                f"{row['chr']}\t{row['start']}\t{row['stop']}\t{row['id']}\n"
             )
 
     # run bedtools to get overlaps
@@ -114,8 +117,18 @@ def run_bedtools_intersect(
     subprocess.run(
         [
             bedtools_path,
-            f"intersect -a deletions.bed -b deletions.bed -wao -f 0.3 -r > {intersect_file}",
-        ]
+            "intersect",
+            "-a",
+            bed_file,
+            "-b",
+            bed_file,
+            "-wao",
+            "-f",
+            "0.3",
+            "-r",
+        ],
+        stdout=open(intersect_file, "w"),
+        check=True,
     )
 
     # convert bed back to csv and remove self-overlaps
@@ -124,12 +137,14 @@ def run_bedtools_intersect(
         fields = line.strip().split("\t")
         sv1_id = fields[3]
         sv2_id = fields[7]
+        if sv1_id == sv2_id:
+            continue
+
         overlap_len = int(fields[8])
-        sv1_len = df[df["sv_id"] == sv1_id]["svlen"].values[0]
-        sv2_len = df[df["sv_id"] == sv2_id]["svlen"].values[0]
-        r = overlap_len / min(sv1_len, sv2_len)
-        if sv1_id != sv2_id:
-            overlaps_df.loc[len(overlaps_df)] = [sv1_id, sv2_id, r]
+        sv1_row = df[df["id"] == sv1_id].iloc[0]
+        sv2_row = df[df["id"] == sv2_id].iloc[0]
+        r = min(overlap_len / sv1_row["svlen"], overlap_len / sv2_row["svlen"])
+        overlaps_df.loc[len(overlaps_df)] = [sv1_id, sv2_id, r]
 
     overlaps_df.to_csv(out_file, index=False)
     print(f"Wrote overlaps to {out_file}")
@@ -201,7 +216,6 @@ def subset_svs(
             input_dir=input_dir,
             out_file=overlaps_file,
         )
-        pass
     else:
         overlaps = pd.read_csv(overlaps_file)
 
@@ -211,8 +225,8 @@ def subset_svs(
     svs = pick_svs(df, pairs, n_svs=int(n_svs / 2), input_dir=input_dir)
 
     subset_df = pd.DataFrame(columns=["chr", "start", "stop", "n_svs_actual"])
-    for sv in svs["sv_id"]:
-        row = df[df["sv_id"] == sv].iloc[0]
+    for sv in svs:
+        row = df[df["id"] == sv].iloc[0]
         subset_df.loc[len(subset_df)] = [
             row["chr"],
             row["start"],
@@ -220,8 +234,8 @@ def subset_svs(
             1,
         ]
     for sv1, sv2 in pairs:
-        row1 = df[df["sv_id"] == sv1].iloc[0]
-        row2 = df[df["sv_id"] == sv2].iloc[0]
+        row1 = df[df["id"] == sv1].iloc[0]
+        row2 = df[df["id"] == sv2].iloc[0]
         subset_df.loc[len(subset_df)] = [
             row1["chr"],
             # get outer bounds of the two SVs
@@ -231,7 +245,7 @@ def subset_svs(
         ]
     subset_path = os.path.join(input_dir, "subset_svs.csv")
     subset_df.to_csv(subset_path, index=False)
-    print(f"Wrote subset of SVs to f{subset_path}")
+    print(f"Wrote subset of SVs to {subset_path}")
 
 
 def main():
