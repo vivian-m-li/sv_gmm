@@ -144,6 +144,8 @@ def download_stix_data(
     """Download stix data for all regions in the subset before running calibration tests."""
     # TODO: parallelize
     output_dir = os.path.join(input_dir, "stix_output")
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
     for _, row in sv_subset.iterrows():
         # check if the data for this region already exists
         l = giggle_format(str(row.chr), row.start)  # noqa:741
@@ -180,10 +182,10 @@ def run_calibration(
     r_max: float,
     r_step: float,
 ):
-    sv_subset = pd.read_csv(os.path.jion(input_dir, sv_regions_file))
+    sv_subset = pd.read_csv(os.path.join(input_dir, sv_regions_file))
     sv_df = pd.read_csv(os.path.join(input_dir, sv_lookup_file))
     sample_ids = set()
-    with open(sample_ids_file, "r") as f:
+    with open(os.path.join(input_dir, sample_ids_file), "r") as f:
         for line in f:
             sample_ids.add(line.strip())
 

@@ -243,7 +243,7 @@ def subset_svs(
             max(row1["stop"], row2["stop"]),
             2,
         ]
-    subset_path = os.path.join(input_dir, "subset_svs.csv")
+    subset_path = os.path.join(input_dir, "sv_subset.csv")
     subset_df.to_csv(subset_path, index=False)
     print(f"Wrote subset of SVs to {subset_path}")
 
