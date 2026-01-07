@@ -3,7 +3,6 @@ import argparse
 import multiprocessing
 import pandas as pd
 import numpy as np
-from timeout import break_after
 from run_dirichlet import run_dirichlet
 from query_sv import giggle_format, query_stix_bash
 from write_sv_output import (
@@ -137,35 +136,51 @@ def run_calibration_test(
     # do analysis later on which combinations led to "partial correctness"
 
 
+def download_stix_data_inner(
+    row: pd.Series,
+    output_dir: str,
+):
+    # check if the data for this region already exists
+    l = giggle_format(str(row.chr), row.start)  # noqa:741
+    r = giggle_format(str(row.chr), row.stop)
+    filename = f"{l}_{r}"
+    file = os.path.join(output_dir, f"{filename}.txt")
+    if os.path.isfile(file):
+        return
+
+    stix_file = query_stix_bash(
+        l,
+        r,
+        output_dir,
+        filename,
+        # hard-coded stix parameters for 1kg high coverage data on Vivian's fiji
+        "/Users/vili4418/sv/stix/bin/stix",
+        "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
+        "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
+        8,
+    )
+    print(f"Downloaded STIX data {stix_file}")
+
+
 def download_stix_data(
     sv_subset: pd.DataFrame,
     input_dir: str,
 ):
     """Download stix data for all regions in the subset before running calibration tests."""
-    # TODO: parallelize
     output_dir = os.path.join(input_dir, "stix_output")
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
-    for _, row in sv_subset.iterrows():
-        # check if the data for this region already exists
-        l = giggle_format(str(row.chr), row.start)  # noqa:741
-        r = giggle_format(str(row.chr), row.stop)
-        filename = f"{l}_{r}"
-        file = os.path.join(output_dir, f"{filename}.txt")
-        if os.path.isfile(file):
-            continue
-        file = query_stix_bash(
-            l,
-            r,
-            output_dir,
-            filename,
-            # hard-coded stix parameters for 1kg high coverage data on Vivian's fiji
-            "/Users/vili4418/sv/stix/bin/stix",
-            "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
-            "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
-            8,
-        )
-        print(f"Downloaded STIX data for region: {l}_{r}")
+
+    with multiprocessing.Manager():
+        p = multiprocessing.Pool(multiprocessing.cpu_count())
+        args = []
+
+        for _, row in sv_subset.iterrows():
+            args.append((row, output_dir))
+
+        p.starmap(download_stix_data_inner, args)
+        p.close()
+        p.join()
 
 
 def run_calibration(
@@ -182,6 +197,7 @@ def run_calibration(
     r_max: float,
     r_step: float,
 ):
+    """Run calibration tests over a grid of distance and reciprocal overlap thresholds."""
     sv_subset = pd.read_csv(os.path.join(input_dir, sv_regions_file))
     sv_df = pd.read_csv(os.path.join(input_dir, sv_lookup_file))
     sample_ids = set()
@@ -192,6 +208,7 @@ def run_calibration(
     # check that all stix data has been downloaded for regions in sv_subset before running calibration tests
     download_stix_data(sv_subset, input_dir)
 
+    # run calibration tests over grid of d and r values
     for d in range(d_min, d_max + 1, d_step):
         for r in np.arange(r_min, r_max + r_step, r_step):
             print(f"Running calibration for d={d}, r={r}")
