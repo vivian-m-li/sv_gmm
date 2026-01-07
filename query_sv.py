@@ -279,8 +279,8 @@ def get_reference_samples(
 
 
 def query_stix_bash(
-    l: int,
-    r: int,
+    l: str,  # in giggle format
+    r: str,  # in giggle format
     output_dir: str,
     file_name: str,
     stix_bin: str,
@@ -450,7 +450,7 @@ def query_stix(
             break
     if output_file is None:
         print(
-            "This variant has not been previously quiered or processed. Using STIX to do this now.\n"
+            "This variant has not been previously queried or processed. Using STIX to do this now.\n"
         )
         # stix path is required if the SV evidence has not been queried for yet
         if stix_bin is None or stix_index is None or stix_database is None:
