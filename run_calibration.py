@@ -16,6 +16,7 @@ from write_sv_output import (
 )
 from typing import Set, Dict
 
+SLURM_CPUS = int(os.environ['SLURM_CPUS_ON_NODE'])
 FILE_DIR = "calibration_outputs"
 SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
 OUTPUT_FILE_NAME = "sv_stats_converge.csv"
@@ -130,7 +131,7 @@ def run_calibration_test(
         os.makedirs(processed_file_dir)
 
     with multiprocessing.Manager():
-        p = multiprocessing.Pool(multiprocessing.cpu_count())
+        p = multiprocessing.Pool(SLURM_CPUS)
         args = []
         for _, row in sv_subset.iterrows():
             args.append(
@@ -206,7 +207,8 @@ def download_stix_data(
         os.mkdir(output_dir)
 
     with multiprocessing.Manager():
-        p = multiprocessing.Pool(multiprocessing.cpu_count())
+        print(multiprocessing.cpu_count(), SLURM_CPUS)
+        p = multiprocessing.Pool(SLURM_CPUS)
         args = []
 
         for _, row in sv_subset.iterrows():

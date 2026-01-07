@@ -287,6 +287,7 @@ def query_stix_bash(
     index_path: str,
     database_path: str,
     num_shards: int,
+    parallel: bool = False,
 ):
     """
     Runs a bash query file to query STIX for all the read (paired-end and split
@@ -335,7 +336,8 @@ def query_stix_bash(
 
                 # remove partial file
                 os.remove(temp_file)
-        os.rmdir(partial_outputs_dir)
+        if not parallel:
+            os.rmdir(partial_outputs_dir)
     else:
         output_file = f"{stix_output_file}.txt"
 
