@@ -1,6 +1,7 @@
 import os
 import argparse
 import multiprocessing
+import shutil
 import pandas as pd
 import numpy as np
 from run_dirichlet import run_dirichlet
@@ -15,7 +16,7 @@ from write_sv_output import (
 )
 from typing import Set, Dict
 
-FILE_DIR = "processed_svs_converge"
+FILE_DIR = "calibration_outputs"
 SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
 OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
@@ -25,16 +26,19 @@ def calc_confusion_matrix(
     svs_n_modes: pd.DataFrame,
 ) -> Dict[str, float]:
     """Calculate confusion matrix based on predicted vs actual number of SVs."""
-    svs_n_modes.rename(columns={"n_modes", "n_svs_predicted"}, inplace=True)
+    # remove rows that didn't run due to lack of data
+    svs_n_modes = svs_n_modes[svs_n_modes["confidence"] != "inconclusive"]
+    svs_n_modes.rename(
+        columns={"sv_id": "id", "num_modes": "n_svs_predicted"}, inplace=True
+    )
     merged = sv_subset.merge(
         svs_n_modes,
-        left_on=["chr", "start", "stop"],
-        right_on=["chr", "start", "stop"],
+        on="id",
         how="left",
     )
 
     TP = merged[
-        (merged["n_svs_actual"] == 1) & (merged["n_svs_predicted"] == 2)
+        (merged["n_svs_actual"] == 2) & (merged["n_svs_predicted"] == 2)
     ].shape[0]
     FP = (
         merged[
@@ -51,15 +55,21 @@ def calc_confusion_matrix(
         (merged["n_svs_actual"] == 1) & (merged["n_svs_predicted"] == 1)
     ].shape[0]
 
-    return {"TP": TP, "FP": FP, "FN": FN, "TN": TN}
+    n_svs = merged.shape[0]
+    values = {"TP": TP, "FP": FP, "FN": FN, "TN": TN}
+    values = {k: v / n_svs for k, v in values.items()}
+    return values
 
 
 def run_dirichlet_inner(
     row: Dict,
     population_size: int,
     input_dir: str,
+    output_dir: str,
+    d: int,
+    r: float,
 ):
-    sv_id = row["id"]
+    # filter reference samples is set to false because we don't have references for regions, only SVs
     reads, num_samples = get_raw_data(
         row, input_dir, filter_reference_samples=False
     )
@@ -74,6 +84,9 @@ def run_dirichlet_inner(
                 "chr": row["chr"],
                 "L": row["start"],
                 "R": row["stop"],
+                "d_threshold": d,
+                "r_threshold": r,
+                "synthetic_data": True,
                 "plot": False,
                 "stem": input_dir,
             },
@@ -86,12 +99,12 @@ def run_dirichlet_inner(
             num_reference=num_samples - reads["sample_id"].nunique(),
         )
         write_sv_stats(
-            sv_stat, gmm, evidence_by_mode, population_size, SCRATCH_FILE_DIR, i
+            sv_stat, gmm, evidence_by_mode, population_size, output_dir, i
         )
 
     if gmms[0][0] is not None:
         write_posterior_distributions(
-            sv_id, alphas, posterior_distributions, SCRATCH_FILE_DIR
+            row["id"], alphas, posterior_distributions, output_dir
         )
 
 
@@ -105,20 +118,37 @@ def run_calibration_test(
     output_dir: str,
     sample_ids: Set[str],
 ):
+    """
+    Run a single calibration test for given distance and reciprocal overlap thresholds.
+    TODO: do analysis later on which combinations led to "partial correctness"
+    """
     population_size = len(sample_ids)
-    # TODO: parallelize this function
-    for _, row in sv_subset.iterrows():
-        # TODO: pass in d and r args to run_dirichlet_inner
-        run_dirichlet_inner(row, population_size, input_dir)
+    processed_file_dir = os.path.join(
+        SCRATCH_FILE_DIR, "d{}_r{:.2f}".format(d, r)
+    )
+    if not os.path.exists(processed_file_dir):
+        os.makedirs(processed_file_dir)
 
-    # TODO: update these filepaths to point to scratch
-    concat_multi_processed_sv_files(FILE_DIR, OUTPUT_FILE_NAME, output_dir)
-    # TODO: these all need to be updated because they rely on sv id - we need to use region to match instead
-    write_post_processed_files(input_dir, output_dir)
+    with multiprocessing.Manager():
+        p = multiprocessing.Pool(multiprocessing.cpu_count())
+        args = []
+        for _, row in sv_subset.iterrows():
+            args.append(
+                (row, population_size, input_dir, processed_file_dir, d, r)
+            )
+
+        p.starmap(run_dirichlet_inner, args)
+        p.close()
+        p.join()
+
     results_dir = os.path.join(output_dir, "d{}_r{:.2f}".format(d, r))
-    os.mkdir(results_dir, exist_ok=True)
-    # TODO: move final output files to a new directory (id'ed by d and r) in output_dir
-    # TODO: remove intermediate directory - processed_svs_converge
+    if not os.path.exists(results_dir):
+        os.mkdir(results_dir)
+    concat_multi_processed_sv_files(
+        processed_file_dir, OUTPUT_FILE_NAME, results_dir
+    )
+    write_post_processed_files(input_dir, results_dir, sv_subset, True)
+    shutil.rmtree(processed_file_dir)
 
     svs_n_modes = pd.read_csv(os.path.join(results_dir, "svs_n_modes.csv"))
     results = calc_confusion_matrix(sv_subset, svs_n_modes)
@@ -130,10 +160,14 @@ def run_calibration_test(
     with open(final_output_file, "a") as f:
         f.write(
             "{},{},{},{},{},{}\n".format(
-                d, r, results["TP"], results["FP"], results["FN"], results["TN"]
+                d,
+                r,
+                results["TP"],
+                results["FP"],
+                results["FN"],
+                results["TN"],
             )
         )
-    # do analysis later on which combinations led to "partial correctness"
 
 
 def download_stix_data_inner(
@@ -199,6 +233,10 @@ def run_calibration(
 ):
     """Run calibration tests over a grid of distance and reciprocal overlap thresholds."""
     sv_subset = pd.read_csv(os.path.join(input_dir, sv_regions_file))
+    sv_subset["id"] = sv_subset.apply(
+        lambda row: f"{giggle_format(str(row['chr']), row['start'])}_{giggle_format(str(row['chr']), row['stop'])}",
+        axis=1,
+    )
     sv_df = pd.read_csv(os.path.join(input_dir, sv_lookup_file))
     sample_ids = set()
     with open(os.path.join(input_dir, sample_ids_file), "r") as f:
