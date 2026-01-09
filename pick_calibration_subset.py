@@ -5,7 +5,10 @@ import pandas as pd
 from query_sv import load_vcf
 from typing import Optional, Set, Tuple
 
-"""The purpose of this script is to pick a subset of structural variants (SVs) from a larger VCF file to be used for the calibration test."""
+"""
+The purpose of this script is to pick a subset of structural variants (SVs) from a larger VCF file to be used for the calibration test.
+Example usage: python3 pick_calibration_subset.py --sv_lookup filtered_dels.csv -f --bedtools_path /Users/vili4418/sv/bedtools/bin/bedtools -n 192
+"""
 
 
 def pick_pairs(
@@ -161,7 +164,9 @@ def filter_svs(
     """
     df_filtered = df.copy()
 
-    if sample_ids_file is not None:
+    if sample_ids_file is not None and os.path.exists(
+        os.path.join(input_dir, sample_ids_file)
+    ):
         sample_ids = set()
         with open(os.path.join(input_dir, sample_ids_file), "r") as f:
             for line in f:
@@ -268,7 +273,7 @@ def main():
         "--sample_ids",
         type=str,
         help="Txt file containing sample IDs with long read data available",
-        default=None,
+        default="sample_ids.txt",
     )
     parser.add_argument(
         "-f",

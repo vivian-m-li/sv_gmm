@@ -32,11 +32,7 @@ def calc_confusion_matrix(
     svs_n_modes.rename(
         columns={"sv_id": "id", "num_modes": "n_svs_predicted"}, inplace=True
     )
-    merged = sv_subset.merge(
-        svs_n_modes,
-        on="id",
-        how="left",
-    )
+    merged = sv_subset.merge(svs_n_modes, on="id", how="right")
 
     TP = merged[
         (merged["n_svs_actual"] == 2) & (merged["n_svs_predicted"] == 2)
@@ -72,7 +68,7 @@ def run_dirichlet_inner(
 ):
     # filter reference samples is set to false because we don't have references for regions, only SVs
     reads, num_samples = get_raw_data(
-        row, input_dir, filter_reference_samples=False
+        row, input_dir, filter_reference_samples=False, print_messages=False,
     )
 
     if reads.empty:

@@ -107,7 +107,11 @@ def init_sv_stat_row(
 
 
 def get_raw_data(
-    row, input_dir: str = "1kgp", *, filter_reference_samples: bool = True
+    row: pd.Series,
+    input_dir: str = "1kgp",
+    *,
+    filter_reference_samples: bool = True,
+    print_messages: bool = True,
 ) -> Tuple[Dict[str, np.ndarray[float]], int]:
     """
     Gets the samples and evidence for an SV. Filters out samples that are homozygous for the reference allele.
@@ -126,6 +130,7 @@ def get_raw_data(
         stix_index="/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
         stix_database="/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
         num_stix_shards=8,
+        print_messages=print_messages,
     )
     num_samples = reads["sample_id"].nunique()
 

@@ -42,7 +42,14 @@ def load_vcf(dir: str, vcf_filename: str):
     for record in vcf_in.fetch():
         info = dict(record.info)
         chr = record.chrom.strip("chr")
-        if info["SVTYPE"] != "DEL" or chr in ["X", "Y"]:
+
+        sv_type = info.get("SVTYPE")
+        if sv_type is None:
+            pattern = r"^chr[^-]+-\d+-([A-Z]+)->"
+            match = re.match(pattern, record.id)
+            sv_type = match.group(1)
+
+        if sv_type != "DEL" or chr in ["X", "Y"]:
             continue
         row = [
             record.id,
@@ -396,6 +403,7 @@ def query_stix(
     filter_reference: bool = True,
     single_trial: bool = True,
     plot: bool = True,
+    print_messages: bool = True,
     long_reads: bool = False,
 ):
     # check that the user inputted an sv id or sv coordinates
@@ -472,7 +480,8 @@ def query_stix(
             num_stix_shards,
         )
     else:
-        print("Using previously-queried data from", output_file, "\n")
+        if print_messages:
+            print("Using previously-queried data from", output_file, "\n")
 
     # load the data as a dataframe
     reads = stix_output_to_df(output_file)
