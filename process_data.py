@@ -6,6 +6,7 @@ from bokeh.plotting import figure, output_file, save
 from bokeh.models import HoverTool, ColumnDataSource, NumeralTickFormatter
 from typing import Optional, List, Tuple, Dict
 from em import run_gmm
+from helper import reciprocal_overlap
 from viz import plot_2d_coords_fig
 from gmm_types import Evidence, Sample, EstimatedGMM
 
@@ -616,6 +617,14 @@ def process_data(
     Samples are filtered out if too few paired-end reads are present (< min_pairs). Long reads require fewer reads to support an SV.
     Returns a list of points to cluster and a list of Evidence objects for the samples that passed filtering.
     """
+    # filter out reads that don't share enough reciprocal overlap with the SV region
+    # TODO: this should be replaced with additional filtering criteria
+    reads["r"] = reads.apply(
+        lambda row: reciprocal_overlap((row["l_end"], row["r_start"]), (L, R)),
+        axis=1,
+    )
+    reads = reads[reads["r"] >= 0.5]
+
     # list of evidence to keep after filtering
     sv_evidence = []
 
