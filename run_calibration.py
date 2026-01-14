@@ -4,6 +4,7 @@ import multiprocessing
 import shutil
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from run_dirichlet import run_dirichlet
 from query_sv import giggle_format, query_stix_bash
 from write_sv_output import (
@@ -16,10 +17,53 @@ from write_sv_output import (
 )
 from typing import Set, Dict
 
-SLURM_CPUS = int(os.environ['SLURM_CPUS_ON_NODE'])
+SLURM_CPUS = int(os.environ.get("SLURM_CPUS_ON_NODE", 1))
 FILE_DIR = "calibration_outputs"
 SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
 OUTPUT_FILE_NAME = "sv_stats_converge.csv"
+
+
+def find_pareto_front():
+    # construct tp/fp curve from results.csv files in calibration output directories
+    results = pd.read_csv("calibration/results.csv")
+    plt.figure(figsize=(8, 6))
+
+    results = results.sort_values(by=["FP", "TP"], ascending=[True, False])
+    plt.scatter(results["FP"], results["TP"])
+    for i, row in results.iterrows():
+        plt.text(
+            row["FP"],
+            row["TP"] - 0.01,
+            f"d={int(row['d'])},r={row['r']:.2f}",
+            fontsize=8,
+            ha="center",
+        )
+
+    pareto_front = pd.DataFrame(columns=["FP", "TP", "d", "r"])
+    max_tp = -1
+    for i, row in results.iterrows():
+        if row["TP"] > max_tp:
+            pareto_front.loc[len(pareto_front)] = row
+            max_tp = row["TP"]
+    plt.plot(
+        pareto_front["FP"],
+        pareto_front["TP"],
+        color="red",
+        linewidth=2,
+    )
+
+    # find the pareto optimal point closest to (0, 1)
+    pareto_front["dist"] = np.sqrt(
+        pareto_front["FP"] ** 2 + (1 - pareto_front["TP"]) ** 2
+    )
+    best_point = pareto_front.loc[pareto_front["dist"].idxmin()]
+    print(
+        f"Best point on Pareto front: d={int(best_point['d'])}, r={best_point['r']:.2f}, FPR={best_point['FP']:.4f}, TPR={best_point['TP']:.4f}"
+    )
+
+    plt.xlabel("FPR")
+    plt.ylabel("TPR")
+    plt.show()
 
 
 def calc_confusion_matrix(
@@ -28,10 +72,10 @@ def calc_confusion_matrix(
 ) -> Dict[str, float]:
     """Calculate confusion matrix based on predicted vs actual number of SVs."""
     # remove rows that didn't run due to lack of data
-    svs_n_modes = svs_n_modes[svs_n_modes["confidence"] != "inconclusive"]
-    svs_n_modes.rename(
-        columns={"sv_id": "id", "num_modes": "n_svs_predicted"}, inplace=True
+    svs_n_modes = svs_n_modes.rename(
+        columns={"sv_id": "id", "num_modes": "n_svs_predicted"},
     )
+    svs_n_modes = svs_n_modes[svs_n_modes["confidence"] != "inconclusive"]
     merged = sv_subset.merge(svs_n_modes, on="id", how="right")
 
     TP = merged[
@@ -68,7 +112,10 @@ def run_dirichlet_inner(
 ):
     # filter reference samples is set to false because we don't have references for regions, only SVs
     reads, num_samples = get_raw_data(
-        row, input_dir, filter_reference_samples=False, print_messages=False,
+        row,
+        input_dir,
+        filter_reference_samples=False,
+        print_messages=False,
     )
 
     if reads.empty:
@@ -189,6 +236,7 @@ def download_stix_data_inner(
         "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
         "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
         8,
+        True,
     )
     print(f"Downloaded STIX data {stix_file}")
 
@@ -203,7 +251,6 @@ def download_stix_data(
         os.mkdir(output_dir)
 
     with multiprocessing.Manager():
-        print(multiprocessing.cpu_count(), SLURM_CPUS)
         p = multiprocessing.Pool(SLURM_CPUS)
         args = []
 
