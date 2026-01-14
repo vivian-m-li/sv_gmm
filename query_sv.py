@@ -186,7 +186,7 @@ def giggle_format(chromosome: str, position: int):
 
 def stix_format(s: str):
     chr, pos = s.split(":")
-    return chr, pos
+    return chr, int(pos)
 
 
 def reverse_giggle_format(l: str, r: str):  # noqa741
@@ -294,6 +294,8 @@ def get_reference_samples(
 ) -> List[str]:
     df = pd.read_csv(f"{input_dir}/svs_by_chr/chr{chr}.csv")
     row = df[(df["start"] == start) & (df["stop"] == stop)]
+    if row.empty: # query region does not correspond with an SV in the callset
+        return []
     samples = reads["sample_id"].tolist()
     ref_samples = [
         sample_id for sample_id in samples if row.iloc[0][sample_id] == "(0, 0)"

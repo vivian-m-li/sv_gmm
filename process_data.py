@@ -410,7 +410,11 @@ def populate_sample_info(
     deletions_df = pd.read_csv(f"{stem}/svs_by_chr/chr{chr}.csv")
     deletions_row = deletions_df[
         (deletions_df["start"] == L) & (deletions_df["stop"] == R)
-    ].iloc[0]
+    ]
+    if deletions_row.empty:
+        # query region does not correspond with an SV in the callset
+        return
+    deletions_row = deletions_row.iloc[0]
     for evidence in sv_evidence:
         sample_id = evidence.sample.id
         ancestry_row = ancestry_df[ancestry_df["Sample name"] == sample_id]
