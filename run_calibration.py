@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from run_dirichlet import run_dirichlet
-from query_sv import giggle_format, query_stix_bash
+from query_sv import giggle_format, query_stix_bash, get_query_region
 from write_sv_output import (
     get_raw_data,
     init_sv_stat_row,
@@ -219,16 +219,16 @@ def download_stix_data_inner(
     output_dir: str,
 ):
     # check if the data for this region already exists
-    l = giggle_format(str(row.chr), row.start)  # noqa:741
-    r = giggle_format(str(row.chr), row.stop)
-    filename = f"{l}_{r}"
-    file = os.path.join(output_dir, f"{filename}.txt")
+    query_region = get_query_region(
+        f"{row.chr}:{row.start}", f"{row.chr}:{row.stop}"
+    )
+    filename = f"{query_region.file_name}.txt"
+    file = os.path.join(output_dir, filename)
     if os.path.isfile(file):
         return
 
     stix_file = query_stix_bash(
-        l,
-        r,
+        query_region,
         output_dir,
         filename,
         # hard-coded stix parameters for 1kg high coverage data on Vivian's fiji
