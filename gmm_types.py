@@ -86,6 +86,16 @@ SYNTHETIC_DATA_CENTROIDS = {
 
 
 @dataclass
+class StixQueryRegion:
+    chr: str
+    left_start: int
+    left_stop: int
+    right_start: int
+    right_stop: int
+    file_name: str
+
+
+@dataclass
 class GaussianDistribution1D:
     mu: List[float]  # means for a 2D GMM
     vr: List[float]  # variances

@@ -10,6 +10,7 @@ import numpy as np
 from process_data import run_viz_gmm, get_insert_size_lookup
 from run_dirichlet import run_dirichlet
 from helper import stix_output_to_df, get_sample_ids, get_deletions_df, calc_af
+from gmm_types import StixQueryRegion, CHR_LENGTHS
 from typing import List, Dict, Optional
 
 # Increase the field size limit to avoid triggering the error
@@ -153,6 +154,7 @@ def process_input_files(
 ):
     """Processes input files for more efficient lookup during querying."""
 
+    df = None
     if sv_lookup_file.endswith(".vcf") or sv_lookup_file.endswith(".vcf.gz"):
         df = load_vcf(dir, sv_lookup_file)
         write_svs_by_chr(dir, df)
@@ -161,11 +163,15 @@ def process_input_files(
         write_svs_by_chr(dir, df)
 
     if not os.path.isfile(os.path.join(dir, "sample_ids.txt")):
+        if df is None:
+            df = pd.read_csv(os.path.join(dir, sv_lookup_file))
         sample_ids = write_sample_ids_file(dir, df)
     else:
         sample_ids = get_sample_ids(dir)
 
     if not os.path.isfile(os.path.join(dir, "sv_lookup.csv")):
+        if df is None:
+            df = pd.read_csv(os.path.join(dir, sv_lookup_file))
         write_sv_lookup(dir, df)
 
     if not os.path.isfile(os.path.join(dir, insert_size_file)):
@@ -185,7 +191,7 @@ def giggle_format(chromosome: str, position: int):
 
 def stix_format(s: str):
     chr, pos = s.split(":")
-    return f"{chr}:{pos}-{pos}"
+    return chr, int(pos)
 
 
 def reverse_giggle_format(l: str, r: str):  # noqa741
@@ -205,6 +211,28 @@ def lookup_sv_position(sv_id: str, dir: str = "1kgp"):
     start = int(row["start"].values[0])
     stop = int(row["stop"].values[0])
     return chr, start, stop
+
+
+def get_query_region(
+    l: str, r: str, overlap: float = 0.5
+) -> StixQueryRegion:  # noqa741
+    """Returns the STIX query region information from the original SV position."""
+    l_chr, l_pos = stix_format(l)
+    _, r_pos = stix_format(r)
+    svlen = r_pos - l_pos
+    cutoff = int(svlen * (1 - overlap))
+    l_start = max(0, l_pos - cutoff)
+    l_stop = l_pos + cutoff
+    r_start = r_pos - cutoff
+    r_stop = min(r_pos + cutoff, CHR_LENGTHS[l_chr])
+    return StixQueryRegion(
+        chr=l_chr,
+        left_start=l_start,
+        left_stop=l_stop,
+        right_start=r_start,
+        right_stop=r_stop,
+        file_name=f"{l}-{r}",
+    )
 
 
 def load_processed_data(filename: str, rewrite_file: bool = False):
@@ -271,6 +299,8 @@ def get_reference_samples(
 ) -> List[str]:
     df = pd.read_csv(f"{input_dir}/svs_by_chr/chr{chr}.csv")
     row = df[(df["start"] == start) & (df["stop"] == stop)]
+    if row.empty:  # query region does not correspond with an SV in the callset
+        return []
     samples = reads["sample_id"].tolist()
     ref_samples = [
         sample_id for sample_id in samples if row.iloc[0][sample_id] == "(0, 0)"
@@ -279,14 +309,13 @@ def get_reference_samples(
 
 
 def query_stix_bash(
-    l: int,
-    r: int,
+    query_region: StixQueryRegion,
     output_dir: str,
-    file_name: str,
     stix_bin: str,
     index_path: str,
     database_path: str,
     num_shards: int,
+    parallel: bool = False,
 ):
     """
     Runs a bash query file to query STIX for all the read (paired-end and split
@@ -296,20 +325,20 @@ def query_stix_bash(
     """
     partial_outputs_dir = os.path.join(output_dir, "partial_outputs")
     if num_shards > 1:
-        if not os.path.exists(partial_outputs_dir):
+        if not parallel and not os.path.exists(partial_outputs_dir):
             os.mkdir(partial_outputs_dir)
         stix_output_file = os.path.join(
-            output_dir, "partial_outputs", file_name
+            partial_outputs_dir, query_region.file_name
         )
     else:
-        stix_output_file = os.path.join(output_dir, file_name)
+        stix_output_file = os.path.join(output_dir, query_region.file_name)
 
     stix_path = "/".join(index_path.split("/")[:-1])
     subprocess.run(
         ["bash", "query_stix.sh"]
-        + [
-            stix_format(l),
-            stix_format(r),
+        + [  # noqa503
+            f"{query_region.chr}:{query_region.left_start}-{query_region.left_stop}",
+            f"{query_region.chr}:{query_region.right_start}-{query_region.right_stop}",
             stix_path,
             index_path,
             database_path,
@@ -323,11 +352,11 @@ def query_stix_bash(
 
     # the query output from each shard was written to a different file, and we want to write them to the same file
     if num_shards > 1:
-        output_file = os.path.join(output_dir, f"{file_name}.txt")
+        output_file = os.path.join(output_dir, f"{query_region.file_name}.txt")
         with open(output_file, "w") as out_file:
             for i in range(num_shards):
                 temp_file = os.path.join(
-                    partial_outputs_dir, f"{file_name}_{i}.txt"
+                    partial_outputs_dir, f"{query_region.file_name}_{i}.txt"
                 )
                 with open(temp_file, "r") as partial_file:
                     # write the partial file to the main file
@@ -335,7 +364,8 @@ def query_stix_bash(
 
                 # remove partial file
                 os.remove(temp_file)
-        os.rmdir(partial_outputs_dir)
+        if not parallel:
+            os.rmdir(partial_outputs_dir)
     else:
         output_file = f"{stix_output_file}.txt"
 
@@ -435,7 +465,9 @@ def query_stix(
         if not os.path.exists(directory) and directory != "":
             os.mkdir(directory)
 
-    file_name = f"{l}_{r}"  # base file name
+    query_region = get_query_region(l, r)
+    file_name = query_region.file_name
+
     # check if this SV has already been queried for in STIX
     # check multiple locations for this file
     output_file = None
@@ -460,10 +492,8 @@ def query_stix(
 
         # run the bash script to query stix
         output_file = query_stix_bash(
-            l,
-            r,
+            query_region,
             output_file_dir,
-            file_name,
             stix_bin,
             stix_index,
             stix_database,
