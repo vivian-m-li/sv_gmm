@@ -1,13 +1,12 @@
 /__pycache__
 .venv
 venv
-stix_output
-processed_stix_output
+*stix_output*
 plots
 gnomad_svs
 samples
 hs37d5.fa.gz
-1kgp
+*1kgp*
 grch37
 processed_svs
 processed_svs_converge

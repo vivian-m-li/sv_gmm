@@ -154,6 +154,7 @@ def process_input_files(
 ):
     """Processes input files for more efficient lookup during querying."""
 
+    df = None
     if sv_lookup_file.endswith(".vcf") or sv_lookup_file.endswith(".vcf.gz"):
         df = load_vcf(dir, sv_lookup_file)
         write_svs_by_chr(dir, df)
@@ -162,11 +163,15 @@ def process_input_files(
         write_svs_by_chr(dir, df)
 
     if not os.path.isfile(os.path.join(dir, "sample_ids.txt")):
+        if df is None:
+            df = pd.read_csv(os.path.join(dir, sv_lookup_file))
         sample_ids = write_sample_ids_file(dir, df)
     else:
         sample_ids = get_sample_ids(dir)
 
     if not os.path.isfile(os.path.join(dir, "sv_lookup.csv")):
+        if df is None:
+            df = pd.read_csv(os.path.join(dir, sv_lookup_file))
         write_sv_lookup(dir, df)
 
     if not os.path.isfile(os.path.join(dir, insert_size_file)):
@@ -226,7 +231,7 @@ def get_query_region(
         left_stop=l_stop,
         right_start=r_start,
         right_stop=r_stop,
-        file_name=f"{l_chr}:{l_start}-{l_stop}_{l_chr}:{r_start}-{r_stop}",
+        file_name=f"{l}-{r}",
     )
 
 
@@ -310,6 +315,7 @@ def query_stix_bash(
     index_path: str,
     database_path: str,
     num_shards: int,
+    parallel: bool = False,
 ):
     """
     Runs a bash query file to query STIX for all the read (paired-end and split
@@ -319,10 +325,10 @@ def query_stix_bash(
     """
     partial_outputs_dir = os.path.join(output_dir, "partial_outputs")
     if num_shards > 1:
-        if not os.path.exists(partial_outputs_dir):
+        if not parallel and not os.path.exists(partial_outputs_dir):
             os.mkdir(partial_outputs_dir)
         stix_output_file = os.path.join(
-            output_dir, "partial_outputs", query_region.file_name
+            partial_outputs_dir, query_region.file_name
         )
     else:
         stix_output_file = os.path.join(output_dir, query_region.file_name)
@@ -358,7 +364,8 @@ def query_stix_bash(
 
                 # remove partial file
                 os.remove(temp_file)
-        os.rmdir(partial_outputs_dir)
+        if not parallel:
+            os.rmdir(partial_outputs_dir)
     else:
         output_file = f"{stix_output_file}.txt"
 
@@ -458,8 +465,6 @@ def query_stix(
         if not os.path.exists(directory) and directory != "":
             os.mkdir(directory)
 
-    # deprecated: previously, stix queries weren't run with left/right regions, so queries were identified by l_r only
-    # file_name = f"{l}_{r}"  # base file name
     query_region = get_query_region(l, r)
     file_name = query_region.file_name
 

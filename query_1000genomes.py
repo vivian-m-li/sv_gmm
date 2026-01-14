@@ -3,7 +3,12 @@ import os
 import pandas as pd
 import pysam
 import multiprocessing
-from query_sv import get_query_region, query_stix_bash, load_vcf
+from query_sv import (
+    get_query_region,
+    query_stix_bash,
+    load_vcf,
+    process_input_files,
+)
 from helper import get_sample_ids
 from timeout import break_after
 
@@ -64,7 +69,7 @@ def write_cipos():
 
 def query_stix_sv(row: pd.Series):
     query_region = get_query_region(
-        f"{row.chr}:{row.start}", f"{row.chr}:{row.stop}"
+        f"{row['chr']}:{row['start']}", f"{row['chr']}:{row['stop']}"
     )
     _ = query_stix_bash(
         query_region,
@@ -73,15 +78,17 @@ def query_stix_sv(row: pd.Series):
         "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
         "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
         8,
+        True,
     )
 
 
-@break_after(hours=167, minutes=55)  # break before the job is cancelled
+@break_after(hours=166, minutes=0)  # break before the job is cancelled
 def query_stix_all():
     """Query all SVs in deletions.csv using STIX and update num_samples column."""
     filename = f"{INPUT_DIR}/deletions.csv"
-    df = pd.read_csv(filename, low_memory=False)
+    process_input_files(INPUT_DIR, "deletions.csv", "insert_sizes.csv")
 
+    df = pd.read_csv(filename, low_memory=False)
     df["num_samples"] = 0
     sample_ids = get_sample_ids(INPUT_DIR)
     for index, row in df.iterrows():
@@ -98,7 +105,7 @@ def query_stix_all():
             if row["num_samples"] <= 10:
                 # skip rows with too few samples
                 continue
-            args.append((row))
+            args.append((row.to_dict(),))
 
         print(f"Querying stix for {len(args)} SVs...")
         p.starmap(query_stix_sv, args)
