@@ -294,7 +294,7 @@ def get_reference_samples(
 ) -> List[str]:
     df = pd.read_csv(f"{input_dir}/svs_by_chr/chr{chr}.csv")
     row = df[(df["start"] == start) & (df["stop"] == stop)]
-    if row.empty: # query region does not correspond with an SV in the callset
+    if row.empty:  # query region does not correspond with an SV in the callset
         return []
     samples = reads["sample_id"].tolist()
     ref_samples = [
