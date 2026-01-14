@@ -61,7 +61,7 @@ def hinge_loss_overlap(
 
 
 def model_penalty(
-    mu: list[np.ndarray], L: int, R: int, d_threshold, r_threshold
+    mu: list[np.ndarray], L: int, R: int, d_threshold: int, r_threshold: float
 ) -> float:
     """
     Aggregate model penalties from distance and reciprocal overlap into a single score.
