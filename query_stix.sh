@@ -16,7 +16,7 @@ if [ "$num_shards" -eq 1 ]; then
 else
   for (( idx=0; idx<num_shards; idx++ ))
   do
-    "$stix_bin" -i "${index_path}_${idx}" -d "${database_path}_${idx}.ped.db" -s 500 -t DEL -l "$l" -r "$r" -g > "${CURRENT_DIR}/${output_file}_${idx}.txt"
+    "$stix_bin" -i "${index_path}_${idx}" -d "${database_path}_${idx}.ped.db" -s 500 -t DEL -l "$l" -r "$r" -g > "${output_file}_${idx}.txt"
   done
 fi
 

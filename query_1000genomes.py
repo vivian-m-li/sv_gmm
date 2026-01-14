@@ -3,12 +3,13 @@ import os
 import pandas as pd
 import pysam
 import multiprocessing
-from typing import Dict
-from query_sv import giggle_format, query_stix, load_vcf, FILE_DIR
-from process_data import (
-    process_data,
-    get_insert_size_lookup,
+from query_sv import (
+    get_query_region,
+    query_stix_bash,
+    load_vcf,
+    process_input_files,
 )
+from helper import get_sample_ids
 from timeout import break_after
 
 INPUT_DIR = "1kgp"
@@ -66,68 +67,57 @@ def write_cipos():
     df.to_csv(f"{INPUT_DIR}/cipos.csv", index=False)  # 11522 rows
 
 
-def get_num_samples(
-    row_index: int, row, lookup: Dict[int, int], long_reads: bool
-):
-    start = giggle_format(str(row.chr), row.start)
-    end = giggle_format(str(row.chr), row.stop)
-    reads = query_stix(
-        l=start,
-        r=end,
-        input_dir="1kgp",
-        run_gmm=False,
-        plot=False,
-        output_dir="/scratch/Users/vili4418/",
-        long_reads=long_reads,
+def query_stix_sv(row: pd.Series):
+    query_region = get_query_region(
+        f"{row['chr']}:{row['start']}", f"{row['chr']}:{row['stop']}"
     )
-    if not reads.empty:
-        insert_size_lookup = get_insert_size_lookup("1kgp/insert_sizes.csv")
-        points, _ = process_data(
-            reads,
-            L=row.start,
-            R=row.stop,
-            insert_size_lookup=insert_size_lookup,
-        )
-        lookup[row_index] = len(points)
+    _ = query_stix_bash(
+        query_region,
+        "/scratch/Users/vili4418/stix_output",
+        "/Users/vili4418/sv/stix/bin/stix",
+        "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
+        "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
+        8,
+        True,
+    )
 
 
-@break_after(hours=167, minutes=55)  # break before the job is cancelled
-def get_num_sv(long_reads: bool = False):
+@break_after(hours=166, minutes=0)  # break before the job is cancelled
+def query_stix_all():
+    """Query all SVs in deletions.csv using STIX and update num_samples column."""
     filename = f"{INPUT_DIR}/deletions.csv"
+    process_input_files(INPUT_DIR, "deletions.csv", "insert_sizes.csv")
+
     df = pd.read_csv(filename, low_memory=False)
+    df["num_samples"] = 0
+    sample_ids = get_sample_ids(INPUT_DIR)
+    for index, row in df.iterrows():
+        n_w_allele = 0
+        for sample_id in sample_ids:
+            if row[sample_id] != "(0, 0)":
+                n_w_allele += 1
+        df.at[index, "num_samples"] = int(n_w_allele)
 
-    files = os.listdir(FILE_DIR)
-    processed_svs = []
-    pattern = r"([\w]+):(\d+)_[\w]+:(\d+).csv"
-
-    for file in files:
-        match = re.search(pattern, file)
-        chr, start, stop = match.groups()
-        processed_svs.append((chr, int(start), int(stop)))
-
-    with multiprocessing.Manager() as manager:
+    with multiprocessing.Manager():
         p = multiprocessing.Pool(multiprocessing.cpu_count())
-        lookup = manager.dict()
         args = []
-        for i, row in df.iterrows():
-            if (str(row.chr), row.start, row.stop) in processed_svs:
+        for _, row in df.iterrows():
+            if row["num_samples"] <= 10:
+                # skip rows with too few samples
                 continue
-            args.append((i, row, lookup, long_reads))
+            args.append((row.to_dict(),))
 
-        p.starmap(get_num_samples, args)
+        print(f"Querying stix for {len(args)} SVs...")
+        p.starmap(query_stix_sv, args)
         p.close()
         p.join()
-
-        # this only gets updated if all SVs are processed before timeout
-        for row_index, num_samples in lookup.items():
-            df.loc[row_index, "num_samples"] = num_samples
     df.to_csv(filename, index=False)
 
 
 def main():
     if not os.path.isfile(f"{INPUT_DIR}/deletions.csv"):
         load_vcf(INPUT_DIR, "1kg.subset.vcf.gz")
-    get_num_sv(True)
+    query_stix_all()
 
 
 if __name__ == "__main__":
