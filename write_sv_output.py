@@ -286,10 +286,12 @@ def write_sv_stats_collapsed(output_dir: str):
         f"{output_dir}/sv_stats_collapsed.csv", mode="w", newline=""
     ) as out:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
+        fieldnames.append("num_gmm_runs")
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
         csv_writer.writeheader()
         for sv_id in sv_ids:
             rows = df[df["id"] == sv_id]
+            num_gmm_runs = len(rows)
             if len(rows) < 1:
                 continue
 
@@ -297,9 +299,10 @@ def write_sv_stats_collapsed(output_dir: str):
             rows = rows[rows["num_modes"] == consensus_num_modes]
             samples = Counter()
             samples_by_row = {}
-            for i, row in rows.iterrows():
+            for i, trial_row in rows.iterrows():
                 modes = sorted(
-                    ast.literal_eval(row["modes"]), key=lambda x: x["start"]
+                    ast.literal_eval(trial_row["modes"]),
+                    key=lambda x: x["start"],
                 )
                 sample_ids = [
                     ",".join(sorted(mode["sample_ids"])) for mode in modes
@@ -310,6 +313,7 @@ def write_sv_stats_collapsed(output_dir: str):
 
             most_common = samples.most_common(1)[0][0]
             row = rows.loc[samples_by_row[most_common]].copy()
+            row["num_gmm_runs"] = num_gmm_runs
             row = row.drop(
                 ["consensus_num_modes", "num_modes_2", "sv_id", "confidence"]
             )
@@ -396,16 +400,15 @@ def get_n_modes(
     for sv_id in svs:
         rows = df[df["id"] == sv_id]
 
-        # if the sv_id didn't run due to lack of evidence, skip the row
-        if len(rows) == 0:
+        # if the GMM didn't run at all on a sample due to lack of evidence, skip the row
+        if len(rows) == 0 or (
+            len(rows) == 1 and rows["num_iterations"].values[0] == 0
+        ):
             continue
 
-        # if the GMM didn't run at all on a sample
-        # or GMM defaulted to 1 mode because there were too few samples
+        # if the GMM defaulted to 1 mode because there were 1-10 samples,
         # label it as 1 mode inconclusively
-        if (len(rows) == 1 and rows["num_iterations"].values[0] == 0) or rows[
-            "num_samples_run"
-        ].values[0] <= 10:
+        if rows["num_samples_run"].values[0] <= 10:
             sv_df.loc[len(sv_df)] = [sv_id, 1, "inconclusive", np.nan]
             continue
 
@@ -420,7 +423,7 @@ def get_n_modes(
         new_row = [sv_id, num_modes]
         if ci[0] >= 0.6:
             new_row.append("high")
-        elif ci[0] >= 0.3 and ci[1] < 0.6:
+        elif ci[0] >= 0.3:
             new_row.append("medium")
         else:
             new_row.append("low")

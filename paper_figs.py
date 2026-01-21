@@ -20,6 +20,8 @@ from helper import (
     get_sv_chr,
     calc_af,
     stix_output_to_df,
+    calculate_posteriors_from_trials,
+    calculate_ci,
 )
 from gmm_types import COLORS, SUPERPOPULATIONS, SUBPOPULATIONS, ANCESTRY_COLORS
 from matplotlib.gridspec import GridSpec
@@ -790,9 +792,9 @@ def plot_sv_short_long_reads(sv_id, sample_ids, skip_evidence_plot=False):
 
 
 def find_example_svs():
-    df = pd.read_csv("1kgp/svs_n_modes.csv")
+    df = pd.read_csv("results/svs_n_modes.csv")
     df.rename(columns={"sv_id": "id"}, inplace=True)
-    ancestry = pd.read_csv("1kgp/ancestry_dissimilarity.csv")
+    ancestry = pd.read_csv("results/ancestry_dissimilarity.csv")
     df = df.merge(ancestry, on="id")
     df = df.sort_values(by="dissimilarity", ascending=False)
     df = df[
@@ -800,7 +802,7 @@ def find_example_svs():
         & (df["num_modes"] == 3)
         & (df["dissimilarity"] >= 0.5)
     ]
-    collapsed = pd.read_csv("1kgp/sv_stats_collapsed.csv")
+    collapsed = pd.read_csv("results/sv_stats_collapsed.csv")
     for _, row in df.iterrows():
         sv_id = row["id"]
         # check if there are bam files for samples in each mode
@@ -824,8 +826,16 @@ def find_example_svs():
 def get_all_svs_df(path: str = "") -> pd.DataFrame:
     filepath = os.path.join("results", path)
     full_df = get_sv_stats_collapsed_df(filepath)
-    full_df["num_samples_run"] = full_df["num_samples"] - (
-        full_df["num_pruned"] + full_df["num_reference"]
+    full_df["num_samples_run"] = full_df.apply(
+        lambda row: int(
+            np.sum(
+                [
+                    len(mode["sample_ids"])
+                    for mode in ast.literal_eval(row["modes"])
+                ],
+            )
+        ),
+        axis=1,
     )
     full_df.rename(columns={"id": "sv_id"}, inplace=True)
     full_df = full_df[
@@ -838,7 +848,7 @@ def get_all_svs_df(path: str = "") -> pd.DataFrame:
             "modes",
         ]
     ]
-    df = pd.read_csv(f"{filepath}/svs_n_modes.csv")
+    df = pd.read_csv(f"{filepath}/svs_n_modes_modified.csv")
     df = df.merge(full_df, on="sv_id")
     return df
 
@@ -1266,8 +1276,81 @@ def print_sv_stats(path: str = ""):
     plt.show()
 
 
+def plot_num_trials(path: str = ""):
+    """Plots the number of trials per confidence level."""
+    # all low and medium confidence SVs ran all 100 trials
+    # most high confidence SVs ran 8 trials
+    # 4% of high confidence SVs ran >8 trials, with a mean of 25 and median of 18
+    # 62 high confidence SVs ran >50 trials (0.3% of total SVs run)
+    df = get_all_svs_df(path)
+    df = df[df["confidence"] != "inconclusive"]
+
+    confidence_levels = ["low", "medium", "high"]
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+    for i, conf in enumerate(confidence_levels):
+        ax = axs[i]
+        conf_df = df[df["confidence"] == conf]
+        ax.hist(
+            conf_df["num_gmm_runs"],
+            bins=20,
+            color="black",
+            alpha=0.8,
+            edgecolor="white",
+        )
+        ax.set_title(f"Confidence Level: {conf.capitalize()}", fontsize=14)
+        ax.set_xlabel("Number of Trials", fontsize=12)
+        ax.set_ylabel("Count", fontsize=12)
+        ax.tick_params(axis="both", labelsize=12)
+    plt.tight_layout()
+    plt.show()
+
+    converge = pd.read_csv("results/sv_stats_converge.csv")
+    # get all rows where num_gmm_runs > 50
+    subset = df[(df["confidence"] == "high") & (df["num_gmm_runs"] > 50)].copy()
+    for _, row in subset.iterrows():
+        sv_id = row["sv_id"]
+        all_rows = converge[converge["id"] == sv_id]
+        first_50 = all_rows.head(50)
+        random_50 = all_rows.sample(50, random_state=42)
+        for label, rows in zip(
+            ["first_50", "random_50"], [first_50, random_50]
+        ):
+
+            outcomes = rows["num_modes"].values
+            counter = Counter(outcomes)
+            most_common = counter.most_common(2)
+            num_modes = max(1, most_common[0][0])
+            p, var = calculate_posteriors_from_trials(outcomes)
+            ci = calculate_ci(p, var, len(outcomes))
+            confidence = "low"
+            if ci[0] >= 0.6:
+                confidence = "high"
+            elif ci[0] >= 0.3:
+                confidence = "medium"
+
+            subset.loc[subset["sv_id"] == sv_id, f"num_modes_{label}"] = (
+                num_modes
+            )
+            subset.loc[subset["sv_id"] == sv_id, f"confidence_{label}"] = (
+                confidence
+            )
+
+    print("Reducing the max number of trials from 100 to 50 changes:")
+    for label in ["first_50", "random_50"]:
+        n_changed = np.sum(subset["num_modes"] != subset[f"num_modes_{label}"])
+        print(
+            f"  - Number of SVs with different num_modes ({label}): {n_changed} out of {subset.shape[0]}"
+        )
+        n_conf_changed = np.sum(
+            subset["confidence"] != subset[f"confidence_{label}"]
+        )
+        print(
+            f"  - Number of SVs with different confidence ({label}): {n_conf_changed} out of {subset.shape[0]}"
+        )
+
+
 if __name__ == "__main__":
-    figures = [6]
+    figures = [7]
 
     # Figure 1
     if 1 in figures:
@@ -1306,3 +1389,7 @@ if __name__ == "__main__":
     # Print SV stats
     if 6 in figures:
         print_sv_stats()
+
+    # SI figure - confidence vs. number of trials
+    if 7 in figures:
+        plot_num_trials()
