@@ -230,7 +230,6 @@ def download_stix_data_inner(
     stix_file = query_stix_bash(
         query_region,
         output_dir,
-        filename,
         # hard-coded stix parameters for 1kg high coverage data on Vivian's fiji
         "/Users/vili4418/sv/stix/bin/stix",
         "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",

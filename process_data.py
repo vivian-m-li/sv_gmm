@@ -626,7 +626,8 @@ def process_data(
         lambda row: reciprocal_overlap((row["l_end"], row["r_start"]), (L, R)),
         axis=1,
     )
-    reads = reads[reads["r"] >= 0.5]
+    # this filtering doesn't take into account the sequenced distance between L and R
+    # reads = reads[reads["r"] >= 0.5]
 
     # list of evidence to keep after filtering
     sv_evidence = []
