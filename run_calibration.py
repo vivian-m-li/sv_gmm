@@ -34,12 +34,12 @@ def find_pareto_front():
         plt.text(
             row["FP"],
             row["TP"] - 0.01,
-            f"d={int(row['d'])},r={row['r']:.2f}",
+            f"d={int(row['d'])},r={row['r']:.2f},q={row['q']:.2f}",
             fontsize=8,
             ha="center",
         )
 
-    pareto_front = pd.DataFrame(columns=["FP", "TP", "d", "r"])
+    pareto_front = pd.DataFrame(columns=["FP", "TP", "d", "r", "q"])
     max_tp = -1
     for i, row in results.iterrows():
         if row["TP"] > max_tp:
@@ -58,7 +58,7 @@ def find_pareto_front():
     )
     best_point = pareto_front.loc[pareto_front["dist"].idxmin()]
     print(
-        f"Best point on Pareto front: d={int(best_point['d'])}, r={best_point['r']:.2f}, FPR={best_point['FP']:.4f}, TPR={best_point['TP']:.4f}"
+        f"Best point on Pareto front: d={int(best_point['d'])}, r={best_point['r']:.2f}, q={best_point['q']:.2f}, FPR={best_point['FP']:.4f}, TPR={best_point['TP']:.4f}"
     )
 
     plt.xlabel("FPR")
@@ -158,6 +158,7 @@ def run_calibration_test(
     *,
     d: int,
     r: float,
+    q: float,
     input_dir: str,
     output_dir: str,
     sample_ids: Set[str],
@@ -185,7 +186,7 @@ def run_calibration_test(
         p.close()
         p.join()
 
-    results_dir = os.path.join(output_dir, "d{}_r{:.2f}".format(d, r))
+    results_dir = os.path.join(output_dir, "d{}_r{:.2f}_q{:.2f}".format(d, r, q))
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
     concat_multi_processed_sv_files(
@@ -200,12 +201,13 @@ def run_calibration_test(
     final_output_file = os.path.join(output_dir, "results.csv")
     if not os.path.exists(final_output_file):
         with open(final_output_file, "w") as f:
-            f.write("d,r,TP,FP,FN,TN\n")
+            f.write("d,r,q,TP,FP,FN,TN\n")
     with open(final_output_file, "a") as f:
         f.write(
             "{},{},{},{},{},{}\n".format(
                 d,
                 r,
+                q,
                 results["TP"],
                 results["FP"],
                 results["FN"],
@@ -217,10 +219,11 @@ def run_calibration_test(
 def download_stix_data_inner(
     row: pd.Series,
     output_dir: str,
+    q: float,
 ):
     # check if the data for this region already exists
     query_region = get_query_region(
-        f"{row.chr}:{row.start}", f"{row.chr}:{row.stop}"
+        f"{row.chr}:{row.start}", f"{row.chr}:{row.stop}", q,
     )
     filename = f"{query_region.file_name}.txt"
     file = os.path.join(output_dir, filename)
@@ -243,18 +246,20 @@ def download_stix_data_inner(
 def download_stix_data(
     sv_subset: pd.DataFrame,
     input_dir: str,
+    q: float,
 ):
     """Download stix data for all regions in the subset before running calibration tests."""
     output_dir = os.path.join(input_dir, "stix_output")
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
+        os.mkdir(os.path.join(output_dir, "partial_outputs"))
 
     with multiprocessing.Manager():
         p = multiprocessing.Pool(SLURM_CPUS)
         args = []
 
         for _, row in sv_subset.iterrows():
-            args.append((row, output_dir))
+            args.append((row, output_dir, q))
 
         p.starmap(download_stix_data_inner, args)
         p.close()
@@ -274,6 +279,9 @@ def run_calibration(
     r_min: float,
     r_max: float,
     r_step: float,
+    q_min: float,
+    q_max: float,
+    q_step: float,
 ):
     """Run calibration tests over a grid of distance and reciprocal overlap thresholds."""
     sv_subset = pd.read_csv(os.path.join(input_dir, sv_regions_file))
@@ -287,22 +295,29 @@ def run_calibration(
         for line in f:
             sample_ids.add(line.strip())
 
-    # check that all stix data has been downloaded for regions in sv_subset before running calibration tests
-    download_stix_data(sv_subset, input_dir)
 
-    # run calibration tests over grid of d and r values
-    for d in range(d_min, d_max + 1, d_step):
-        for r in np.arange(r_min, r_max + r_step, r_step):
-            print(f"Running calibration for d={d}, r={r}")
-            run_calibration_test(
-                sv_df,
-                sv_subset,
-                d=d,
-                r=round(r, 2),
-                input_dir=input_dir,
-                output_dir=output_dir,
-                sample_ids=sample_ids,
-            )
+    # run calibration tests over grid of d, r, and q values
+    for q in np.arange(q_min, q_max + q_step, q_step):
+        # check that all stix data has been downloaded for regions in sv_subset before running calibration tests
+        download_stix_data(sv_subset, input_dir, q)
+        for d in range(d_min, d_max + 1, d_step):
+            for r in np.arange(r_min, r_max + r_step, r_step):
+                print(f"Running calibration for d={d}, r={r}, q={q}")
+                run_calibration_test(
+                    sv_df,
+                    sv_subset,
+                    d=d,
+                    r=round(r, 2),
+                    q=round(q, 2),
+                    input_dir=input_dir,
+                    output_dir=output_dir,
+                    sample_ids=sample_ids,
+                )
+        
+        # move stix data to a new dir if we're testing more than one q value
+        if q_min != q_max:
+            os.rename(os.path.join(input_dir, "stix_output"), os.path.join(input_dir, f"stix_output_{q}"))
+
 
 
 def main():
@@ -375,6 +390,24 @@ def main():
         help="Step size for reciprocal overlap values",
         default=0.05,
     )
+    parser.add_argument(
+        "--q_min",
+        type=float,
+        help="Minimum query overlap to consider",
+        default=0.5,
+    )
+    parser.add_argument(
+        "--q_max",
+        type=float,
+        help="Maximum query overlap to consider",
+        default=1.0,
+    )
+    parser.add_argument(
+        "--q_step",
+        type=float,
+        help="Step size for reciprocal overlap values",
+        default=0.1,
+    )
 
     args = parser.parse_args()
     run_calibration(
@@ -389,6 +422,9 @@ def main():
         r_min=args.r_min,
         r_max=args.r_max,
         r_step=args.r_step,
+        q_min=args.q_min,
+        q_max=args.q_max,
+        q_step=args.q_step,
     )
 
 
