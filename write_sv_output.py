@@ -285,17 +285,18 @@ def write_sv_stats_collapsed(output_dir: str):
         csv_writer.writeheader()
         for sv_id in sv_ids:
             rows = df[df["id"] == sv_id]
+            num_gmm_runs = len(rows)
             if len(rows) < 1:
                 continue
 
-            row["num_gmm_runs"] = len(rows)
             consensus_num_modes = rows["consensus_num_modes"].values[0]
             rows = rows[rows["num_modes"] == consensus_num_modes]
             samples = Counter()
             samples_by_row = {}
-            for i, row in rows.iterrows():
+            for i, trial_row in rows.iterrows():
                 modes = sorted(
-                    ast.literal_eval(row["modes"]), key=lambda x: x["start"]
+                    ast.literal_eval(trial_row["modes"]),
+                    key=lambda x: x["start"],
                 )
                 sample_ids = [
                     ",".join(sorted(mode["sample_ids"])) for mode in modes
@@ -306,6 +307,7 @@ def write_sv_stats_collapsed(output_dir: str):
 
             most_common = samples.most_common(1)[0][0]
             row = rows.loc[samples_by_row[most_common]].copy()
+            row["num_gmm_runs"] = num_gmm_runs
             row = row.drop(
                 ["consensus_num_modes", "num_modes_2", "sv_id", "confidence"]
             )
