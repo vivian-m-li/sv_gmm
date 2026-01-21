@@ -143,7 +143,7 @@ def run_trial(reads, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
 
 
 def run_dirichlet(
-    reads, insert_size_file = None, **kwargs
+    reads, insert_size_file=None, **kwargs
 ) -> Tuple[List[GMM], List[np.ndarray]]:
     """
     Runs the Dirichlet process until convergence or max iterations.

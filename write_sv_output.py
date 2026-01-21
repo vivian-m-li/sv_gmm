@@ -280,6 +280,7 @@ def write_sv_stats_collapsed(output_dir: str):
         f"{output_dir}/sv_stats_collapsed.csv", mode="w", newline=""
     ) as out:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
+        fieldnames.append("num_gmm_runs")
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
         csv_writer.writeheader()
         for sv_id in sv_ids:
@@ -287,6 +288,7 @@ def write_sv_stats_collapsed(output_dir: str):
             if len(rows) < 1:
                 continue
 
+            row["num_gmm_runs"] = len(rows)
             consensus_num_modes = rows["consensus_num_modes"].values[0]
             rows = rows[rows["num_modes"] == consensus_num_modes]
             samples = Counter()
@@ -385,16 +387,15 @@ def get_n_modes(input_dir: str, output_dir: str):
     for sv_id in svs:
         rows = df[df["id"] == sv_id]
 
-        # if the sv_id didn't run due to lack of evidence, skip the row
-        if len(rows) == 0:
+        # if the GMM didn't run at all on a sample due to lack of evidence, skip the row
+        if len(rows) == 0 or (
+            len(rows) == 1 and rows["num_iterations"].values[0] == 0
+        ):
             continue
 
-        # if the GMM didn't run at all on a sample
-        # or GMM defaulted to 1 mode because there were too few samples
+        # if the GMM defaulted to 1 mode because there were 1-10 samples,
         # label it as 1 mode inconclusively
-        if (len(rows) == 1 and rows["num_iterations"].values[0] == 0) or rows[
-            "num_samples_run"
-        ].values[0] <= 10:
+        if rows["num_samples_run"].values[0] <= 10:
             sv_df.loc[len(sv_df)] = [sv_id, 1, "inconclusive", np.nan]
             continue
 
@@ -409,7 +410,7 @@ def get_n_modes(input_dir: str, output_dir: str):
         new_row = [sv_id, num_modes]
         if ci[0] >= 0.6:
             new_row.append("high")
-        elif ci[0] >= 0.3 and ci[1] < 0.6:
+        elif ci[0] >= 0.3:
             new_row.append("medium")
         else:
             new_row.append("low")
