@@ -60,14 +60,16 @@ def hinge_loss_overlap(
     return loss
 
 
-def model_penalty(mu: list[np.ndarray], L: int, R: int):
+def model_penalty(
+    mu: list[np.ndarray], L: int, R: int, d_threshold: int, r_threshold: float
+) -> float:
     """
     Aggregate model penalties from distance and reciprocal overlap into a single score.
     """
     svlen = R - L
     # penalty decreases with sv size since clusters will be closer together due to noise in read data
-    d_penalty = hinge_loss_distance(mu)
-    r_penalty = hinge_loss_overlap(mu, L, R)
+    d_penalty = hinge_loss_distance(mu, cutoff=d_threshold)
+    r_penalty = hinge_loss_overlap(mu, L, R, cutoff=r_threshold)
 
     # weight the two penalties based on sv length
     # shorter SVs -> more weight on overlap penalty since noise can cause clusters to be closer in distance
@@ -92,6 +94,8 @@ def calc_log_likelihood(
     p: np.ndarray,
     L: int,
     R: int,
+    d_threshold: int,
+    r_threshold: float,
     *,
     with_penalty: bool = True,
 ) -> float:
@@ -116,19 +120,27 @@ def calc_log_likelihood(
 
     # calculate final penalized logL
     n = len(x)
-    penalty = model_penalty(mu, L, R)
+    penalty = model_penalty(mu, L, R, d_threshold, r_threshold)
     penalized_logL = logL - np.log(n) * penalty
     return penalized_logL
 
 
 def calc_aic(
-    logL: float, num_modes: int, mu: np.ndarray, cov: List[np.ndarray], L, R, n
+    logL: float,
+    num_modes: int,
+    mu: np.ndarray,
+    cov: List[np.ndarray],
+    L,
+    R,
+    n,
+    d_threshold,
+    r_threshold,
 ) -> float:
     """Calculates the penalized log-likelihood using AIC."""
     num_params = (
         (num_modes * 2) + (num_modes * 3) + (num_modes - 1)
     )  # number of parameters for mu + cov + p - 1
-    penalty = np.log(n) * model_penalty(mu, L, R)
+    penalty = np.log(n) * model_penalty(mu, L, R, d_threshold, r_threshold)
     # only count the model penalty once
     aic = (2 * num_params) - (2 * logL) - penalty  # scale the AIC
     return aic
@@ -139,6 +151,8 @@ def init_em(
     num_modes: int,
     L: int,
     R: int,
+    d_threshold: int,
+    r_threshold: float,
 ) -> Tuple[int, np.ndarray, List[np.ndarray], np.ndarray, np.ndarray]:
     """
     Initializes the expectation-maximization algorithm using k-means clustering on the data.
@@ -166,7 +180,9 @@ def init_em(
     n = len(x)  # sample size
 
     # initial log-likelihood
-    logL.append(calc_log_likelihood(x, mu, cov, p, L, R))
+    logL.append(
+        calc_log_likelihood(x, mu, cov, p, L, R, d_threshold, r_threshold)
+    )
 
     return n, mu, cov, p, logL
 
@@ -199,6 +215,8 @@ def em(
     p: np.ndarray,
     L: int,
     R: int,
+    d_threshold: int,
+    r_threshold: float,
 ) -> GMM2D:
     """Performs one iteration of the expectation-maximization algorithm."""
     # Expectation step: calculate the posterior probabilities
@@ -223,7 +241,7 @@ def em(
     p = nk / n
 
     # update likelihood
-    logL = calc_log_likelihood(x, mu, cov, p, L, R)
+    logL = calc_log_likelihood(x, mu, cov, p, L, R, d_threshold, r_threshold)
     return GMM2D(mu, cov, p, logL)
 
 
@@ -232,6 +250,8 @@ def run_em(
     num_modes: int,
     L: int,
     R: int,
+    d_threshold: int = 100,
+    r_threshold: float = 0.8,
     plot: bool = False,
 ) -> Tuple[List[GMM2D], int]:
     """
@@ -241,7 +261,9 @@ def run_em(
     """
     all_params: List[GMM2D] = []
 
-    n, mu, cov, p, logL = init_em(x, num_modes, L, R)  # initialize parameters
+    n, mu, cov, p, logL = init_em(
+        x, num_modes, L, R, d_threshold, r_threshold
+    )  # initialize parameters
     all_params.append(GMM2D(mu, cov, p, logL[0]))
 
     # only need to estimate mean and covariance matrix if we have 1 mode
@@ -252,7 +274,18 @@ def run_em(
     i = 0
     while i < max_iterations:
         prev_gmm = all_params[-1]
-        gmm = em(x, num_modes, n, prev_gmm.mu, prev_gmm.cov, prev_gmm.p, L, R)
+        gmm = em(
+            x,
+            num_modes,
+            n,
+            prev_gmm.mu,
+            prev_gmm.cov,
+            prev_gmm.p,
+            L,
+            R,
+            d_threshold,
+            r_threshold,
+        )
         logL.append(gmm.logL)
         all_params.append(gmm)
 
@@ -288,6 +321,8 @@ def run_gmm(
     *,
     L,
     R,
+    d_threshold: int = 100,
+    r_threshold: float = 0.8,
     plot: bool = False,
     pr: bool = False,
     force_n_modes: Optional[int] = None,
@@ -324,7 +359,9 @@ def run_gmm(
     outliers = []
     aic_vals = []
     if len(x) <= 10:  # small number of samples detected
-        opt_params, num_iterations = run_em(x, 1, L, R, plot)
+        opt_params, num_iterations = run_em(
+            x, 1, L, R, d_threshold, r_threshold, plot
+        )
         num_iterations_final = num_iterations
         num_sv = 1
     else:
@@ -334,7 +371,9 @@ def run_gmm(
             [force_n_modes] if force_n_modes is not None else range(1, 4)
         )
         for num_modes in mode_options:
-            params, num_iterations = run_em(x, num_modes, L, R, plot)
+            params, num_iterations = run_em(
+                x, num_modes, L, R, d_threshold, r_threshold, plot
+            )
             aic = calc_aic(
                 params[-1].logL,
                 num_modes,
@@ -343,6 +382,8 @@ def run_gmm(
                 L,
                 R,
                 len(x),
+                d_threshold,
+                r_threshold,
             )
             all_params.append(params)
             iterations.append(num_iterations)

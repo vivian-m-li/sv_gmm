@@ -43,7 +43,14 @@ def load_vcf(dir: str, vcf_filename: str):
     for record in vcf_in.fetch():
         info = dict(record.info)
         chr = record.chrom.strip("chr")
-        if info["SVTYPE"] != "DEL" or chr in ["X", "Y"]:
+
+        sv_type = info.get("SVTYPE")
+        if sv_type is None:
+            pattern = r"^chr[^-]+-\d+-([A-Z]+)->"
+            match = re.match(pattern, record.id)
+            sv_type = match.group(1)
+
+        if sv_type != "DEL" or chr in ["X", "Y"]:
             continue
         row = [
             record.id,
@@ -220,6 +227,10 @@ def get_query_region(
     l_chr, l_pos = stix_format(l)
     _, r_pos = stix_format(r)
     svlen = r_pos - l_pos
+    if overlap < 0:
+        overlap = 1
+    elif overlap > 1:
+        overlap = min(1, overlap / 100) 
     cutoff = int(svlen * (1 - overlap))
     l_start = max(0, l_pos - cutoff)
     l_stop = l_pos + cutoff
@@ -334,11 +345,13 @@ def query_stix_bash(
         stix_output_file = os.path.join(output_dir, query_region.file_name)
 
     stix_path = "/".join(index_path.split("/")[:-1])
+    l_query = f"{query_region.chr}:{query_region.left_start}-{query_region.left_stop}"
+    r_query = f"{query_region.chr}:{query_region.right_start}-{query_region.right_stop}"
     subprocess.run(
         ["bash", "query_stix.sh"]
         + [  # noqa503
-            f"{query_region.chr}:{query_region.left_start}-{query_region.left_stop}",
-            f"{query_region.chr}:{query_region.right_start}-{query_region.right_stop}",
+            l_query,
+            r_query,
             stix_path,
             index_path,
             database_path,
@@ -353,17 +366,23 @@ def query_stix_bash(
     # the query output from each shard was written to a different file, and we want to write them to the same file
     if num_shards > 1:
         output_file = os.path.join(output_dir, f"{query_region.file_name}.txt")
-        with open(output_file, "w") as out_file:
-            for i in range(num_shards):
-                temp_file = os.path.join(
-                    partial_outputs_dir, f"{query_region.file_name}_{i}.txt"
-                )
-                with open(temp_file, "r") as partial_file:
-                    # write the partial file to the main file
-                    out_file.write(partial_file.read())
+        try:
+            with open(output_file, "w") as out_file:
+                for i in range(num_shards):
+                    temp_file = os.path.join(
+                        partial_outputs_dir, f"{query_region.file_name}_{i}.txt"
+                    )
+                    with open(temp_file, "r") as partial_file:
+                        # write the partial file to the main file
+                        out_file.write(partial_file.read())
 
-                # remove partial file
-                os.remove(temp_file)
+                    # remove partial file
+                    os.remove(temp_file)
+        except FileNotFoundError:
+            os.remove(output_file)
+            raise Exception(
+                f"There was an issue querying STIX for the region {l_query} to {r_query}"
+            )
         if not parallel:
             os.rmdir(partial_outputs_dir)
     else:
@@ -416,6 +435,7 @@ def query_stix(
     output_dir: Optional[str] = None,
     sv_lookup_file: str = "deletions.csv",
     insert_size_file: str = "insert_sizes.csv",
+    read_overlap: float = 1.0,
     stix_bin: Optional[str] = None,
     stix_index: Optional[str] = None,
     stix_database: Optional[str] = None,
@@ -424,6 +444,7 @@ def query_stix(
     filter_reference: bool = True,
     single_trial: bool = True,
     plot: bool = True,
+    print_messages: bool = True,
     long_reads: bool = False,
 ):
     # check that the user inputted an sv id or sv coordinates
@@ -465,7 +486,7 @@ def query_stix(
         if not os.path.exists(directory) and directory != "":
             os.mkdir(directory)
 
-    query_region = get_query_region(l, r)
+    query_region = get_query_region(l, r, read_overlap)
     file_name = query_region.file_name
 
     # check if this SV has already been queried for in STIX
@@ -482,7 +503,7 @@ def query_stix(
             break
     if output_file is None:
         print(
-            "This variant has not been previously quiered or processed. Using STIX to do this now.\n"
+            "This variant has not been previously queried or processed. Using STIX to do this now.\n"
         )
         # stix path is required if the SV evidence has not been queried for yet
         if stix_bin is None or stix_index is None or stix_database is None:
@@ -500,7 +521,8 @@ def query_stix(
             num_stix_shards,
         )
     else:
-        print("Using previously-queried data from", output_file, "\n")
+        if print_messages:
+            print("Using previously-queried data from", output_file, "\n")
 
     # load the data as a dataframe
     reads = stix_output_to_df(output_file)
@@ -562,6 +584,7 @@ def main():
     --output_dir: Output directory for processed data (default: None)
     --sv_lookup: VCF or CSV file with structural variants (default: deletions.csv)
     --insert_size_file: Insert size for each sample (default: insert_sizes.csv)
+    --read_overlap: Amount of overlap allowed with the region of interest when querying STIX for surrounding reads
     --stix_bin: Path to STIX executable
     --stix_index: Path to STIX index for querying sample reads
     --stix_database: Path to STIX database for querying sample reads
@@ -638,6 +661,12 @@ def main():
         default="insert_sizes.csv",
     )
     parser.add_argument(
+        "--read_overlap",
+        type=float,
+        help="Amount of overlap allowed with the region of interest when querying STIX for surrounding reads",
+        default=1.0,
+    )
+    parser.add_argument(
         "--stix_bin",
         type=str,
         help="Path to STIX executable.",
@@ -674,6 +703,7 @@ def main():
         output_dir=args.output_dir,
         sv_lookup_file=args.sv_lookup,
         insert_size_file=args.insert_size_file,
+        read_overlap=args.read_overlap,
         stix_bin=args.stix_bin,
         stix_index=args.stix_index,
         stix_database=args.stix_database,

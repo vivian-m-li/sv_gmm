@@ -87,11 +87,11 @@ def init_sv_stat_row(
         chr=row["chr"],
         start=row["start"],
         stop=row["stop"],
-        svlen=row["svlen"],
-        ref=row["ref"],
-        alt=row["alt"],
-        qual=row["qual"],
-        af=row["af"],
+        svlen=row.get("svlen"),
+        ref=row.get("ref"),
+        alt=row.get("alt"),
+        qual=row.get("qual"),
+        af=row.get("af"),
         num_samples=num_samples,
         num_samples_run=0,
         num_pruned=0,
@@ -107,7 +107,11 @@ def init_sv_stat_row(
 
 
 def get_raw_data(
-    row, input_dir: str = "1kgp"
+    row: pd.Series,
+    input_dir: str = "1kgp",
+    *,
+    filter_reference_samples: bool = True,
+    print_messages: bool = True,
 ) -> Tuple[Dict[str, np.ndarray[float]], int]:
     """
     Gets the samples and evidence for an SV. Filters out samples that are homozygous for the reference allele.
@@ -126,11 +130,13 @@ def get_raw_data(
         stix_index="/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
         stix_database="/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
         num_stix_shards=8,
+        print_messages=print_messages,
     )
     num_samples = reads["sample_id"].nunique()
 
-    reference_samples = get_reference_samples(row, reads)
-    reads = reads[~reads["sample_id"].isin(reference_samples)]
+    if filter_reference_samples:
+        reference_samples = get_reference_samples(row, reads)
+        reads = reads[~reads["sample_id"].isin(reference_samples)]
 
     return reads, num_samples
 
@@ -199,12 +205,12 @@ def write_sv_stats(
         mode_coords.append((min_start, max_end))
 
         mode_stat = ModeStat(
-            length=np.mean(lengths),
-            length_sd=np.std(lengths),
+            length=int(np.mean(lengths)),
+            length_sd=float(np.std(lengths)),
             start=int(np.mean(starts)),
-            start_sd=np.std(starts),
+            start_sd=float(np.std(starts)),
             end=int(np.mean(ends)),
-            end_sd=np.std(ends),
+            end_sd=float(np.std(ends)),
             num_samples=num_samples,
             num_heterozygous=num_heterozygous,
             num_homozygous=num_homozygous,
@@ -376,14 +382,19 @@ def write_ancestry_dissimilarity(output_dir: str):
     results_df.to_csv(f"{output_dir}/ancestry_dissimilarity.csv", index=False)
 
 
-def get_n_modes(input_dir: str, output_dir: str):
+def get_n_modes(
+    input_dir: str,
+    output_dir: str,
+    deletions_df: Optional[pd.DataFrame] = None,
+):
     """Get the number of modes and confidence for each SV."""
     sv_df = pd.DataFrame(
         columns=["sv_id", "num_modes", "confidence", "num_modes_2"]
     )
 
-    deletions_df = get_deletions_df(input_dir)
-    deletions_df = deletions_df[deletions_df["num_samples"] > 0]
+    if deletions_df is None:
+        deletions_df = get_deletions_df(input_dir)
+        deletions_df = deletions_df[deletions_df["num_samples"] > 0]
     svs = deletions_df["id"].unique()
     df = get_sv_stats_converge_df(output_dir)
     for sv_id in svs:
@@ -750,9 +761,14 @@ def write_samplot_files():
         )
 
 
-def write_post_processed_files(input_dir: str, output_dir: str):
+def write_post_processed_files(
+    input_dir: str,
+    output_dir: str,
+    sv_df: Optional[pd.DataFrame] = None,
+    synthetic_data: bool = False,
+):
     """Write all post-processed files after running the dirichlet process with short or long reads."""
-    get_n_modes(input_dir, output_dir)
+    get_n_modes(input_dir, output_dir, sv_df)
     print("wrote svs_n_modes.csv")
     if input_dir == "long_reads":
         compare_short_long_reads()
@@ -763,6 +779,7 @@ def write_post_processed_files(input_dir: str, output_dir: str):
     print("wrote sv_stats_collapsed.csv")
     get_outliers(output_dir)
     print("wrote outliers.csv")
-    write_ancestry_dissimilarity(output_dir)
-    print("wrote ancestry_dissimilarity.csv")
+    if not synthetic_data:
+        write_ancestry_dissimilarity(output_dir)
+        print("wrote ancestry_dissimilarity.csv")
     # get_new_gene_intersections() # need bedtools to run this

@@ -418,7 +418,10 @@ def populate_sample_info(
     deletions_row = deletions_row.iloc[0]
     for evidence in sv_evidence:
         sample_id = evidence.sample.id
-        ancestry_row = ancestry_df[ancestry_df["Sample name"] == sample_id]
+        try:
+            ancestry_row = ancestry_df[ancestry_df["Sample name"] == sample_id]
+        except KeyError:
+            ancestry_row = pd.DataFrame()
 
         sex = "Unknown"
         population = "Unknown"
@@ -623,7 +626,8 @@ def process_data(
         lambda row: reciprocal_overlap((row["l_end"], row["r_start"]), (L, R)),
         axis=1,
     )
-    reads = reads[reads["r"] >= 0.5]
+    # this filtering doesn't take into account the sequenced distance between L and R
+    # reads = reads[reads["r"] >= 0.5]
 
     # list of evidence to keep after filtering
     sv_evidence = []
@@ -689,6 +693,8 @@ def run_viz_gmm(
     chr: str,
     L: int,  # sv start
     R: int,  # sv stop
+    d_threshold: int = 100,
+    r_threshold: float = 0.8,
     min_pairs: int = 2,
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
@@ -714,7 +720,15 @@ def run_viz_gmm(
         # warnings.warn("No structural variants found in this region.")
         return None, []
 
-    gmm = run_gmm(points, L=L, R=R, plot=plot, pr=False)
+    gmm = run_gmm(
+        points,
+        L=L,
+        R=R,
+        d_threshold=d_threshold,
+        r_threshold=r_threshold,
+        plot=plot,
+        pr=False,
+    )
 
     if not synthetic_data:
         populate_sample_info(
