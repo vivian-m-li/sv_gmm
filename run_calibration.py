@@ -1,4 +1,5 @@
 import os
+import re
 import argparse
 import multiprocessing
 import shutil
@@ -100,6 +101,42 @@ def calc_confusion_matrix(
     values = {"TP": TP, "FP": FP, "FN": FN, "TN": TN}
     values = {k: v / n_svs for k, v in values.items()}
     return values
+
+
+def rewrite_calibration_results():
+    """
+    Rewrites the results.csv file with the confusion matrix from each run.
+    Standalone function
+    """
+    sv_subset = pd.read_csv("calibration/sv_subset.csv")
+    sv_subset["id"] = sv_subset.apply(
+        lambda row: f"{giggle_format(str(row['chr']), row['start'])}_{giggle_format(str(row['chr']), row['stop'])}",
+        axis=1,
+    )
+
+    runs = os.listdir("calibration/results")
+    runs.remove("results.csv") 
+    results_df = pd.DataFrame(columns=["d", "r", "q", "TP", "FP", "FN", "TN"])
+    for dirname in runs:
+        pattern = r"d([\d]+)_r([0,1].[\d]+)_q([0,1].[\d]+)"
+        match = re.match(pattern, dirname)
+        d, r, q = int(match.group(1)), float(match.group(2)), float(match.group(3))
+        svs_n_modes = pd.read_csv(
+            os.path.join("calibration/results", dirname, "svs_n_modes.csv")
+        )
+        confusion_mat = calc_confusion_matrix(sv_subset, svs_n_modes)
+        results_df.loc[len(results_df)] = [
+            d,
+            r,
+            q,
+            confusion_mat["TP"],
+            confusion_mat["FP"],
+            confusion_mat["FN"],
+            confusion_mat["TN"],
+        ]
+    results_df.sort_values(by=["q", "d", "r"], inplace=True)
+    results_df = results_df.astype({"d": int})
+    results_df.to_csv("calibration/results_new.csv", index=False)
 
 
 def run_dirichlet_inner(
@@ -204,7 +241,7 @@ def run_calibration_test(
             f.write("d,r,q,TP,FP,FN,TN\n")
     with open(final_output_file, "a") as f:
         f.write(
-            "{},{},{},{},{},{}\n".format(
+            "{},{},{},{},{},{},{}\n".format(
                 d,
                 r,
                 q,
@@ -297,11 +334,11 @@ def run_calibration(
 
 
     # run calibration tests over grid of d, r, and q values
-    for q in np.arange(q_min, q_max + q_step, q_step):
+    for q in np.arange(q_min, q_max + 0.01, q_step):
         # check that all stix data has been downloaded for regions in sv_subset before running calibration tests
         download_stix_data(sv_subset, input_dir, q)
         for d in range(d_min, d_max + 1, d_step):
-            for r in np.arange(r_min, r_max + r_step, r_step):
+            for r in np.arange(r_min, r_max + 0.01, r_step):
                 print(f"Running calibration for d={d}, r={r}, q={q}")
                 run_calibration_test(
                     sv_df,
@@ -410,6 +447,8 @@ def main():
     )
 
     args = parser.parse_args()
+    print("Using the following arguments:", args, "\n")
+
     run_calibration(
         input_dir=args.input_dir,
         output_dir=args.output_dir,
@@ -429,4 +468,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    rewrite_calibration_results()
