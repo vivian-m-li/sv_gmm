@@ -424,6 +424,7 @@ def plot_2d_coords(
     insert_size_file: Optional[str] = None,
     d_threshold: int = 100,
     r_threshold: float = 0.8,
+    max_penalty: int = 200,
 ):
     if insert_size_lookup is None and insert_size_file is not None:
         insert_sizes_df = pd.read_csv(insert_size_file)
@@ -478,7 +479,7 @@ def plot_2d_coords(
         x = np.array(x)
         num_evidence = np.array(num_evidence)
 
-        gmm_iters, _ = run_em(x, 1, L, R, d_threshold, r_threshold)
+        gmm_iters, _ = run_em(x, 1, L, R, d_threshold, r_threshold, max_penalty)
         gmm = gmm_iters[-1]
 
         # plot 2D data

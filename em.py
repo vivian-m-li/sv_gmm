@@ -13,7 +13,7 @@ GMM/EM helper functions
 
 
 def hinge_loss_distance(
-    mu: List[np.ndarray], *, cutoff=100, max_penalty=100
+    mu: List[np.ndarray], *, cutoff=100, max_penalty=200
 ) -> float:
     """Adds a penalty to the log-likelihood to prevent cluster centroids from getting too close to each other (decreasing d), accounting for sequencing noise."""
     # c - alpha * d(mu_i, mu_j)
@@ -43,7 +43,7 @@ def get_sv_from_mu(mu: np.ndarray, L: int, R: int) -> Tuple[int, int]:
 
 
 def hinge_loss_overlap(
-    mu: List[np.ndarray], L: int, R: int, *, cutoff=0.8, max_penalty=100
+    mu: List[np.ndarray], L: int, R: int, *, cutoff=0.8, max_penalty=200
 ) -> float:
     """Adds a penalty to the log-likelihood to prevent high reciprocal overlap and avoid over-clustering."""
     num_modes = len(mu)
@@ -61,15 +61,24 @@ def hinge_loss_overlap(
 
 
 def model_penalty(
-    mu: list[np.ndarray], L: int, R: int, d_threshold: int, r_threshold: float
+    mu: list[np.ndarray],
+    L: int,
+    R: int,
+    d_threshold: int,
+    r_threshold: float,
+    max_penalty: int,
 ) -> float:
     """
     Aggregate model penalties from distance and reciprocal overlap into a single score.
     """
     svlen = R - L
     # penalty decreases with sv size since clusters will be closer together due to noise in read data
-    d_penalty = hinge_loss_distance(mu, cutoff=d_threshold)
-    r_penalty = hinge_loss_overlap(mu, L, R, cutoff=r_threshold)
+    d_penalty = hinge_loss_distance(
+        mu, cutoff=d_threshold, max_penalty=max_penalty
+    )
+    r_penalty = hinge_loss_overlap(
+        mu, L, R, cutoff=r_threshold, max_penalty=max_penalty
+    )
 
     # weight the two penalties based on sv length
     # shorter SVs -> more weight on overlap penalty since noise can cause clusters to be closer in distance
@@ -96,8 +105,7 @@ def calc_log_likelihood(
     R: int,
     d_threshold: int,
     r_threshold: float,
-    *,
-    with_penalty: bool = True,
+    max_penalty: int,
 ) -> float:
     """Calculates the log-likelihood of the data fitting the GMM."""
     num_modes = len(mu)
@@ -115,34 +123,23 @@ def calc_log_likelihood(
             pdf.append(pdf_i)
         likelihood_i = np.sum(pdf)
         logL += np.log(likelihood_i + 1e-300)  # avoid log(0)
-    if not with_penalty:
-        return logL
 
     # calculate final penalized logL
-    n = len(x)
-    penalty = model_penalty(mu, L, R, d_threshold, r_threshold)
-    penalized_logL = logL - np.log(n) * penalty
+    penalty = model_penalty(mu, L, R, d_threshold, r_threshold, max_penalty)
+    penalized_logL = logL - penalty
     return penalized_logL
 
 
 def calc_aic(
     logL: float,
     num_modes: int,
-    mu: np.ndarray,
-    cov: List[np.ndarray],
-    L,
-    R,
-    n,
-    d_threshold,
-    r_threshold,
 ) -> float:
     """Calculates the penalized log-likelihood using AIC."""
     num_params = (
         (num_modes * 2) + (num_modes * 3) + (num_modes - 1)
     )  # number of parameters for mu + cov + p - 1
-    penalty = np.log(n) * model_penalty(mu, L, R, d_threshold, r_threshold)
-    # only count the model penalty once
-    aic = (2 * num_params) - (2 * logL) - penalty  # scale the AIC
+    # aic = 2k - 2ln(L)
+    aic = (2 * num_params) - (2 * logL)
     return aic
 
 
@@ -153,6 +150,7 @@ def init_em(
     R: int,
     d_threshold: int,
     r_threshold: float,
+    max_penalty: int,
 ) -> Tuple[int, np.ndarray, List[np.ndarray], np.ndarray, np.ndarray]:
     """
     Initializes the expectation-maximization algorithm using k-means clustering on the data.
@@ -181,7 +179,9 @@ def init_em(
 
     # initial log-likelihood
     logL.append(
-        calc_log_likelihood(x, mu, cov, p, L, R, d_threshold, r_threshold)
+        calc_log_likelihood(
+            x, mu, cov, p, L, R, d_threshold, r_threshold, max_penalty
+        )
     )
 
     return n, mu, cov, p, logL
@@ -217,6 +217,7 @@ def em(
     R: int,
     d_threshold: int,
     r_threshold: float,
+    max_penalty: int,
 ) -> GMM2D:
     """Performs one iteration of the expectation-maximization algorithm."""
     # Expectation step: calculate the posterior probabilities
@@ -241,7 +242,9 @@ def em(
     p = nk / n
 
     # update likelihood
-    logL = calc_log_likelihood(x, mu, cov, p, L, R, d_threshold, r_threshold)
+    logL = calc_log_likelihood(
+        x, mu, cov, p, L, R, d_threshold, r_threshold, max_penalty
+    )
     return GMM2D(mu, cov, p, logL)
 
 
@@ -252,6 +255,7 @@ def run_em(
     R: int,
     d_threshold: int = 100,
     r_threshold: float = 0.8,
+    max_penalty: int = 200,
     plot: bool = False,
 ) -> Tuple[List[GMM2D], int]:
     """
@@ -262,7 +266,7 @@ def run_em(
     all_params: List[GMM2D] = []
 
     n, mu, cov, p, logL = init_em(
-        x, num_modes, L, R, d_threshold, r_threshold
+        x, num_modes, L, R, d_threshold, r_threshold, max_penalty
     )  # initialize parameters
     all_params.append(GMM2D(mu, cov, p, logL[0]))
 
@@ -285,6 +289,7 @@ def run_em(
             R,
             d_threshold,
             r_threshold,
+            max_penalty,
         )
         logL.append(gmm.logL)
         all_params.append(gmm)
@@ -323,6 +328,7 @@ def run_gmm(
     R,
     d_threshold: int = 100,
     r_threshold: float = 0.8,
+    max_penalty: int = 200,
     plot: bool = False,
     pr: bool = False,
     force_n_modes: Optional[int] = None,
@@ -360,7 +366,7 @@ def run_gmm(
     aic_vals = []
     if len(x) <= 10:  # small number of samples detected
         opt_params, num_iterations = run_em(
-            x, 1, L, R, d_threshold, r_threshold, plot
+            x, 1, L, R, d_threshold, r_threshold, max_penalty, plot
         )
         num_iterations_final = num_iterations
         num_sv = 1
@@ -372,19 +378,9 @@ def run_gmm(
         )
         for num_modes in mode_options:
             params, num_iterations = run_em(
-                x, num_modes, L, R, d_threshold, r_threshold, plot
+                x, num_modes, L, R, d_threshold, r_threshold, max_penalty, plot
             )
-            aic = calc_aic(
-                params[-1].logL,
-                num_modes,
-                params[-1].mu,
-                params[-1].cov,
-                L,
-                R,
-                len(x),
-                d_threshold,
-                r_threshold,
-            )
+            aic = calc_aic(params[-1].logL, num_modes)
             all_params.append(params)
             iterations.append(num_iterations)
             aic_vals.append(aic)
