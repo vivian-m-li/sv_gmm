@@ -363,9 +363,9 @@ def run_calibration(
             sample_ids.add(line.strip())
 
     # store the files in stix_output in a temp dir so we don't overwrite them
-    if os.path.exists(output_dir):
+    if os.path.exists(os.path.join(input_dir, "stix_output")):
         temp_dir = os.path.join(input_dir, "stix_output_temp")
-        os.rename(output_dir, temp_dir)
+        os.rename(os.path.join(input_dir, "stix_output"), temp_dir)
 
     # run calibration tests over grid of d, r, and q values
     for q in np.arange(q_min, q_max + 0.01, q_step):
