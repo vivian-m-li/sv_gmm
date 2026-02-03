@@ -6,6 +6,7 @@ import shutil
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.optimize import minimize
 from run_dirichlet import run_dirichlet
 from query_sv import giggle_format, query_stix_bash, get_query_region
 from write_sv_output import (
@@ -310,7 +311,7 @@ def download_stix_data(
         os.rename(predownloaded_outputs, output_dir)
     else:
         os.mkdir(output_dir)
-    
+
     # set up the correct file paths in case we need to query more SVs
     partial_outputs_dir = os.path.join(output_dir, "partial_outputs")
     if not os.path.exists(partial_outputs_dir):
@@ -326,17 +327,17 @@ def download_stix_data(
         p.starmap(download_stix_data_inner, args)
         p.close()
         p.join()
-    
+
     os.rmdir(partial_outputs_dir)
 
 
-def run_calibration(
+def run_calibration_nelder_mead(
+    sv_df: pd.DataFrame,
+    sv_subset: pd.DataFrame,
+    sample_ids: Set[str],
     *,
     input_dir: str,
     output_dir: str,
-    sv_regions_file: str,
-    sv_lookup_file: str,
-    sample_ids_file: str,
     d_min: int,
     d_max: int,
     d_step: int,
@@ -351,21 +352,10 @@ def run_calibration(
     p_step: int,
 ):
     """Run calibration tests over a grid of distance and reciprocal overlap thresholds."""
-    sv_subset = pd.read_csv(os.path.join(input_dir, sv_regions_file))
-    sv_subset["id"] = sv_subset.apply(
-        lambda row: f"{giggle_format(str(row['chr']), row['start'])}_{giggle_format(str(row['chr']), row['stop'])}",
-        axis=1,
-    )
-    sv_df = pd.read_csv(os.path.join(input_dir, sv_lookup_file))
-    sample_ids = set()
-    with open(os.path.join(input_dir, sample_ids_file), "r") as f:
-        for line in f:
-            sample_ids.add(line.strip())
-
-    # store the files in stix_output in a temp dir so we don't overwrite them
-    if os.path.exists(output_dir):
-        temp_dir = os.path.join(input_dir, "stix_output_temp")
-        os.rename(output_dir, temp_dir)
+    # TODO: define an objective function
+    # and use scipy minimize with method='Nelder-Mead' to find optimal params
+    # first, download stix data for all q values that we need to loop over
+    # our objective function needs to return a score (some value of TP/FP/acc/etc)
 
     # run calibration tests over grid of d, r, and q values
     for q in np.arange(q_min, q_max + 0.01, q_step):
@@ -395,6 +385,86 @@ def run_calibration(
                 os.path.join(input_dir, "stix_output"),
                 os.path.join(input_dir, f"stix_output_{q}"),
             )
+
+
+def run_calibration_grid_search(
+    sv_df: pd.DataFrame,
+    sv_subset: pd.DataFrame,
+    sample_ids: Set[str],
+    *,
+    input_dir: str,
+    output_dir: str,
+    d_min: int,
+    d_max: int,
+    d_step: int,
+    r_min: float,
+    r_max: float,
+    r_step: float,
+    q_min: float,
+    q_max: float,
+    q_step: float,
+    p_min: int,
+    p_max: int,
+    p_step: int,
+):
+    """Run calibration tests over a grid of distance and reciprocal overlap thresholds."""
+    # run calibration tests over grid of d, r, and q values
+    for q in np.arange(q_min, q_max + 0.01, q_step):
+        # check that all stix data has been downloaded for regions in sv_subset before running calibration tests
+        download_stix_data(sv_subset, input_dir, q)
+        for d in range(d_min, d_max + 1, d_step):
+            for r in np.arange(r_min, r_max + 0.01, r_step):
+                for pen in range(p_min, p_max + 1, p_step):
+                    print(
+                        f"Running calibration for d={d}, r={r}, q={q}, p={pen}"
+                    )
+                    run_calibration_test(
+                        sv_df,
+                        sv_subset,
+                        d=d,
+                        r=round(r, 2),
+                        q=round(q, 2),
+                        pen=pen,
+                        input_dir=input_dir,
+                        output_dir=output_dir,
+                        sample_ids=sample_ids,
+                    )
+
+        # move stix data to a new dir if we're testing more than one q value
+        if q_min != q_max:
+            os.rename(
+                os.path.join(input_dir, "stix_output"),
+                os.path.join(input_dir, f"stix_output_{q}"),
+            )
+
+
+def run_calibration(search_func: str = "grid_search", **kwargs):
+    input_dir = kwargs["input_dir"]
+    output_dir = kwargs["output_dir"]
+    sv_regions_file = kwargs["sv_regions_file"]
+    sv_lookup_file = kwargs["sv_lookup_file"]
+    sample_ids_file = kwargs["sample_ids_file"]
+
+    sv_subset = pd.read_csv(os.path.join(input_dir, sv_regions_file))
+    sv_subset["id"] = sv_subset.apply(
+        lambda row: f"{giggle_format(str(row['chr']), row['start'])}_{giggle_format(str(row['chr']), row['stop'])}",
+        axis=1,
+    )
+    sv_df = pd.read_csv(os.path.join(input_dir, sv_lookup_file))
+    sample_ids = set()
+    with open(os.path.join(input_dir, sample_ids_file), "r") as f:
+        for line in f:
+            sample_ids.add(line.strip())
+
+    # store the files in stix_output in a temp dir so we don't overwrite them
+    if os.path.exists(output_dir):
+        temp_dir = os.path.join(input_dir, "stix_output_temp")
+        os.rename(output_dir, temp_dir)
+
+    if search_func == "nelder_mead":
+        run_calibration_nelder_mead(sv_df, sv_subset, sample_ids, **kwargs)
+    else:
+        run_calibration_grid_search(sv_df, sv_subset, sample_ids, **kwargs)
 
 
 def main():
@@ -508,6 +578,7 @@ def main():
     print("Using the following arguments:", args, "\n")
 
     run_calibration(
+        "grid_search",
         input_dir=args.input_dir,
         output_dir=args.output_dir,
         sv_regions_file=args.regions,
