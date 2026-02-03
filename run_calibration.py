@@ -303,9 +303,18 @@ def download_stix_data(
 ):
     """Download stix data for all regions in the subset before running calibration tests."""
     output_dir = os.path.join(input_dir, "stix_output")
-    if not os.path.exists(output_dir):
+    predownloaded_outputs = os.path.join(input_dir, f"stix_output_{q}")
+
+    # check if the data has already been downloaded
+    if os.path.exists(predownloaded_outputs):
+        os.rename(predownloaded_outputs, output_dir)
+    else:
         os.mkdir(output_dir)
-        os.mkdir(os.path.join(output_dir, "partial_outputs"))
+    
+    # set up the correct file paths in case we need to query more SVs
+    partial_outputs_dir = os.path.join(output_dir, "partial_outputs")
+    if not os.path.exists(partial_outputs_dir):
+        os.mkdir(partial_outputs_dir)
 
     with multiprocessing.Manager():
         p = multiprocessing.Pool(SLURM_CPUS)
@@ -317,6 +326,8 @@ def download_stix_data(
         p.starmap(download_stix_data_inner, args)
         p.close()
         p.join()
+    
+    os.rmdir(partial_outputs_dir)
 
 
 def run_calibration(
@@ -350,6 +361,11 @@ def run_calibration(
     with open(os.path.join(input_dir, sample_ids_file), "r") as f:
         for line in f:
             sample_ids.add(line.strip())
+
+    # store the files in stix_output in a temp dir so we don't overwrite them
+    if os.path.exists(output_dir):
+        temp_dir = os.path.join(input_dir, "stix_output_temp")
+        os.rename(output_dir, temp_dir)
 
     # run calibration tests over grid of d, r, and q values
     for q in np.arange(q_min, q_max + 0.01, q_step):
