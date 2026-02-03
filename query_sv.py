@@ -230,7 +230,7 @@ def get_query_region(
     if overlap < 0:
         overlap = 1
     elif overlap > 1:
-        overlap = min(1, overlap / 100) 
+        overlap = min(1, overlap / 100)
     cutoff = int(svlen * (1 - overlap))
     l_start = max(0, l_pos - cutoff)
     l_stop = l_pos + cutoff
@@ -242,7 +242,7 @@ def get_query_region(
         left_stop=l_stop,
         right_start=r_start,
         right_stop=r_stop,
-        file_name=f"{l}-{r}",
+        file_name=f"{l}_{r}",
     )
 
 
@@ -345,7 +345,9 @@ def query_stix_bash(
         stix_output_file = os.path.join(output_dir, query_region.file_name)
 
     stix_path = "/".join(index_path.split("/")[:-1])
-    l_query = f"{query_region.chr}:{query_region.left_start}-{query_region.left_stop}"
+    l_query = (
+        f"{query_region.chr}:{query_region.left_start}-{query_region.left_stop}"
+    )
     r_query = f"{query_region.chr}:{query_region.right_start}-{query_region.right_stop}"
     subprocess.run(
         ["bash", "query_stix.sh"]
@@ -498,8 +500,9 @@ def query_stix(
         os.path.join(input_dir, FILE_DIR),
         output_file_dir,
     ]:
-        if os.path.isfile(f"{directory}/{file_name}.txt"):
-            output_file = f"{directory}/{file_name}.txt"
+        file_path = f"{directory}/{file_name}.txt"
+        if os.path.isfile(file_path):
+            output_file = file_path
             break
     if output_file is None:
         print(

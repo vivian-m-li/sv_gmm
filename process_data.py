@@ -695,6 +695,7 @@ def run_viz_gmm(
     R: int,  # sv stop
     d_threshold: int = 100,
     r_threshold: float = 0.8,
+    max_penalty: int = 200,
     min_pairs: int = 2,
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
@@ -726,6 +727,7 @@ def run_viz_gmm(
         R=R,
         d_threshold=d_threshold,
         r_threshold=r_threshold,
+        max_penalty=max_penalty,
         plot=plot,
         pr=False,
     )

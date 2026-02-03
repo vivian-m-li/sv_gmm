@@ -26,7 +26,7 @@ OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
 def find_pareto_front():
     # construct tp/fp curve from results.csv files in calibration output directories
-    results = pd.read_csv("calibration/results.csv")
+    results = pd.read_csv("calibration/results/results.csv")
     plt.figure(figsize=(8, 6))
 
     results = results.sort_values(by=["FP", "TP"], ascending=[True, False])
@@ -35,12 +35,12 @@ def find_pareto_front():
         plt.text(
             row["FP"],
             row["TP"] - 0.01,
-            f"d={int(row['d'])},r={row['r']:.2f},q={row['q']:.2f}",
+            f"d={int(row['d'])},r={row['r']:.2f},q={row['q']:.2f},p={row['p']:.2f}",
             fontsize=8,
             ha="center",
         )
 
-    pareto_front = pd.DataFrame(columns=["FP", "TP", "d", "r", "q"])
+    pareto_front = pd.DataFrame(columns=["FP", "TP", "d", "r", "q", "p"])
     max_tp = -1
     for i, row in results.iterrows():
         if row["TP"] > max_tp:
@@ -59,7 +59,7 @@ def find_pareto_front():
     )
     best_point = pareto_front.loc[pareto_front["dist"].idxmin()]
     print(
-        f"Best point on Pareto front: d={int(best_point['d'])}, r={best_point['r']:.2f}, q={best_point['q']:.2f}, FPR={best_point['FP']:.4f}, TPR={best_point['TP']:.4f}"
+        f"Best point on Pareto front: d={int(best_point['d'])}, r={best_point['r']:.2f}, q={best_point['q']:.2f}, p={int(best_point['p'])}, FPR={best_point['FP']:.4f}, TPR={best_point['TP']:.4f}"
     )
 
     plt.xlabel("FPR")
@@ -115,12 +115,19 @@ def rewrite_calibration_results():
     )
 
     runs = os.listdir("calibration/results")
-    runs.remove("results.csv") 
-    results_df = pd.DataFrame(columns=["d", "r", "q", "TP", "FP", "FN", "TN"])
+    runs.remove("results.csv")
+    results_df = pd.DataFrame(
+        columns=["d", "r", "q", "p", "TP", "FP", "FN", "TN"]
+    )
     for dirname in runs:
-        pattern = r"d([\d]+)_r([0,1].[\d]+)_q([0,1].[\d]+)"
+        pattern = r"d([\d]+)_r([0,1].[\d]+)_q([0,1].[\d]+)_p([\d]+)"
         match = re.match(pattern, dirname)
-        d, r, q = int(match.group(1)), float(match.group(2)), float(match.group(3))
+        d, r, q, p = (
+            int(match.group(1)),
+            float(match.group(2)),
+            float(match.group(3)),
+            int(match.group(4)),
+        )
         svs_n_modes = pd.read_csv(
             os.path.join("calibration/results", dirname, "svs_n_modes.csv")
         )
@@ -129,13 +136,14 @@ def rewrite_calibration_results():
             d,
             r,
             q,
+            p,
             confusion_mat["TP"],
             confusion_mat["FP"],
             confusion_mat["FN"],
             confusion_mat["TN"],
         ]
-    results_df.sort_values(by=["q", "d", "r"], inplace=True)
-    results_df = results_df.astype({"d": int})
+    results_df.sort_values(by=["q", "d", "r", "p"], inplace=True)
+    results_df = results_df.astype({"d": int, "p": int})
     results_df.to_csv("calibration/results_new.csv", index=False)
 
 
@@ -146,6 +154,7 @@ def run_dirichlet_inner(
     output_dir: str,
     d: int,
     r: float,
+    pen: int,
 ):
     # filter reference samples is set to false because we don't have references for regions, only SVs
     reads, num_samples = get_raw_data(
@@ -167,6 +176,7 @@ def run_dirichlet_inner(
                 "R": row["stop"],
                 "d_threshold": d,
                 "r_threshold": r,
+                "max_penalty": pen,
                 "synthetic_data": True,
                 "plot": False,
                 "stem": input_dir,
@@ -196,6 +206,7 @@ def run_calibration_test(
     d: int,
     r: float,
     q: float,
+    pen: int,
     input_dir: str,
     output_dir: str,
     sample_ids: Set[str],
@@ -206,7 +217,7 @@ def run_calibration_test(
     """
     population_size = len(sample_ids)
     processed_file_dir = os.path.join(
-        SCRATCH_FILE_DIR, "d{}_r{:.2f}".format(d, r)
+        SCRATCH_FILE_DIR, "d{}_r{:.2f}_p{}".format(d, r, pen)
     )
     if not os.path.exists(processed_file_dir):
         os.makedirs(processed_file_dir)
@@ -216,14 +227,16 @@ def run_calibration_test(
         args = []
         for _, row in sv_subset.iterrows():
             args.append(
-                (row, population_size, input_dir, processed_file_dir, d, r)
+                (row, population_size, input_dir, processed_file_dir, d, r, pen)
             )
 
         p.starmap(run_dirichlet_inner, args)
         p.close()
         p.join()
 
-    results_dir = os.path.join(output_dir, "d{}_r{:.2f}_q{:.2f}".format(d, r, q))
+    results_dir = os.path.join(
+        output_dir, "d{}_r{:.2f}_q{:.2f}_p{}".format(d, r, q, pen)
+    )
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
     concat_multi_processed_sv_files(
@@ -238,13 +251,14 @@ def run_calibration_test(
     final_output_file = os.path.join(output_dir, "results.csv")
     if not os.path.exists(final_output_file):
         with open(final_output_file, "w") as f:
-            f.write("d,r,q,TP,FP,FN,TN\n")
+            f.write("d,r,q,p,TP,FP,FN,TN\n")
     with open(final_output_file, "a") as f:
         f.write(
-            "{},{},{},{},{},{},{}\n".format(
+            "{},{},{},{},{},{},{},{}\n".format(
                 d,
                 r,
                 q,
+                pen,
                 results["TP"],
                 results["FP"],
                 results["FN"],
@@ -260,7 +274,9 @@ def download_stix_data_inner(
 ):
     # check if the data for this region already exists
     query_region = get_query_region(
-        f"{row.chr}:{row.start}", f"{row.chr}:{row.stop}", q,
+        f"{row.chr}:{row.start}",
+        f"{row.chr}:{row.stop}",
+        q,
     )
     filename = f"{query_region.file_name}.txt"
     file = os.path.join(output_dir, filename)
@@ -287,9 +303,18 @@ def download_stix_data(
 ):
     """Download stix data for all regions in the subset before running calibration tests."""
     output_dir = os.path.join(input_dir, "stix_output")
-    if not os.path.exists(output_dir):
+    predownloaded_outputs = os.path.join(input_dir, f"stix_output_{q}")
+
+    # check if the data has already been downloaded
+    if os.path.exists(predownloaded_outputs):
+        os.rename(predownloaded_outputs, output_dir)
+    else:
         os.mkdir(output_dir)
-        os.mkdir(os.path.join(output_dir, "partial_outputs"))
+    
+    # set up the correct file paths in case we need to query more SVs
+    partial_outputs_dir = os.path.join(output_dir, "partial_outputs")
+    if not os.path.exists(partial_outputs_dir):
+        os.mkdir(partial_outputs_dir)
 
     with multiprocessing.Manager():
         p = multiprocessing.Pool(SLURM_CPUS)
@@ -301,6 +326,8 @@ def download_stix_data(
         p.starmap(download_stix_data_inner, args)
         p.close()
         p.join()
+    
+    os.rmdir(partial_outputs_dir)
 
 
 def run_calibration(
@@ -319,6 +346,9 @@ def run_calibration(
     q_min: float,
     q_max: float,
     q_step: float,
+    p_min: int,
+    p_max: int,
+    p_step: int,
 ):
     """Run calibration tests over a grid of distance and reciprocal overlap thresholds."""
     sv_subset = pd.read_csv(os.path.join(input_dir, sv_regions_file))
@@ -332,6 +362,10 @@ def run_calibration(
         for line in f:
             sample_ids.add(line.strip())
 
+    # store the files in stix_output in a temp dir so we don't overwrite them
+    if os.path.exists(os.path.join(input_dir, "stix_output")):
+        temp_dir = os.path.join(input_dir, "stix_output_temp")
+        os.rename(os.path.join(input_dir, "stix_output"), temp_dir)
 
     # run calibration tests over grid of d, r, and q values
     for q in np.arange(q_min, q_max + 0.01, q_step):
@@ -339,22 +373,28 @@ def run_calibration(
         download_stix_data(sv_subset, input_dir, q)
         for d in range(d_min, d_max + 1, d_step):
             for r in np.arange(r_min, r_max + 0.01, r_step):
-                print(f"Running calibration for d={d}, r={r}, q={q}")
-                run_calibration_test(
-                    sv_df,
-                    sv_subset,
-                    d=d,
-                    r=round(r, 2),
-                    q=round(q, 2),
-                    input_dir=input_dir,
-                    output_dir=output_dir,
-                    sample_ids=sample_ids,
-                )
-        
+                for pen in range(p_min, p_max + 1, p_step):
+                    print(
+                        f"Running calibration for d={d}, r={r}, q={q}, p={pen}"
+                    )
+                    run_calibration_test(
+                        sv_df,
+                        sv_subset,
+                        d=d,
+                        r=round(r, 2),
+                        q=round(q, 2),
+                        pen=pen,
+                        input_dir=input_dir,
+                        output_dir=output_dir,
+                        sample_ids=sample_ids,
+                    )
+
         # move stix data to a new dir if we're testing more than one q value
         if q_min != q_max:
-            os.rename(os.path.join(input_dir, "stix_output"), os.path.join(input_dir, f"stix_output_{q}"))
-
+            os.rename(
+                os.path.join(input_dir, "stix_output"),
+                os.path.join(input_dir, f"stix_output_{q}"),
+            )
 
 
 def main():
@@ -445,6 +485,24 @@ def main():
         help="Step size for reciprocal overlap values",
         default=0.1,
     )
+    parser.add_argument(
+        "--p_min",
+        type=int,
+        help="Minimum penalty size to consider",
+        default=100,
+    )
+    parser.add_argument(
+        "--p_max",
+        type=int,
+        help="Maximum penalty size to consider",
+        default=600,
+    )
+    parser.add_argument(
+        "--p_step",
+        type=int,
+        help="Step size for penalty values",
+        default=100,
+    )
 
     args = parser.parse_args()
     print("Using the following arguments:", args, "\n")
@@ -464,9 +522,11 @@ def main():
         q_min=args.q_min,
         q_max=args.q_max,
         q_step=args.q_step,
+        p_min=args.p_min,
+        p_max=args.p_max,
+        p_step=args.p_step,
     )
 
 
 if __name__ == "__main__":
-    # main()
-    rewrite_calibration_results()
+    main()
