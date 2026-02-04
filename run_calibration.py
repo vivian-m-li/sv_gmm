@@ -16,12 +16,44 @@ from write_sv_output import (
     concat_multi_processed_sv_files,
     write_post_processed_files,
 )
+from collections import defaultdict, Counter
 from typing import Set, Dict
 
 SLURM_CPUS = int(os.environ.get("SLURM_CPUS_ON_NODE", 1))
 FILE_DIR = "calibration_outputs"
 SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
 OUTPUT_FILE_NAME = "sv_stats_converge.csv"
+
+
+def all_consensus_svs():
+    """Gets the distribution of mode predictions for each SV across all calibration runs."""
+    if not os.path.exists("calibration/results/sv_results.csv"):
+        sv_mode_counts = defaultdict(Counter)
+        for run_dir in os.listdir("calibration/results"):
+            if not os.path.isdir(os.path.join("calibration/results", run_dir)):
+                continue
+            svs_n_modes = pd.read_csv(
+                os.path.join("calibration/results", run_dir, "svs_n_modes.csv")
+            )
+            svs_n_modes = svs_n_modes[
+                svs_n_modes["confidence"] != "inconclusive"
+            ]
+            for i, row in svs_n_modes.iterrows():
+                sv_mode_counts[row["sv_id"]][row["num_modes"]] += 1
+
+        df = pd.DataFrame(
+            columns=["sv_id", "n_modes_1", "n_modes_2", "n_modes_3"]
+        )
+        for sv_id, counts in sv_mode_counts.items():
+            df.loc[len(df)] = [
+                sv_id,
+                counts.get(1, 0),
+                counts.get(2, 0),
+                counts.get(3, 0),
+            ]
+        df.to_csv("calibration/results/sv_results.csv", index=False)
+    else:
+        df = pd.read_csv("calibration/results/sv_results.csv")
 
 
 def find_pareto_front():
@@ -310,7 +342,7 @@ def download_stix_data(
         os.rename(predownloaded_outputs, output_dir)
     else:
         os.mkdir(output_dir)
-    
+
     # set up the correct file paths in case we need to query more SVs
     partial_outputs_dir = os.path.join(output_dir, "partial_outputs")
     if not os.path.exists(partial_outputs_dir):
@@ -326,7 +358,7 @@ def download_stix_data(
         p.starmap(download_stix_data_inner, args)
         p.close()
         p.join()
-    
+
     os.rmdir(partial_outputs_dir)
 
 
