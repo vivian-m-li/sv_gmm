@@ -42,14 +42,33 @@ def all_consensus_svs(*, plot: bool = False):
                 sv_mode_counts[row["sv_id"]][row["num_modes"]] += 1
 
         df = pd.DataFrame(
-            columns=["sv_id", "n_modes_1", "n_modes_2", "n_modes_3"]
+            columns=[
+                "sv_id",
+                "n_modes_1",
+                "n_modes_2",
+                "n_modes_3",
+                "majority_outcome",
+                "majority_percent",
+                "n_models_run",
+            ]
         )
         for sv_id, counts in sv_mode_counts.items():
+            n_modes_1 = counts.get(1, 0)
+            n_modes_2 = counts.get(2, 0)
+            n_modes_3 = counts.get(3, 0)
+            total = n_modes_1 + n_modes_2 + n_modes_3
+            majority_outcome = (
+                np.argmax([n_modes_1, n_modes_2, n_modes_3]) + 1
+            )
+            majority_count = max(n_modes_1, n_modes_2, n_modes_3)
             df.loc[len(df)] = [
                 sv_id,
-                counts.get(1, 0),
-                counts.get(2, 0),
-                counts.get(3, 0),
+                n_modes_1,
+                n_modes_2,
+                n_modes_3,
+                int(majority_outcome),
+                majority_count / total,
+                total,
             ]
         df.to_csv("calibration/results/sv_results.csv", index=False)
     else:
@@ -58,32 +77,7 @@ def all_consensus_svs(*, plot: bool = False):
     if plot:
         # plot distribution of mode predictions
         plt.figure(figsize=(8, 6))
-        consensus = pd.DataFrame(
-            columns=[
-                "sv_id",
-                "majority_outcome",
-                "majority_percent",
-                "n_models_run",
-            ]
-        )
-        for _, row in df.iterrows():
-            total = row["n_modes_1"] + row["n_modes_2"] + row["n_modes_3"]
-            majority_count = max(
-                row["n_modes_1"], row["n_modes_2"], row["n_modes_3"]
-            )
-            majority_outcome = (
-                np.argmax(
-                    [row["n_modes_1"], row["n_modes_2"], row["n_modes_3"]]
-                )
-                + 1
-            )
-            consensus.iloc[len(consensus)] = [
-                row["sv_id"],
-                majority_outcome,
-                majority_count / total,
-                total,
-            ]
-        plt.hist(consensus["majority_percent"].values, bins=20, range=(0, 1))
+        plt.hist(df["majority_percent"].values, bins=20, range=(0, 1))
         plt.xlabel("% of Runs Agreeing on Majority Mode")
         plt.ylabel("Number of SVs")
         plt.show()
@@ -93,24 +87,22 @@ def assign_model_score():
     # assign scores based on how often models agreed with the consensus
     sv_results = pd.read_csv("calibration/results/sv_results.csv")
     df = pd.read_csv("calibration/results/results.csv")
-    for _, row in df.iterrows():
-        dir = f"d{row['d']}_r{row['r']:.2f}_q{row['q']:.2f}"
+    for i, row in df.iterrows():
+        dir = f"d{int(row['d'])}_r{row['r']:.2f}_q{row['q']:.2f}"
         svs_n_modes = pd.read_csv(
             os.path.join("calibration/results", dir, "svs_n_modes.csv")
         )
-        n_correct = sum(
-            [
-                1
-                for _, sv_row in svs_n_modes.iterrows()
-                if sv_row["num_modes"]
-                == sv_results[sv_results["sv_id"] == sv_row["sv_id"]][
-                    "majority_outcome"
-                ].values[0]
-            ]
+        merged = svs_n_modes.merge(sv_results, on="sv_id", how="left")
+        merged["correct"] = merged.apply(
+            lambda row: int(row["num_modes"] == row["majority_outcome"]),
+            axis=1
         )
-        df["n_run"] = svs_n_modes.shape[0]
-        df["n_correct"] = n_correct
-        df["model_score"] = n_correct / svs_n_modes.shape[0]
+        n_correct = sum(merged["correct"].values)
+        n_run = svs_n_modes[svs_n_modes["confidence"] != "inconclusive"].shape[0]
+        df.loc[i, "n_run"] = n_run
+        df.loc[i, "n_correct"] = n_correct
+        df.loc[i, "model_score"] = n_correct / n_run
+    df.to_csv("calibration/results/results.csv", index=False)
 
 
 def find_pareto_front():
@@ -619,4 +611,5 @@ def main():
 
 if __name__ == "__main__":
     all_consensus_svs()
+    assign_model_score()
     # main()
