@@ -57,9 +57,7 @@ def all_consensus_svs(*, plot: bool = False):
             n_modes_2 = counts.get(2, 0)
             n_modes_3 = counts.get(3, 0)
             total = n_modes_1 + n_modes_2 + n_modes_3
-            majority_outcome = (
-                np.argmax([n_modes_1, n_modes_2, n_modes_3]) + 1
-            )
+            majority_outcome = np.argmax([n_modes_1, n_modes_2, n_modes_3]) + 1
             majority_count = max(n_modes_1, n_modes_2, n_modes_3)
             df.loc[len(df)] = [
                 sv_id,
@@ -83,7 +81,7 @@ def all_consensus_svs(*, plot: bool = False):
         plt.show()
 
 
-def assign_model_score():
+def assign_model_score(*, plot: bool = False):
     # assign scores based on how often models agreed with the consensus
     sv_results = pd.read_csv("calibration/results/sv_results.csv")
     df = pd.read_csv("calibration/results/results.csv")
@@ -94,15 +92,37 @@ def assign_model_score():
         )
         merged = svs_n_modes.merge(sv_results, on="sv_id", how="left")
         merged["correct"] = merged.apply(
-            lambda row: int(row["num_modes"] == row["majority_outcome"]),
-            axis=1
+            lambda row: int(row["num_modes"] == row["majority_outcome"]), axis=1
         )
         n_correct = sum(merged["correct"].values)
-        n_run = svs_n_modes[svs_n_modes["confidence"] != "inconclusive"].shape[0]
+        n_run = svs_n_modes[svs_n_modes["confidence"] != "inconclusive"].shape[
+            0
+        ]
         df.loc[i, "n_run"] = n_run
         df.loc[i, "n_correct"] = n_correct
         df.loc[i, "model_score"] = n_correct / n_run
     df.to_csv("calibration/results/results.csv", index=False)
+
+    if plot:
+        fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+        for i, (param, xlabel) in enumerate(
+            zip(
+                ["d", "r", "q"],
+                [
+                    "Distance at which penalty = 0",
+                    "Reciprocal overlap at which penalty = 0",
+                    "Required evidence overlap with original SV region",
+                ],
+            )
+        ):
+            df.boxplot(column="model_score", by=param, ax=axs[i])
+            axs[i].set_xlabel(xlabel)
+            axs[i].set_ylabel("Model Score")
+            axs[i].set_title("")
+            axs[i].set_ylim(0, 1)
+            axs[i].grid(False)
+        plt.suptitle("")
+        plt.show()
 
 
 def find_pareto_front():
@@ -610,6 +630,4 @@ def main():
 
 
 if __name__ == "__main__":
-    all_consensus_svs()
-    assign_model_score()
-    # main()
+    main()
