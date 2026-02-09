@@ -17,7 +17,7 @@ from helper import stix_output_to_df
 from timeout import break_after
 from typing import List
 
-SCRATCH_DIR = "/scratch/Users/vili4418"
+SCRATCH_DIR = "/scratch/Shares/layer/1kg_lr_crams"
 STIX_DATA_DIR = "/Users/vili4418/sv/sv_gmm/data_dump/lr_stix_output/"
 
 
@@ -440,13 +440,73 @@ def download_long_read_evidence_wrapper(
     sys.stdout.flush()
 
 
+def download_long_read_cram(sample_row: pd.Series):
+    """Download the cram file for a sample and store it in scratch."""
+    sample_id = sample_row["sample_id"]
+    print(f"Processing sample {sample_id}", flush=True)
+
+    # download the cram file and the indexed cram file
+    output_file = os.path.join(
+        SCRATCH_DIR, sample_row["cram_file"].split("/")[-1]
+    )
+    if not os.path.exists(output_file):
+        download_start = time.time()
+        subprocess.run(
+            ["wget", "-O", output_file, sample_row["cram_file"]],
+            capture_output=True,
+            text=True,
+        )
+        download_end = time.time()
+        print(
+            f"Downloaded cram file for {sample_id} in ",
+            int((download_end - download_start) / 60),
+            "minutes",
+            flush=True,
+        )
+    indexed_file = f"{output_file}.crai"
+    if not os.path.exists(indexed_file):
+        subprocess.run(
+            [
+                "wget",
+                "-O",
+                indexed_file,
+                sample_row["indexed_cram_file"],
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+
+def download_long_read_crams_all():
+    """
+    Downloads all long read cram files.
+    Takes just over 48 hours when using four cores.
+    """
+    long_read_samples = pd.read_csv("long_reads/long_read_samples.csv")
+    files = os.listdir(SCRATCH_DIR)
+    completed_samples = set([file.split(".")[0] for file in files])
+    long_read_samples = long_read_samples[
+        ~long_read_samples["sample_id"].isin(completed_samples)
+    ]
+
+    with mp.Manager():
+        pool = mp.Pool(4)
+        args = []
+        for _, sample_row in long_read_samples.iterrows():
+            args.append((sample_row,))
+        pool.starmap(download_long_read_cram, args)
+        pool.close()
+        pool.join()
+
+
 if __name__ == "__main__":
     # for testing purposes
     # process_sample_evidence_inner("HGSV_204941", "NA19657", "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1KG_ONT_VIENNA/hg38/NA19657.hg38.cram")
 
     start = time.time()
 
-    download_long_read_evidence_wrapper(move_files=True, redo_samples=False)
+    download_long_read_crams_all()
+    # download_long_read_evidence_wrapper(move_files=True, redo_samples=False)
 
     end = time.time()
     print("Time taken:", (end - start) / 60, "minutes")
