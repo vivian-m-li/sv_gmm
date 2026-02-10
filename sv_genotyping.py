@@ -107,16 +107,14 @@ def build_sr_lr_overlap_set(
     out_df.to_csv(os.path.join(FILE_DIR, output_file), index=False)
 
 
-def convert_results_to_vcf():
+def convert_results_to_vcf(out_file: str):
     """Takes the results from SPLIT and converts them to a VCF file with the same format as the original SVs, but with the new SV IDs and coordinates. The non-ref sample IDs should reflect the mode that the sample was assigned to. Also builds a lookup file that maps the original SV IDs to the new split SV IDs."""
     collapsed = pd.read_csv("results/sv_stats_collapsed.csv")
 
     # initialize a new vcf and copy headers from the original vcf, keeping ID, CHROM, POS, END, and sample columns
     template_vcf = pysam.VariantFile("1kgp/1kg.subset.vcf.gz")
     expanded_vcf = pysam.VariantFile(
-        os.path.join(FILE_DIR, "expanded_sv.vcf"),
-        "w",
-        header=template_vcf.header,
+        os.path.join(FILE_DIR, out_file), "w", header=template_vcf.header
     )
 
     lookup_df = pd.DataFrame(
@@ -159,10 +157,11 @@ def convert_results_to_vcf():
 def main():
     # build_sr_lr_overlap_set once for the original SR SVs, then for the LR SVs
     lr_vcf = "long_reads/final-vcf.unphased.vcf.gz"
-    if not os.path.exists("results/1kg_expanded_vcf.gz"):
-        convert_results_to_vcf()
+    expanded_sr_vcf = "results/1kg_expanded_vcf.gz"
+    if not os.path.exists(expanded_sr_vcf):
+        convert_results_to_vcf(expanded_sr_vcf)
     for sr_vcf, output_file in zip(
-        ["1kgp/1kg.subset.vcf.gz", "results/1kg_expanded_vcf.gz"],
+        ["1kgp/1kg.subset.vcf.gz", expanded_sr_vcf],
         ["original_sr", "expanded_sr"],
     ):
         build_sr_lr_overlap_set(
