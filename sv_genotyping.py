@@ -60,17 +60,20 @@ def build_sr_lr_overlap_set(
     sr_bed = os.path.join(FILE_DIR, f"{sr_root}.bed")
     lr_bed = os.path.join(FILE_DIR, f"{lr_root}.bed")
 
-    if not os.path.exists(sr_bed) and not os.path.exists(lr_bed):
+    if not os.path.exists(sr_bed) or not os.path.exists(lr_bed):
         print("Converting VCFs to BED files...", flush=True)
 
         # only keep the sample IDs that are in both VCFs
         sample_ids = set(pysam.VariantFile(sr_vcf).header.samples).intersection(
             set(pysam.VariantFile(lr_vcf).header.samples)
         )
-        if not os.path.exists(sr_bed):
-            vcf_to_bed(sr_vcf, sr_bed, sample_ids)
-        if not os.path.exists(lr_bed):
-            vcf_to_bed(lr_vcf, lr_bed, sample_ids)
+        for vcf_file, bed_file in zip([sr_vcf, lr_vcf], [sr_bed, lr_bed]):
+            if not os.path.exists(bed_file):
+                try:
+                    vcf_to_bed(vcf_file, bed_file, sample_ids)
+                except Exception:
+                    os.remove(bed_file)
+                    raise Exception(f"Failed to write {bed_file}.")
 
     print("Running bedtools intersect...", flush=True)
     intersect_file = os.path.join(
@@ -133,11 +136,14 @@ def build_sr_lr_overlap_set(
         overlap = row["n_bp_overlap"] / max(
             row["sr_stop"] - row["sr_start"], row["lr_stop"] - row["lr_start"]
         )
-        sr_samples = set(row["sr_sample_ids"].split(","))
-        lr_samples = set(row["lr_sample_ids"].split(","))
-        sample_overlap = len(sr_samples.intersection(lr_samples)) / len(
-            sr_samples.union(lr_samples)
-        )
+        sr_samples = set(ast.literal_eval(row["sr_sample_ids"]))
+        lr_samples = set(ast.literal_eval(row["lr_sample_ids"]))
+        try:
+            sample_overlap = len(sr_samples.intersection(lr_samples)) / len(
+                sr_samples.union(lr_samples)
+            )
+        except ZeroDivisionError:
+            sample_overlap = 0
         out_df.loc[len(out_df)] = [
             row["sr_sv_id"],
             row["lr_sv_id"],
@@ -170,8 +176,6 @@ def convert_results_to_vcf(out_file: str):
         ]
     )
 
-    pysam.VariantRecordSample
-
     for _, row in collapsed.iterrows():
         og_sv_coords = (row["start"], row["stop"])
         modes = ast.literal_eval(row["modes"])
@@ -190,6 +194,7 @@ def convert_results_to_vcf(out_file: str):
             new_record.chrom = f"chr{row['chr']}"
             new_record.pos = mode["start"]
             new_record.stop = mode["end"]
+            new_record.info["SVTYPE"] = "DEL"
             new_record.alleles = ("N", "<DEL>")
             for sample in mode["sample_ids"]:
                 new_record.samples[sample]["GT"] = (1, 1)
