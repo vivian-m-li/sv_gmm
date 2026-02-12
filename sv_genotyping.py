@@ -18,7 +18,7 @@ GTs = [(0, 1), (1, 0), (1, 1)]
 def vcf_to_bed(in_file: str, out_file: str, sample_ids: Set[int]) -> None:
     """Converts a vcf to a bed file to be used with bedtools intersect. Writes out columns chr, start, end, id"""
 
-    print(f"Converting {in_file} to bed...")
+    print(f"Converting {in_file} to bed...", flush=True)
     vcf_in = pysam.VariantFile(in_file)
     sample_lookup = pd.DataFrame(columns=["sv_id", "sample_ids"])
     with open(out_file, "w") as outfile:
@@ -50,14 +50,14 @@ def vcf_to_bed(in_file: str, out_file: str, sample_ids: Set[int]) -> None:
 def build_sr_lr_overlap_set(
     *, sr_vcf: str, lr_vcf: str, bedtools_path: str, output_file: str
 ) -> None:
-    print("Building SR/LR overlap set...")
+    print(f"Building SR/LR overlap set for {sr_vcf} and {lr_vcf}...", flush=True)
     sr_root = '.'.join(sr_vcf.split("/")[-1].strip(".gz").split(".")[:-1])
     lr_root = '.'.join(lr_vcf.split("/")[-1].strip(".gz").split(".")[:-1])
     sr_bed = os.path.join(FILE_DIR, f"{sr_root}.bed")
     lr_bed = os.path.join(FILE_DIR, f"{lr_root}.bed")
 
     if not os.path.exists(sr_bed) and not os.path.exists(lr_bed):
-        print("Converting VCFs to BED files...")
+        print("Converting VCFs to BED files...", flush=True)
 
         # only keep the sample IDs that are in both VCFs
         sample_ids = set(pysam.VariantFile(sr_vcf).header.samples).intersection(
@@ -68,7 +68,7 @@ def build_sr_lr_overlap_set(
         if not os.path.exists(lr_bed):
             vcf_to_bed(lr_vcf, lr_bed, sample_ids)
 
-    print("Running bedtools intersect...")
+    print("Running bedtools intersect...", flush=True)
     intersect_file = os.path.join(
         FILE_DIR, f"{sr_root}_{lr_root}_intersect.bed",
     )
@@ -93,12 +93,23 @@ def build_sr_lr_overlap_set(
             "n_bp_overlap",
         ],
     )
+    
+    # join with sample ID lookup by SV for both SR and LR callsets
     sr_sample_lookup = pd.read_csv(
         os.path.join(FILE_DIR, f"{sr_root}_sample_lookup.csv")
+    )
+    sr_sample_lookup = sr_sample_lookup.rename(
+        columns={"sv_id": "sr_sv_id", "sample_ids": "sr_sample_ids"}
     )
     lr_sample_lookup = pd.read_csv(
         os.path.join(FILE_DIR, f"{lr_root}_sample_lookup.csv")
     )
+    lr_sample_lookup = lr_sample_lookup.rename(
+        columns={"sv_id": "lr_sv_id", "sample_ids": "lr_sample_ids"}
+    )
+    intersect_df = intersect_df.merge(sr_sample_lookup, on="sr_sv_id")
+    intersect_df = intersect_df.merge(lr_sample_lookup, on="lr_sv_id")
+
     out_df = pd.DataFrame(
         columns=[
             "sr_sv_id",
@@ -109,7 +120,7 @@ def build_sr_lr_overlap_set(
         ]
     )
 
-    print(f"Writing {output_file}...")
+    print(f"Writing {output_file}...", flush=True)
     for _, row in intersect_df.iterrows():
         if row["lr_sv_id"] == ".":
             out_df.loc[len(out_df)] = [row["sr_sv_id"], None, 0, 0, ""]
@@ -130,12 +141,13 @@ def build_sr_lr_overlap_set(
             ",".join(sr_samples.intersection(lr_samples)),
         ]
     out_df.to_csv(os.path.join(FILE_DIR, output_file), index=False)
+    print(f"Done writing {output_file}.", flush=True)
 
 
 def convert_results_to_vcf(out_file: str):
     """Takes the results from SPLIT and converts them to a VCF file with the same format as the original SVs, but with the new SV IDs and coordinates. The non-ref sample IDs should reflect the mode that the sample was assigned to. Also builds a lookup file that maps the original SV IDs to the new split SV IDs."""
 
-    print("Writing SV expanded VCF...")
+    print("Writing SV expanded VCF...", flush=True)
     collapsed = pd.read_csv("results/sv_stats_collapsed.csv")
 
     # initialize a new vcf and copy headers from the original vcf, keeping ID, CHROM, POS, END, and sample columns
@@ -153,28 +165,31 @@ def convert_results_to_vcf(out_file: str):
         ]
     )
 
-    og_sv_coords = (row["start"], row["stop"])
+    pysam.VariantRecordSample
+
     for _, row in collapsed.iterrows():
+        og_sv_coords = (row["start"], row["stop"])
         modes = ast.literal_eval(row["modes"])
         # sort modes from most to least reciprocal overlap with the original SV
-        modes = sorted(modes, key=lambda x: reciprocal_overlap(og_sv_coords, (x["start"], x["stop"])), reverse=True)
+        modes = sorted(modes, key=lambda x: reciprocal_overlap(og_sv_coords, (x["start"], x["end"])), reverse=True)
         for i, mode in enumerate(modes):
             # write a new row in the vcf with the new SV ID, coordinates, and non-ref sample IDs
             new_record = expanded_vcf.new_record()
-            expanded_vcf.id = f"{row['id']}_{i}"
-            expanded_vcf.chrom = row["chr"]
-            expanded_vcf.pos = mode["start"]
-            expanded_vcf.stop = mode["stop"]
+            new_record.id = f"{row['id']}_{i}"
+            new_record.chrom = f"chr{row['chr']}"
+            new_record.pos = mode["start"]
+            new_record.stop = mode["end"]
+            new_record.alleles = ("N", "<DEL>")
             for sample in mode["sample_ids"]:
-                new_record.samples[sample] = (1, 1)
+                new_record.samples[sample]["GT"] = (1, 1)
             expanded_vcf.write(new_record)
 
             lookup_df.loc[len(lookup_df)] = [
-                expanded_vcf.id,
-                expanded_vcf.id,
-                expanded_vcf.chrom,
-                expanded_vcf.pos,
-                expanded_vcf.stop,
+                new_record.id,
+                f"{new_record.id}_{i}",
+                new_record.chrom,
+                new_record.pos,
+                new_record.stop,
                 ",".join(mode["sample_ids"]),
             ]
     expanded_vcf.close()
@@ -182,19 +197,26 @@ def convert_results_to_vcf(out_file: str):
 
 def main():
     # build_sr_lr_overlap_set once for the original SR SVs, then for the LR SVs
-    lr_vcf = "long_reads/final-vcf.unphased.vcf.gz"
-    expanded_sr_vcf = "results/1kg_expanded_vcf.gz"
+    lr_vcf = "long_reads/all.sniffles.hg38.1kGP.ont.7Aug2023.vcf.gz"
+    expanded_sr_vcf = "results/1kg_expanded.vcf"
     if not os.path.exists(expanded_sr_vcf):
-        convert_results_to_vcf(expanded_sr_vcf)
-    for sr_vcf, output_file in zip(
+        try:
+            convert_results_to_vcf(expanded_sr_vcf)
+        except Exception:
+            os.remove(expanded_sr_vcf)
+            raise Exception(f"Failed to write {expanded_sr_vcf}. Exiting now.")
+    for sr_vcf, output_file_root in zip(
         ["1kgp/1kg.subset.vcf.gz", expanded_sr_vcf],
         ["original_sr", "expanded_sr"],
     ):
+        output_file = f"{output_file_root}_lr_overlaps.csv"
+        if os.path.exists(os.path.join(FILE_DIR, output_file)):
+            continue
         build_sr_lr_overlap_set(
             sr_vcf=sr_vcf,
             lr_vcf=lr_vcf,
             bedtools_path="/Users/vili4418/sv/bedtools/bin/bedtools",
-            output_file=f"{output_file}_lr_overlaps.csv",
+            output_file=output_file,
         )
 
 
