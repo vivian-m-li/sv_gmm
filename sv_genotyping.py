@@ -44,15 +44,19 @@ def vcf_to_bed(in_file: str, out_file: str, sample_ids: Set[int]) -> None:
             ]
             sample_lookup.loc[len(sample_lookup)] = [record.id, record_samples]
     vcf_in.close()
-    sample_lookup.to_csv(out_file.replace(".bed", "_sample_lookup.csv"), index=False)
+    sample_lookup.to_csv(
+        out_file.replace(".bed", "_sample_lookup.csv"), index=False
+    )
 
 
 def build_sr_lr_overlap_set(
     *, sr_vcf: str, lr_vcf: str, bedtools_path: str, output_file: str
 ) -> None:
-    print(f"Building SR/LR overlap set for {sr_vcf} and {lr_vcf}...", flush=True)
-    sr_root = '.'.join(sr_vcf.split("/")[-1].strip(".gz").split(".")[:-1])
-    lr_root = '.'.join(lr_vcf.split("/")[-1].strip(".gz").split(".")[:-1])
+    print(
+        f"Building SR/LR overlap set for {sr_vcf} and {lr_vcf}...", flush=True
+    )
+    sr_root = ".".join(sr_vcf.split("/")[-1].strip(".gz").split(".")[:-1])
+    lr_root = ".".join(lr_vcf.split("/")[-1].strip(".gz").split(".")[:-1])
     sr_bed = os.path.join(FILE_DIR, f"{sr_root}.bed")
     lr_bed = os.path.join(FILE_DIR, f"{lr_root}.bed")
 
@@ -70,7 +74,8 @@ def build_sr_lr_overlap_set(
 
     print("Running bedtools intersect...", flush=True)
     intersect_file = os.path.join(
-        FILE_DIR, f"{sr_root}_{lr_root}_intersect.bed",
+        FILE_DIR,
+        f"{sr_root}_{lr_root}_intersect.bed",
     )
     subprocess.run(
         [bedtools_path, "intersect", "-a", sr_bed, "-b", lr_bed, "-wao"],
@@ -93,7 +98,7 @@ def build_sr_lr_overlap_set(
             "n_bp_overlap",
         ],
     )
-    
+
     # join with sample ID lookup by SV for both SR and LR callsets
     sr_sample_lookup = pd.read_csv(
         os.path.join(FILE_DIR, f"{sr_root}_sample_lookup.csv")
@@ -171,7 +176,13 @@ def convert_results_to_vcf(out_file: str):
         og_sv_coords = (row["start"], row["stop"])
         modes = ast.literal_eval(row["modes"])
         # sort modes from most to least reciprocal overlap with the original SV
-        modes = sorted(modes, key=lambda x: reciprocal_overlap(og_sv_coords, (x["start"], x["end"])), reverse=True)
+        modes = sorted(
+            modes,
+            key=lambda x: reciprocal_overlap(
+                og_sv_coords, (x["start"], x["end"])
+            ),
+            reverse=True,
+        )
         for i, mode in enumerate(modes):
             # write a new row in the vcf with the new SV ID, coordinates, and non-ref sample IDs
             new_record = expanded_vcf.new_record()
