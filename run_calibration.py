@@ -17,12 +17,113 @@ from write_sv_output import (
     concat_multi_processed_sv_files,
     write_post_processed_files,
 )
+from collections import defaultdict, Counter
 from typing import Set, Dict
 
 SLURM_CPUS = int(os.environ.get("SLURM_CPUS_ON_NODE", 1))
 FILE_DIR = "calibration_outputs"
 SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
 OUTPUT_FILE_NAME = "sv_stats_converge.csv"
+
+
+def all_consensus_svs(*, plot: bool = False):
+    """Gets the distribution of mode predictions for each SV across all calibration runs."""
+    if not os.path.exists("calibration/results/sv_results.csv"):
+        sv_mode_counts = defaultdict(Counter)
+        for run_dir in os.listdir("calibration/results"):
+            if not os.path.isdir(os.path.join("calibration/results", run_dir)):
+                continue
+            svs_n_modes = pd.read_csv(
+                os.path.join("calibration/results", run_dir, "svs_n_modes.csv")
+            )
+            svs_n_modes = svs_n_modes[
+                svs_n_modes["confidence"] != "inconclusive"
+            ]
+            for i, row in svs_n_modes.iterrows():
+                sv_mode_counts[row["sv_id"]][row["num_modes"]] += 1
+
+        df = pd.DataFrame(
+            columns=[
+                "sv_id",
+                "n_modes_1",
+                "n_modes_2",
+                "n_modes_3",
+                "majority_outcome",
+                "majority_percent",
+                "n_models_run",
+            ]
+        )
+        for sv_id, counts in sv_mode_counts.items():
+            n_modes_1 = counts.get(1, 0)
+            n_modes_2 = counts.get(2, 0)
+            n_modes_3 = counts.get(3, 0)
+            total = n_modes_1 + n_modes_2 + n_modes_3
+            majority_outcome = np.argmax([n_modes_1, n_modes_2, n_modes_3]) + 1
+            majority_count = max(n_modes_1, n_modes_2, n_modes_3)
+            df.loc[len(df)] = [
+                sv_id,
+                n_modes_1,
+                n_modes_2,
+                n_modes_3,
+                int(majority_outcome),
+                majority_count / total,
+                total,
+            ]
+        df.to_csv("calibration/results/sv_results.csv", index=False)
+    else:
+        df = pd.read_csv("calibration/results/sv_results.csv")
+
+    if plot:
+        # plot distribution of mode predictions
+        plt.figure(figsize=(8, 6))
+        plt.hist(df["majority_percent"].values, bins=20, range=(0, 1))
+        plt.xlabel("% of Runs Agreeing on Majority Mode")
+        plt.ylabel("Number of SVs")
+        plt.show()
+
+
+def assign_model_score(*, plot: bool = False):
+    # assign scores based on how often models agreed with the consensus
+    sv_results = pd.read_csv("calibration/results/sv_results.csv")
+    df = pd.read_csv("calibration/results/results.csv")
+    for i, row in df.iterrows():
+        dir = f"d{int(row['d'])}_r{row['r']:.2f}_q{row['q']:.2f}"
+        svs_n_modes = pd.read_csv(
+            os.path.join("calibration/results", dir, "svs_n_modes.csv")
+        )
+        merged = svs_n_modes.merge(sv_results, on="sv_id", how="left")
+        merged["correct"] = merged.apply(
+            lambda row: int(row["num_modes"] == row["majority_outcome"]), axis=1
+        )
+        n_correct = sum(merged["correct"].values)
+        n_run = svs_n_modes[svs_n_modes["confidence"] != "inconclusive"].shape[
+            0
+        ]
+        df.loc[i, "n_run"] = n_run
+        df.loc[i, "n_correct"] = n_correct
+        df.loc[i, "model_score"] = n_correct / n_run
+    df.to_csv("calibration/results/results.csv", index=False)
+
+    if plot:
+        fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+        for i, (param, xlabel) in enumerate(
+            zip(
+                ["d", "r", "q"],
+                [
+                    "Distance at which penalty = 0",
+                    "Reciprocal overlap at which penalty = 0",
+                    "Required evidence overlap with original SV region",
+                ],
+            )
+        ):
+            df.boxplot(column="model_score", by=param, ax=axs[i])
+            axs[i].set_xlabel(xlabel)
+            axs[i].set_ylabel("Model Score")
+            axs[i].set_title("")
+            axs[i].set_ylim(0, 1)
+            axs[i].grid(False)
+        plt.suptitle("")
+        plt.show()
 
 
 def find_pareto_front():
@@ -357,34 +458,10 @@ def run_calibration_nelder_mead(
     # first, download stix data for all q values that we need to loop over
     # our objective function needs to return a score (some value of TP/FP/acc/etc)
 
-    # run calibration tests over grid of d, r, and q values
-    for q in np.arange(q_min, q_max + 0.01, q_step):
-        # check that all stix data has been downloaded for regions in sv_subset before running calibration tests
-        download_stix_data(sv_subset, input_dir, q)
-        for d in range(d_min, d_max + 1, d_step):
-            for r in np.arange(r_min, r_max + 0.01, r_step):
-                for pen in range(p_min, p_max + 1, p_step):
-                    print(
-                        f"Running calibration for d={d}, r={r}, q={q}, p={pen}"
-                    )
-                    run_calibration_test(
-                        sv_df,
-                        sv_subset,
-                        d=d,
-                        r=round(r, 2),
-                        q=round(q, 2),
-                        pen=pen,
-                        input_dir=input_dir,
-                        output_dir=output_dir,
-                        sample_ids=sample_ids,
-                    )
-
-        # move stix data to a new dir if we're testing more than one q value
-        if q_min != q_max:
-            os.rename(
-                os.path.join(input_dir, "stix_output"),
-                os.path.join(input_dir, f"stix_output_{q}"),
-            )
+    # store the files in stix_output in a temp dir so we don't overwrite them
+    if os.path.exists(os.path.join(input_dir, "stix_output")):
+        temp_dir = os.path.join(input_dir, "stix_output_temp")
+        os.rename(os.path.join(input_dir, "stix_output"), temp_dir)
 
 
 def run_calibration_grid_search(

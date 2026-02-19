@@ -1349,7 +1349,29 @@ def plot_num_trials(path: str = ""):
         )
 
 
+def download_l_len_plots():
+    df = pd.read_csv("calibration/results/d300_r0.50_q0.80_p200/svs_n_modes.csv")
+    df = df[df["confidence"] == "high"]
+    for n_modes in list(range(1, 4)):
+        subset = df[df["num_modes"] == n_modes]
+        out_dir = f"calibration/results/d300_r0.50_q0.80_p200/plots/{n_modes}modes"
+        if not os.path.exists:
+            os.mkdir(out_dir)
+        for _, row in subset.sample(n=10).iterrows():
+            l, r = row['sv_id'].split("_")
+            query_stix(
+                l=l,
+                r=r,
+                input_dir="calibration",
+                output_dir=out_dir,
+                sv_lookup_file="filtered_dels.csv",
+                single_trial=False,
+                plot=True,
+            )
+
+
 if __name__ == "__main__":
+
     figures = [7]
 
     # Figure 1
