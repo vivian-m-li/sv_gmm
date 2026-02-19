@@ -16,9 +16,6 @@ from typing import List, Dict, Optional
 # Increase the field size limit to avoid triggering the error
 csv.field_size_limit(sys.maxsize)
 
-FILE_DIR = "stix_output"
-PLOT_DIR = "plots"
-
 """File processing functions to convert user-provided SV files into a format taken by SPLIT"""
 
 
@@ -437,6 +434,7 @@ def query_stix(
     output_dir: Optional[str] = None,
     sv_lookup_file: str = "deletions.csv",
     insert_size_file: str = "insert_sizes.csv",
+    stix_file_dir: str = "stix_output",
     read_overlap: float = 1.0,
     stix_bin: Optional[str] = None,
     stix_index: Optional[str] = None,
@@ -477,8 +475,8 @@ def query_stix(
     # set filepaths
     if output_dir is None:
         output_dir = input_dir
-    output_file_dir = os.path.join(output_dir, FILE_DIR)
-    plot_dir = os.path.join(output_dir, PLOT_DIR)
+    output_file_dir = os.path.join(output_dir, stix_file_dir)
+    plot_dir = os.path.join(output_dir, "plots")
 
     for directory in [
         output_dir,
@@ -497,10 +495,10 @@ def query_stix(
     for directory in [
         input_dir,
         output_dir,
-        os.path.join(input_dir, FILE_DIR),
+        os.path.join(input_dir, stix_file_dir),
         output_file_dir,
     ]:
-        file_path = f"{directory}/{file_name}.txt"
+        file_path = os.path.join(directory, f"{file_name}.txt")
         if os.path.isfile(file_path):
             output_file = file_path
             break

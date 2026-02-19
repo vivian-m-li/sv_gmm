@@ -110,6 +110,7 @@ def get_raw_data(
     row: pd.Series,
     input_dir: str = "1kgp",
     *,
+    stix_file_dir: str | None = None,
     filter_reference_samples: bool = True,
     print_messages: bool = True,
 ) -> Tuple[Dict[str, np.ndarray[float]], int]:
@@ -124,6 +125,7 @@ def get_raw_data(
         r=end,
         input_dir=input_dir,
         output_dir="",  # project home directory
+        stix_file_dir=stix_file_dir,
         run_gmm=False,
         filter_reference=False,
         stix_bin="/Users/vili4418/sv/stix/bin/stix",

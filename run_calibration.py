@@ -6,9 +6,10 @@ import shutil
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.optimize import minimize
+from ax.service.ax_client import AxClient, ObjectiveProperties
 from run_dirichlet import run_dirichlet
 from query_sv import giggle_format, query_stix_bash, get_query_region
+from helper import calc_pr_auc
 from write_sv_output import (
     get_raw_data,
     init_sv_stat_row,
@@ -254,6 +255,7 @@ def run_dirichlet_inner(
     population_size: int,
     input_dir: str,
     output_dir: str,
+    q: float,
     d: int,
     r: float,
     pen: int,
@@ -262,6 +264,7 @@ def run_dirichlet_inner(
     reads, num_samples = get_raw_data(
         row,
         input_dir,
+        stix_file_dir=os.path.join(input_dir, f"stix_output_{q}"),
         filter_reference_samples=False,
         print_messages=False,
     )
@@ -317,6 +320,7 @@ def run_calibration_test(
     Run a single calibration test for given distance and reciprocal overlap thresholds.
     TODO: do analysis later on which combinations led to "partial correctness"
     """
+    print(f"Running calibration for d={d}, r={r}, q={q}, p={pen}")
     population_size = len(sample_ids)
     processed_file_dir = os.path.join(
         SCRATCH_FILE_DIR, "d{}_r{:.2f}_p{}".format(d, r, pen)
@@ -329,7 +333,16 @@ def run_calibration_test(
         args = []
         for _, row in sv_subset.iterrows():
             args.append(
-                (row, population_size, input_dir, processed_file_dir, d, r, pen)
+                (
+                    row,
+                    population_size,
+                    input_dir,
+                    processed_file_dir,
+                    q,
+                    d,
+                    r,
+                    pen,
+                )
             )
 
         p.starmap(run_dirichlet_inner, args)
@@ -369,6 +382,201 @@ def run_calibration_test(
         )
 
 
+def snap_to_grid(value: float, min_val: float, step: float) -> float:
+    """Snap a continuous value to the nearest grid point defined by min + k*step."""
+    k = round((value - min_val) / step)
+    return round(min_val + k * step, 10)
+
+
+def run_calibration_bayesian_opt(
+    sv_df: pd.DataFrame,
+    sv_subset: pd.DataFrame,
+    sample_ids: Set[str],
+    *,
+    input_dir: str,
+    output_dir: str,
+    n_trials: int = 30,
+    batch_size: int = 1,
+    d_min: int,
+    d_max: int,
+    d_step: int,
+    r_min: float,
+    r_max: float,
+    r_step: float,
+    q_min: float,
+    q_max: float,
+    q_step: float,
+    p_min: int,
+    p_max: int,
+    p_step: int,
+):
+    """
+    Run calibration using Bayesian Optimization to find the parameter
+    combination that maximizes PR-AUC.
+
+    If calibration/results/results.csv already exists, those reults are fed into
+    the BO model as prior observations before any new runs are launched.
+    """
+
+    # define the search space
+    ax_client = AxClient()
+    ax_client.create_experiment(
+        name="calibration_experiment",
+        parameters=[
+            {
+                "name": "d",
+                "type": "range",
+                "bounds": [float(d_min), float(d_max)],
+                "value_type": "float",
+            },
+            {
+                "name": "r",
+                "type": "range",
+                "bounds": [r_min, r_max],
+                "value_type": "float",
+            },
+            {
+                "name": "q",
+                "type": "range",
+                "bounds": [q_min, q_max],
+                "value_type": "float",
+            },
+            {
+                "name": "p",
+                "type": "range",
+                "bounds": [float(p_min), float(p_max)],
+                "value_type": "float",
+            },
+        ],
+        objectives={"pr_auc": ObjectiveProperties(minimize=False)},
+    )
+
+    # load pre-existing results
+    results_file = os.path.join(output_dir, "results.csv")
+    if os.path.exists(results_file):
+        df = pd.read_csv(results_file)
+        for i, row in df.iterrows():
+            params = {
+                "d": float(snap_to_grid(row["d"], d_min, d_step)),
+                "r": float(snap_to_grid(row["r"], r_min, r_step)),
+                "q": float(snap_to_grid(row["q"], q_min, q_step)),
+                "p": float(snap_to_grid(row["p"], p_min, p_step)),
+            }
+            score = calc_pr_auc(row["TP"], row["FP"], row["FN"])
+            _, trial_index = ax_client.attach_trial(params)
+            ax_client.complete_trial(
+                trial_index=trial_index,
+                raw_data={"pr_auc": (score, None)},
+            )
+
+    # BO loop
+    for trial in range(n_trials):
+        print(f"Running Bayesian Optimization Trial {trial + 1}/{n_trials}")
+
+        # ask for the next candidate(s)
+        if batch_size > 1:
+            parameterizations, trial_index = ax_client.get_next_trials(
+                max_trials=batch_size
+            )
+        else:
+            parameterization, trial_index = ax_client.get_next_trial()
+            parameterizations = {trial_index: parameterization}
+
+        # evaluate each candidate
+        for t_index, params in parameterizations.items():
+            d = int(snap_to_grid(params["d"], d_min, d_step))
+            r = round(snap_to_grid(params["r"], r_min, r_step), 2)
+            q = round(snap_to_grid(params["q"], q_min, q_step), 2)
+            p = int(snap_to_grid(params["p"], p_min, p_step))
+
+            # this function is parallelized for each SV but runs one calibration test for the given parameters
+            results = run_calibration_test(
+                sv_df,
+                sv_subset,
+                d=d,
+                r=r,
+                q=q,
+                pen=p,
+                input_dir=input_dir,
+                output_dir=output_dir,
+                sample_ids=sample_ids,
+            )
+
+        for t_index, params in parameterizations.items():
+            score = calc_pr_auc(results["TP"], results["FP"], results["FN"])
+            print(f"Trial {t_index} F1 score = {score:.4f}")
+            ax_client.complete_trial(
+                trial_index=t_index,
+                raw_data={"pr_auc": (score, None)},
+            )
+
+    # after BO loop, get the best parameters and run one final calibration test with those parameters to save the outputs
+    best_params, metrics = ax_client.get_best_parameters()
+    best_d = int(snap_to_grid(best_params["d"], d_min, d_step))
+    best_r = round(snap_to_grid(best_params["r"], r_min, r_step), 2)
+    best_q = round(snap_to_grid(best_params["q"], q_min, q_step), 2)
+    best_p = int(snap_to_grid(best_params["p"], p_min, p_step))
+
+    print(
+        f"Best parameters found by Bayesian Optimization: d={best_d}, r={best_r}, q={best_q}, p={best_p}"
+    )
+    print(f"Best F1 score: {metrics[0]["pr_auc"]:.4f}")
+
+    best_result = pd.DataFrame(
+        [
+            {
+                "d": best_d,
+                "r": best_r,
+                "q": best_q,
+                "p": best_p,
+                "pr_auc": metrics[0]["pr_auc"],
+            }
+        ]
+    )
+    best_result.to_csv(os.path.join(output_dir, "best_params.csv"), index=False)
+
+    return best_params
+
+
+def run_calibration_grid_search(
+    sv_df: pd.DataFrame,
+    sv_subset: pd.DataFrame,
+    sample_ids: Set[str],
+    *,
+    input_dir: str,
+    output_dir: str,
+    d_min: int,
+    d_max: int,
+    d_step: int,
+    r_min: float,
+    r_max: float,
+    r_step: float,
+    q_min: float,
+    q_max: float,
+    q_step: float,
+    p_min: int,
+    p_max: int,
+    p_step: int,
+):
+    """Run calibration tests over a grid of distance and reciprocal overlap thresholds."""
+    # run calibration tests over grid of d, r, and q values
+    for q in np.arange(q_min, q_max + 0.01, q_step):
+        for d in range(d_min, d_max + 1, d_step):
+            for r in np.arange(r_min, r_max + 0.01, r_step):
+                for pen in range(p_min, p_max + 1, p_step):
+                    run_calibration_test(
+                        sv_df,
+                        sv_subset,
+                        d=d,
+                        r=round(r, 2),
+                        q=round(q, 2),
+                        pen=pen,
+                        input_dir=input_dir,
+                        output_dir=output_dir,
+                        sample_ids=sample_ids,
+                    )
+
+
 def download_stix_data_inner(
     row: pd.Series,
     output_dir: str,
@@ -404,19 +612,12 @@ def download_stix_data(
     q: float,
 ):
     """Download stix data for all regions in the subset before running calibration tests."""
-    output_dir = os.path.join(input_dir, "stix_output")
-    predownloaded_outputs = os.path.join(input_dir, f"stix_output_{q}")
-
-    # check if the data has already been downloaded
-    if os.path.exists(predownloaded_outputs):
-        os.rename(predownloaded_outputs, output_dir)
-    else:
-        os.mkdir(output_dir)
+    output_dir = os.path.join(input_dir, f"stix_output_{q}")
 
     # set up the correct file paths in case we need to query more SVs
     partial_outputs_dir = os.path.join(output_dir, "partial_outputs")
     if not os.path.exists(partial_outputs_dir):
-        os.mkdir(partial_outputs_dir)
+        os.makedirs(partial_outputs_dir)
 
     with multiprocessing.Manager():
         p = multiprocessing.Pool(SLURM_CPUS)
@@ -430,89 +631,6 @@ def download_stix_data(
         p.join()
 
     os.rmdir(partial_outputs_dir)
-
-
-def run_calibration_nelder_mead(
-    sv_df: pd.DataFrame,
-    sv_subset: pd.DataFrame,
-    sample_ids: Set[str],
-    *,
-    input_dir: str,
-    output_dir: str,
-    d_min: int,
-    d_max: int,
-    d_step: int,
-    r_min: float,
-    r_max: float,
-    r_step: float,
-    q_min: float,
-    q_max: float,
-    q_step: float,
-    p_min: int,
-    p_max: int,
-    p_step: int,
-):
-    """Run calibration tests over a grid of distance and reciprocal overlap thresholds."""
-    # TODO: define an objective function
-    # and use scipy minimize with method='Nelder-Mead' to find optimal params
-    # first, download stix data for all q values that we need to loop over
-    # our objective function needs to return a score (some value of TP/FP/acc/etc)
-
-    # store the files in stix_output in a temp dir so we don't overwrite them
-    if os.path.exists(os.path.join(input_dir, "stix_output")):
-        temp_dir = os.path.join(input_dir, "stix_output_temp")
-        os.rename(os.path.join(input_dir, "stix_output"), temp_dir)
-
-
-def run_calibration_grid_search(
-    sv_df: pd.DataFrame,
-    sv_subset: pd.DataFrame,
-    sample_ids: Set[str],
-    *,
-    input_dir: str,
-    output_dir: str,
-    d_min: int,
-    d_max: int,
-    d_step: int,
-    r_min: float,
-    r_max: float,
-    r_step: float,
-    q_min: float,
-    q_max: float,
-    q_step: float,
-    p_min: int,
-    p_max: int,
-    p_step: int,
-):
-    """Run calibration tests over a grid of distance and reciprocal overlap thresholds."""
-    # run calibration tests over grid of d, r, and q values
-    for q in np.arange(q_min, q_max + 0.01, q_step):
-        # check that all stix data has been downloaded for regions in sv_subset before running calibration tests
-        download_stix_data(sv_subset, input_dir, q)
-        for d in range(d_min, d_max + 1, d_step):
-            for r in np.arange(r_min, r_max + 0.01, r_step):
-                for pen in range(p_min, p_max + 1, p_step):
-                    print(
-                        f"Running calibration for d={d}, r={r}, q={q}, p={pen}"
-                    )
-                    run_calibration_test(
-                        sv_df,
-                        sv_subset,
-                        d=d,
-                        r=round(r, 2),
-                        q=round(q, 2),
-                        pen=pen,
-                        input_dir=input_dir,
-                        output_dir=output_dir,
-                        sample_ids=sample_ids,
-                    )
-
-        # move stix data to a new dir if we're testing more than one q value
-        if q_min != q_max:
-            os.rename(
-                os.path.join(input_dir, "stix_output"),
-                os.path.join(input_dir, f"stix_output_{q}"),
-            )
 
 
 def run_calibration(search_func: str = "grid_search", **kwargs):
@@ -533,13 +651,19 @@ def run_calibration(search_func: str = "grid_search", **kwargs):
         for line in f:
             sample_ids.add(line.strip())
 
+    for q in np.arange(
+        kwargs["q_min"], kwargs["q_max"] + 0.01, kwargs["q_step"]
+    ):
+        # check that all stix data has been downloaded for regions in sv_subset before running calibration tests
+        download_stix_data(sv_subset, input_dir, q)
+
     # store the files in stix_output in a temp dir so we don't overwrite them
     if os.path.exists(output_dir):
         temp_dir = os.path.join(input_dir, "stix_output_temp")
         os.rename(output_dir, temp_dir)
 
-    if search_func == "nelder_mead":
-        run_calibration_nelder_mead(sv_df, sv_subset, sample_ids, **kwargs)
+    if search_func == "bayesian_optimization":
+        run_calibration_bayesian_opt(sv_df, sv_subset, sample_ids, **kwargs)
     else:
         run_calibration_grid_search(sv_df, sv_subset, sample_ids, **kwargs)
 
@@ -577,6 +701,12 @@ def main():
         type=str,
         help="Txt file containing sample IDs with long read data available",
         default="sample_ids.txt",
+    )
+    parser.add_argument(
+        "--search_func",
+        type=str,
+        help="Search function to use for calibration (grid_search or bayesian_optimization)",
+        default="grid_search",
     )
     parser.add_argument(
         "--d_min",
@@ -655,7 +785,7 @@ def main():
     print("Using the following arguments:", args, "\n")
 
     run_calibration(
-        "grid_search",
+        args.search_func,
         input_dir=args.input_dir,
         output_dir=args.output_dir,
         sv_regions_file=args.regions,
