@@ -353,7 +353,7 @@ def run_calibration_test(
         output_dir, "d{}_r{:.2f}_q{:.2f}_p{}".format(d, r, q, pen)
     )
     if not os.path.exists(results_dir):
-        os.mkdir(results_dir)
+        os.makedirs(results_dir)
     concat_multi_processed_sv_files(
         processed_file_dir, OUTPUT_FILE_NAME, results_dir
     )
@@ -380,6 +380,8 @@ def run_calibration_test(
                 results["TN"],
             )
         )
+
+    return results
 
 
 def snap_to_grid(value: float, min_val: float, step: float) -> float:
@@ -520,7 +522,7 @@ def run_calibration_bayesian_opt(
     print(
         f"Best parameters found by Bayesian Optimization: d={best_d}, r={best_r}, q={best_q}, p={best_p}"
     )
-    print(f"Best F1 score: {metrics[0]["pr_auc"]:.4f}")
+    print(f"Best F1 score: {metrics[0]['pr_auc']:.4f}")
 
     best_result = pd.DataFrame(
         [
@@ -633,12 +635,15 @@ def download_stix_data(
     os.rmdir(partial_outputs_dir)
 
 
-def run_calibration(search_func: str = "grid_search", **kwargs):
+def run_calibration(
+    sv_lookup_file: str,
+    sample_ids_file: str,
+    sv_regions_file: str,
+    search_func: str,
+    **kwargs,
+):
     input_dir = kwargs["input_dir"]
     output_dir = kwargs["output_dir"]
-    sv_regions_file = kwargs["sv_regions_file"]
-    sv_lookup_file = kwargs["sv_lookup_file"]
-    sample_ids_file = kwargs["sample_ids_file"]
 
     sv_subset = pd.read_csv(os.path.join(input_dir, sv_regions_file))
     sv_subset["id"] = sv_subset.apply(
@@ -656,11 +661,6 @@ def run_calibration(search_func: str = "grid_search", **kwargs):
     ):
         # check that all stix data has been downloaded for regions in sv_subset before running calibration tests
         download_stix_data(sv_subset, input_dir, q)
-
-    # store the files in stix_output in a temp dir so we don't overwrite them
-    if os.path.exists(output_dir):
-        temp_dir = os.path.join(input_dir, "stix_output_temp")
-        os.rename(output_dir, temp_dir)
 
     if search_func == "bayesian_optimization":
         run_calibration_bayesian_opt(sv_df, sv_subset, sample_ids, **kwargs)
@@ -785,12 +785,12 @@ def main():
     print("Using the following arguments:", args, "\n")
 
     run_calibration(
+        args.sv_lookup,
+        args.sample_ids,
+        args.regions,
         args.search_func,
         input_dir=args.input_dir,
         output_dir=args.output_dir,
-        sv_regions_file=args.regions,
-        sv_lookup_file=args.sv_lookup,
-        sample_ids_file=args.sample_ids,
         d_min=args.d_min,
         d_max=args.d_max,
         d_step=args.d_step,
