@@ -459,10 +459,10 @@ def run_calibration_bayesian_opt(
         df = pd.read_csv(results_file)
         for i, row in df.iterrows():
             params = {
-                "d": float(snap_to_grid(row["d"], d_min, d_step)),
-                "r": float(snap_to_grid(row["r"], r_min, r_step)),
+                "d": float(row["d"]),
+                "r": float(row["r"]),
                 "q": float(snap_to_grid(row["q"], q_min, q_step)),
-                "p": float(snap_to_grid(row["p"], p_min, p_step)),
+                "p": float(row["p"]),
             }
             score = calc_pr_auc(row["TP"], row["FP"], row["FN"])
             _, trial_index = ax_client.attach_trial(params)
@@ -643,7 +643,6 @@ def run_calibration(
     **kwargs,
 ):
     input_dir = kwargs["input_dir"]
-    output_dir = kwargs["output_dir"]
 
     sv_subset = pd.read_csv(os.path.join(input_dir, sv_regions_file))
     sv_subset["id"] = sv_subset.apply(

@@ -1,6 +1,7 @@
 import ast
 import os
 import subprocess
+import re
 import random
 import pysam
 import numpy as np
@@ -9,6 +10,10 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Rectangle
 from matplotlib.lines import Line2D
 from matplotlib.ticker import FixedLocator
+import matplotlib.gridspec as gridspec
+import matplotlib.ticker as ticker
+from matplotlib.colors import Normalize
+from matplotlib.cm import ScalarMappable
 from collections import Counter, defaultdict
 from viz import plot_2d_coords, plot_single_sv
 from query_sv import query_stix
@@ -1350,15 +1355,19 @@ def plot_num_trials(path: str = ""):
 
 
 def download_l_len_plots():
-    df = pd.read_csv("calibration/results/d300_r0.50_q0.80_p200/svs_n_modes.csv")
+    df = pd.read_csv(
+        "calibration/results/d300_r0.50_q0.80_p200/svs_n_modes.csv"
+    )
     df = df[df["confidence"] == "high"]
     for n_modes in list(range(1, 4)):
         subset = df[df["num_modes"] == n_modes]
-        out_dir = f"calibration/results/d300_r0.50_q0.80_p200/plots/{n_modes}modes"
+        out_dir = (
+            f"calibration/results/d300_r0.50_q0.80_p200/plots/{n_modes}modes"
+        )
         if not os.path.exists:
             os.mkdir(out_dir)
         for _, row in subset.sample(n=10).iterrows():
-            l, r = row['sv_id'].split("_")
+            l, r = row["sv_id"].split("_")
             query_stix(
                 l=l,
                 r=r,
@@ -1370,9 +1379,131 @@ def download_l_len_plots():
             )
 
 
-if __name__ == "__main__":
+def bayesian_optimization_iterations(file: str):
+    """
+    Plot the F1 score and parameter values at each iteration of the
+    Bayesian optimization process to show how the optimization converges
+    over time.
+    """
+    # parse eofile for each iteration
+    param_names = [
+        "distance_at_0_penalty",
+        "overlap_at_0_penalty",
+        "query_overlap",
+        "max_penalty_value",
+    ]
+    param_values = [[] for _ in range(4)]  # d, r, q, p
+    f1_scores = []
+    with open(file, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            # match the output line for parameter values
+            match = re.match(
+                r"Running calibration for d=(\d+), r=([\d.]+), q=([\d.]+), p=(\d+)",
+                line,
+            )
+            if match:
+                d = int(match.group(1))
+                param_values[0].append(d)
 
-    figures = [7]
+                r = float(match.group(2))
+                param_values[1].append(r)
+
+                q = float(match.group(3))
+                param_values[2].append(q)
+
+                p = int(match.group(4))
+                param_values[3].append(p)
+
+            # match the output line for F1 score: Trial 23 F1 score = 0.4281
+            match_f1 = re.match(
+                r"Trial \d+ F1 score = ([\d.]+)",
+                line,
+            )
+            if match_f1:
+                f1_score = float(match_f1.group(1))
+                f1_scores.append(f1_score)
+    f1_scores = np.array(f1_scores)
+    iterations = list(range(1, len(f1_scores) + 1))
+    best_so_far = np.maximum.accumulate(f1_scores)
+    best_idx = np.argmax(f1_scores)
+
+    # plot F1 score and parameter values over iterations
+    fig = plt.figure(figsize=(13, 7))
+    gs = gridspec.GridSpec(
+        2,
+        2,
+        figure=fig,
+        height_ratios=[1.6, 1],
+        width_ratios=[1, 0.03],
+        hspace=0.12,
+        wspace=0.04,
+        left=0.13,
+        right=0.94,
+        top=0.95,
+        bottom=0.07,
+    )
+
+    # normalize parameter values
+    params_raw = np.array(param_values).T  # shape (N_ITER, 4)
+    params_norm = (params_raw - params_raw.min(axis=0)) / (
+        params_raw.max(axis=0) - params_raw.min(axis=0)
+    )
+
+    ax_f1 = fig.add_subplot(gs[0, 0])
+    ax_heat = fig.add_subplot(gs[1, 0])
+    ax_cbar = fig.add_subplot(gs[:, 1])
+
+    # top plot of F1 scores
+    # f1 score at each iteration
+    ax_f1.scatter(iterations, f1_scores, color="mediumslateblue", zorder=2)
+
+    # best so far line
+    ax_f1.plot(iterations, best_so_far, color="steelblue")
+    ax_f1.fill_between(iterations, best_so_far, alpha=0.10, color="steelblue")
+
+    # mark the global best
+    ax_f1.scatter([best_idx + 1], [f1_scores[best_idx]], color="gold", zorder=3)
+
+    ax_f1.set_xlim(0.5, len(iterations) + 0.5)
+    ax_f1.set_ylim(
+        max(0, f1_scores.min() - 0.06), min(1, f1_scores.max() + 0.06)
+    )
+    ax_f1.set_ylabel("F1 Score")
+
+    # bottom plot of parameter values as a heatmap
+    ax_heat.imshow(
+        params_norm.T,
+        aspect="auto",
+        cmap="viridis",
+        interpolation="nearest",
+        extent=[0.5, len(iterations) + 0.5, -0.5, len(param_names) - 0.5],
+        origin="lower",
+    )
+    ax_heat.axvline(best_idx + 1, color="gold", zorder=3)
+    ax_heat.set_xlim(0.5, len(iterations) + 0.5)
+    ax_heat.set_ylim(-0.5, len(param_names) - 0.5)
+    ax_heat.set_yticks(range(len(param_names)))
+    ax_heat.set_yticklabels(param_names)
+    ax_heat.set_xlabel("Iteration")
+    ax_heat.xaxis.set_major_locator(ticker.MultipleLocator(5))
+    for y in np.arange(0.5, len(param_names) - 0.5, 1):
+        ax_heat.axhline(y)
+
+    # heatmap colorbar
+    norm = Normalize(vmin=0, vmax=1)
+    cb = fig.colorbar(
+        ScalarMappable(norm=norm, cmap="viridis"),
+        cax=ax_cbar,
+        orientation="vertical",
+    )
+    cb.set_label("Normalised\nparameter value")
+
+    plt.show()
+
+
+if __name__ == "__main__":
+    figures = [8]
 
     # Figure 1
     if 1 in figures:
@@ -1415,3 +1546,6 @@ if __name__ == "__main__":
     # SI figure - confidence vs. number of trials
     if 7 in figures:
         plot_num_trials()
+
+    if 8 in figures:
+        bayesian_optimization_iterations("calibration/results/bo.out")
