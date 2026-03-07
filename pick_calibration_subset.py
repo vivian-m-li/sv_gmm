@@ -270,7 +270,7 @@ def subset_svs_from_jaccard(
     """
     Picks a subset of SVs for the calibration test based on Jaccard similarity of the genotyping results.
 
-    genotyping_results_file is a csv file with columns: id, jaccard_index
+    genotyping_results_file is a csv file with mandatory columns: svid, jaccard
     """
     # read the sv lookup file
     # if it is a vcf, load it as a dataframe
@@ -280,19 +280,27 @@ def subset_svs_from_jaccard(
         df = pd.read_csv(os.path.join(input_dir, sv_lookup_file))
 
     # merge the file with the genotyping results file on sv id
-    geno_df = pd.read_csv(os.path.join(input_dir, genotyping_results_file))
+    geno_df = pd.read_csv(
+        os.path.join(input_dir, genotyping_results_file), delimiter="\t"
+    )
+    geno_df.rename(columns={"svid": "id"}, inplace=True)
 
     # filter out SVs with no matching samples between genotyping results and original SV
-    geno_df = geno_df[geno_df["jaccard_index"] > 0]
+    geno_df = geno_df[geno_df["jaccard"] > 0]
 
     # merge dfs to get coordinates for the SVs in the genotyping results file
-    df = geno_df.merge(df[["id", "chr", "start", "stop"]], on="id", how="left")
+    df = geno_df.merge(
+        df[["id", "chr", "start", "stop"]],
+        on="id",
+        how="left",
+        suffixes=("", "_y"),
+    )
 
     # pick up to n_svs/2 SVs with jaccard index of 1 and n_svs/2 SVs with jaccard index < 1
-    svs_one_mode = df[df["jaccard_index"] == 1]
+    svs_one_mode = df[df["jaccard"] == 1]
     if svs_one_mode.shape[0] > n_svs / 2:
         svs_one_mode = svs_one_mode.sample(n=int(n_svs / 2), random_state=42)
-    svs_multi_modes = df[df["jaccard_index"] < 1].sample(
+    svs_multi_modes = df[df["jaccard"] < 1].sample(
         n=svs_one_mode.shape[0], random_state=42
     )
 
@@ -369,6 +377,6 @@ if __name__ == "__main__":
     subset_svs_from_jaccard(
         input_dir="calibration",
         sv_lookup_file="deletions.csv",
-        genotyping_results_file="genotyping.csv",
+        genotyping_results_file="1k_sr_sv_non_ref-1k_sr_lr_gt_non_ref.bed.gz",
         n_svs=1000,
     )
