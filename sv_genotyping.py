@@ -201,13 +201,14 @@ def convert_results_to_vcf(out_file: str):
             expanded_vcf.write(new_record)
 
             lookup_df.loc[len(lookup_df)] = [
+                row['id'],
                 new_record.id,
-                f"{new_record.id}_{i}",
                 new_record.chrom,
                 new_record.pos,
                 new_record.stop,
                 ",".join(mode["sample_ids"]),
             ]
+    lookup_df.to_csv(out_file.replace(".vcf", "_lookup.csv"), index=False)
     expanded_vcf.close()
 
 
