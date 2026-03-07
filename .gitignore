@@ -20,7 +20,7 @@ data_dump
 *.cram*
 assets
 results
-calibration
+calibration*
 test_stix_queries
 plot_critic*
 sv_genotyping

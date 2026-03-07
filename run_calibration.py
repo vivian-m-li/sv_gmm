@@ -170,11 +170,15 @@ def find_pareto_front():
     plt.show()
 
 
-def calc_confusion_matrix(
+def get_confusion_matrix(
     sv_subset: pd.DataFrame,
     svs_n_modes: pd.DataFrame,
 ) -> Dict[str, float]:
-    """Calculate confusion matrix based on predicted vs actual number of SVs."""
+    """
+    Calculate confusion matrix based on predicted vs actual number of SVs.
+    The actual number of SVs are determined based on the long read data
+    and are defined in the sv_subset.csv file.
+    """
     # remove rows that didn't run due to lack of data
     svs_n_modes = svs_n_modes.rename(
         columns={"sv_id": "id", "num_modes": "n_svs_predicted"},
@@ -234,7 +238,7 @@ def rewrite_calibration_results():
         svs_n_modes = pd.read_csv(
             os.path.join("calibration/results", dirname, "svs_n_modes.csv")
         )
-        confusion_mat = calc_confusion_matrix(sv_subset, svs_n_modes)
+        confusion_mat = get_confusion_matrix(sv_subset, svs_n_modes)
         results_df.loc[len(results_df)] = [
             d,
             r,
@@ -361,7 +365,7 @@ def run_calibration_test(
     shutil.rmtree(processed_file_dir)
 
     svs_n_modes = pd.read_csv(os.path.join(results_dir, "svs_n_modes.csv"))
-    results = calc_confusion_matrix(sv_subset, svs_n_modes)
+    results = get_confusion_matrix(sv_subset, svs_n_modes)
 
     final_output_file = os.path.join(output_dir, "results.csv")
     if not os.path.exists(final_output_file):
@@ -486,10 +490,10 @@ def run_calibration_bayesian_opt(
 
         # evaluate each candidate
         for t_index, params in parameterizations.items():
-            d = int(snap_to_grid(params["d"], d_min, d_step))
-            r = round(snap_to_grid(params["r"], r_min, r_step), 2)
+            d = int(params["d"], d_min, d_step)
+            r = round(params["r"], r_min, r_step, 2)
             q = round(snap_to_grid(params["q"], q_min, q_step), 2)
-            p = int(snap_to_grid(params["p"], p_min, p_step))
+            p = int(params["p"], p_min, p_step)
 
             # this function is parallelized for each SV but runs one calibration test for the given parameters
             results = run_calibration_test(
@@ -659,7 +663,7 @@ def run_calibration(
         kwargs["q_min"], kwargs["q_max"] + 0.01, kwargs["q_step"]
     ):
         # check that all stix data has been downloaded for regions in sv_subset before running calibration tests
-        download_stix_data(sv_subset, input_dir, q)
+        download_stix_data(sv_subset, input_dir, round(q, 2))
 
     if search_func == "bayesian_optimization":
         run_calibration_bayesian_opt(sv_df, sv_subset, sample_ids, **kwargs)

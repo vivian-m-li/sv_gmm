@@ -391,7 +391,14 @@ def get_n_modes(
 ):
     """Get the number of modes and confidence for each SV."""
     sv_df = pd.DataFrame(
-        columns=["sv_id", "num_modes", "confidence", "num_modes_2"]
+        columns=[
+            "sv_id",
+            "num_modes",
+            "confidence",
+            "ci_lower",
+            "ci_upper",
+            "num_modes_2",
+        ]
     )
 
     if deletions_df is None:
@@ -411,7 +418,7 @@ def get_n_modes(
         # if the GMM defaulted to 1 mode because there were 1-10 samples,
         # label it as 1 mode inconclusively
         if rows["num_samples_run"].values[0] <= 10:
-            sv_df.loc[len(sv_df)] = [sv_id, 1, "inconclusive", np.nan]
+            sv_df.loc[len(sv_df)] = [sv_id, 1, "inconclusive", 0, 0, np.nan]
             continue
 
         outcomes = rows["num_modes"].values
@@ -429,7 +436,7 @@ def get_n_modes(
             new_row.append("medium")
         else:
             new_row.append("low")
-        new_row.append(num_modes_2)
+        new_row.extend([ci[0][0], ci[1][0], num_modes_2])
 
         sv_df.loc[len(sv_df)] = new_row
     sv_df.to_csv(f"{output_dir}/svs_n_modes.csv", index=False)

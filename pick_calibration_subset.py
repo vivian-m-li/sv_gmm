@@ -200,7 +200,14 @@ def subset_svs(
     sample_ids_file: Optional[str],
     bedtools_path: str,
     n_svs: int,
-):
+) -> None:
+    """
+    Picks a subset of SVs for the calibration test. The subset consists of n_svs single SVs and n_svs pairs of SVs with >= 30% reciprocal overlap.
+     - If the input SV lookup file is not already filtered, it filters the SVs based on samples with long read data available and number of samples with the SV.
+     - It then runs bedtools intersect to find pairs of SVs with >= 30% reciprocal overlap.
+     - Finally, it picks n_svs single SVs that are not in the pairs set and n_svs pairs of SVs for the calibration test and writes them to separate csv files.
+     - It also writes a combined csv file with all the picked SVs and their coordinates.
+    """
     # read the sv lookup file
     # if it is a vcf, load it as a dataframe
     if sv_lookup_file.endswith(".vcf") or sv_lookup_file.endswith(".vcf.gz"):
@@ -248,6 +255,65 @@ def subset_svs(
             max(row1["stop"], row2["stop"]),
             2,
         ]
+    subset_path = os.path.join(input_dir, "sv_subset.csv")
+    subset_df.to_csv(subset_path, index=False)
+    print(f"Wrote subset of SVs to {subset_path}")
+
+
+def subset_svs_from_jaccard(
+    *,
+    input_dir: str,
+    sv_lookup_file: str,
+    genotyping_results_file: str,
+    n_svs: int,
+):
+    """
+    Picks a subset of SVs for the calibration test based on Jaccard similarity of the genotyping results.
+
+    genotyping_results_file is a csv file with mandatory columns: svid, jaccard
+    """
+    # read the sv lookup file
+    # if it is a vcf, load it as a dataframe
+    if sv_lookup_file.endswith(".vcf") or sv_lookup_file.endswith(".vcf.gz"):
+        df = load_vcf(input_dir, sv_lookup_file)
+    else:
+        df = pd.read_csv(os.path.join(input_dir, sv_lookup_file))
+
+    # merge the file with the genotyping results file on sv id
+    geno_df = pd.read_csv(
+        os.path.join(input_dir, genotyping_results_file), delimiter="\t"
+    )
+    geno_df.rename(columns={"svid": "id"}, inplace=True)
+
+    # filter out SVs with no matching samples between genotyping results and original SV
+    geno_df = geno_df[geno_df["jaccard"] > 0]
+
+    # merge dfs to get coordinates for the SVs in the genotyping results file
+    df = geno_df.merge(
+        df[["id", "chr", "start", "stop"]],
+        on="id",
+        how="left",
+        suffixes=("", "_y"),
+    )
+
+    # pick up to n_svs/2 SVs with jaccard index of 1 and n_svs/2 SVs with jaccard index < 1
+    svs_one_mode = df[df["jaccard"] == 1]
+    if svs_one_mode.shape[0] > n_svs / 2:
+        svs_one_mode = svs_one_mode.sample(n=int(n_svs / 2), random_state=42)
+    svs_multi_modes = df[df["jaccard"] < 1].sample(
+        n=svs_one_mode.shape[0], random_state=42
+    )
+
+    subset_df = pd.DataFrame(columns=["chr", "start", "stop", "n_svs_actual"])
+    for sv_df, n_svs_actual in zip([svs_one_mode, svs_multi_modes], (1, 2)):
+        for _, row in sv_df.iterrows():
+            subset_df.loc[len(subset_df)] = [
+                row["chr"],
+                row["start"],
+                row["stop"],
+                n_svs_actual,
+            ]
+
     subset_path = os.path.join(input_dir, "sv_subset.csv")
     subset_df.to_csv(subset_path, index=False)
     print(f"Wrote subset of SVs to {subset_path}")
@@ -307,4 +373,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    subset_svs_from_jaccard(
+        input_dir="calibration",
+        sv_lookup_file="deletions.csv",
+        genotyping_results_file="1k_sr_sv_non_ref-1k_sr_lr_gt_non_ref.bed.gz",
+        n_svs=1000,
+    )

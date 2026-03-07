@@ -15,6 +15,67 @@ FILE_DIR = "sv_genotyping"
 GTs = [(0, 1), (1, 0), (1, 1)]
 
 
+def vcf_to_csv(
+    in_file: str,
+    out_file: str,
+    sv_ids: set[str] | None,
+    sample_ids: set[str] | None,
+) -> None:
+    """
+    Converts a vcf to a csv with fields id, chr, start, end, sample_ids.
+    If sv_ids is provided, only keeps SVs in sv_ids.
+    If sample_ids is provided, only keeps SVs with at least one sample in sample_ids.
+    """
+    df = pd.DataFrame(columns=["id", "chr", "start", "end", "sample_ids"])
+    vcf_in = pysam.VariantFile(in_file)
+    for record in vcf_in.fetch():
+        for record in vcf_in.fetch():
+            if sv_ids is not None and record.id not in sv_ids:
+                continue
+
+            info = dict(record.info)
+            sv_type = info.get("SVTYPE")
+            if sv_type is None:
+                pattern = r"^chr[^-]+-\d+-([A-Z]+)->"
+                match = re.match(pattern, record.id)
+                sv_type = match.group(1)
+
+            # only keep deletion records
+            if sv_type != "DEL" or chr in ["X", "Y"]:
+                continue
+
+            record_samples = [
+                s_id
+                for s_id, s_gt in record.samples.items()
+                if s_id in sample_ids and s_gt["GT"] in GTs
+            ]
+            df.loc[len(df)] = [
+                record.id,
+                record.chrom,
+                record.start,
+                record.stop,
+                ",".join(record_samples),
+            ]
+    vcf_in.close()
+    df.to_csv(out_file, index=False)
+
+
+def vcf_to_csv_filtered(in_file: str, out_file: str):
+    """
+    Loads the SVs that were run through SPLIT and the samples that have long
+    reads, and filters the VCF to only keep those SVs and samples before
+    converting to CSV.
+    """
+    svs_split_df = pd.read_csv("results/svs_n_modes.csv")
+    svs_split_df = svs_split_df[svs_split_df["confidence"] != "inconclusive"]
+    svs_run = set(svs_split_df["sv_id"].values)
+
+    lr_samples_df = pd.read_csv("long_reads/long_read_samples.csv")
+    lr_samples = set(lr_samples_df["sample_id"].values)
+
+    vcf_to_csv(in_file, out_file, sv_ids=svs_run, sample_ids=lr_samples)
+
+
 def vcf_to_bed(in_file: str, out_file: str, sample_ids: Set[int]) -> None:
     """Converts a vcf to a bed file to be used with bedtools intersect. Writes out columns chr, start, end, id"""
 
@@ -201,7 +262,7 @@ def convert_results_to_vcf(out_file: str):
             expanded_vcf.write(new_record)
 
             lookup_df.loc[len(lookup_df)] = [
-                row['id'],
+                row["id"],
                 new_record.id,
                 new_record.chrom,
                 new_record.pos,
@@ -238,4 +299,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    vcf_to_csv_filtered(
+        "1kgp/1kg.subset.vcf.gz", "sv_genotyping/1kg.subset.split_svs_only.csv"
+    )
