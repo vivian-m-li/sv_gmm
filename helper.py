@@ -9,7 +9,9 @@ from typing import List, Optional, Tuple
 
 PROCESSED_SVS_DIR = "processed_svs"
 
-"""Get commonly used dataframes"""
+# ----------------------------
+# Get commonly used dataframes
+# ----------------------------
 
 
 def get_deletions_df(stem: str = "1kgp"):
@@ -211,9 +213,9 @@ def get_sample_sequencing_centers():
     return df
 
 
-"""Handle varying insert sizes"""
-
-
+# ----------------------------
+# Handle varying insert sizes
+# ----------------------------
 def get_insert_sizes(get_files: bool = False):
     """Get mean insert sizes for all samples in 1kgp. If get_files is True, will download mapped files from BAS files."""
     if get_files:
@@ -299,7 +301,9 @@ def get_insert_size_diff():
     df.to_csv("1kgp/insert_size_compare.csv", index=False)
 
 
-"""Dirichlet helpers"""
+# ------------------
+# Dirichlet helpers
+# ------------------
 
 
 def calculate_posteriors(alpha):
@@ -351,6 +355,18 @@ def reciprocal_overlap(sv1: Tuple[int, int], sv2: Tuple[int, int]) -> float:
     sv1_length = end1 - start1
     sv2_length = end2 - start2
     return min(overlap_length / sv1_length, overlap_length / sv2_length)
+
+
+def calc_pr_auc(tp: float, fp: float, fn: float) -> float:
+    """
+    Compute a scalar PR-AUC proxy from confusion matrix fractions.
+    Approximate PR-AUC using the F1 score.
+    """
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    if precision + recall == 0:
+        return 0.0
+    return 2 * precision * recall / (precision + recall)  # F1
 
 
 def copy_stix_output_from_fiji(sv_id: str):
