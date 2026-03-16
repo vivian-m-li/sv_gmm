@@ -1497,7 +1497,7 @@ def bayesian_optimization_iterations(file: str):
         cax=ax_cbar,
         orientation="vertical",
     )
-    cb.set_label("Normalised\nparameter value")
+    cb.set_label("Normalized\nparameter value")
 
     plt.show()
 

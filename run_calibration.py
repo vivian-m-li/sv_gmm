@@ -463,10 +463,10 @@ def run_calibration_bayesian_opt(
         df = pd.read_csv(results_file)
         for i, row in df.iterrows():
             params = {
-                "d": float(row["d"]),
-                "r": float(row["r"]),
-                "q": float(snap_to_grid(row["q"], q_min, q_step)),
-                "p": float(row["p"]),
+                "d": int(row["d"]),
+                "r": round(row["r"], 2),
+                "q": round(snap_to_grid(row["q"], q_min, q_step), 2),
+                "p": int(row["p"]),
             }
             score = calc_pr_auc(row["TP"], row["FP"], row["FN"])
             _, trial_index = ax_client.attach_trial(params)
@@ -490,10 +490,10 @@ def run_calibration_bayesian_opt(
 
         # evaluate each candidate
         for t_index, params in parameterizations.items():
-            d = int(params["d"], d_min, d_step)
-            r = round(params["r"], r_min, r_step, 2)
+            d = int(params["d"])
+            r = round(params["r"], 2)
             q = round(snap_to_grid(params["q"], q_min, q_step), 2)
-            p = int(params["p"], p_min, p_step)
+            p = int(params["p"])
 
             # this function is parallelized for each SV but runs one calibration test for the given parameters
             results = run_calibration_test(
@@ -518,10 +518,10 @@ def run_calibration_bayesian_opt(
 
     # after BO loop, get the best parameters and run one final calibration test with those parameters to save the outputs
     best_params, metrics = ax_client.get_best_parameters()
-    best_d = int(snap_to_grid(best_params["d"], d_min, d_step))
-    best_r = round(snap_to_grid(best_params["r"], r_min, r_step), 2)
+    best_d = int(best_params["d"])
+    best_r = round(best_params["r"], 2)
     best_q = round(snap_to_grid(best_params["q"], q_min, q_step), 2)
-    best_p = int(snap_to_grid(best_params["p"], p_min, p_step))
+    best_p = int(best_params["p"])
 
     print(
         f"Best parameters found by Bayesian Optimization: d={best_d}, r={best_r}, q={best_q}, p={best_p}"
