@@ -190,7 +190,12 @@ def process_input_files(
 
 
 def giggle_format(chromosome: str, position: int):
-    return f"{chromosome.lower()}:{position}"
+    chr_formatted = (
+        chromosome.lower().strip("chr")
+        if type(chromosome) is str
+        else str(chromosome)
+    )
+    return f"{chr_formatted}:{position}"
 
 
 def stix_format(s: str):

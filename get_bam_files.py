@@ -94,7 +94,14 @@ def samplot_viz():
             row = lookup[lookup["id"] == sv_id].iloc[0]
             subprocess.run(
                 ["bash", "samplot_viz.sh"]
-                + [sv_id, row["chr"], str(row["start"]), str(row["stop"])],
+                + [  # noqa
+                    sv_id,
+                    row["chr"],
+                    str(row["start"]),
+                    str(row["stop"]),
+                    "long_reads/bam_files",
+                    "long_reads/samplot_viz",
+                ],
                 capture_output=True,
                 text=True,
             )

@@ -264,12 +264,12 @@ def run_dirichlet_inner(
     r: float,
     pen: int,
 ):
-    # filter reference samples is set to false because we don't have references for regions, only SVs
+    # get reads from stix file and filter reference samples
     reads, num_samples = get_raw_data(
         row,
         input_dir,
         stix_file_dir=os.path.join(input_dir, f"stix_output_{q}"),
-        filter_reference_samples=False,
+        filter_reference_samples=True,
         print_messages=False,
     )
 
@@ -310,7 +310,6 @@ def run_dirichlet_inner(
 
 def run_calibration_test(
     sv_df: pd.DataFrame,
-    sv_subset: pd.DataFrame,
     *,
     d: int,
     r: float,
@@ -335,7 +334,7 @@ def run_calibration_test(
     with multiprocessing.Manager():
         p = multiprocessing.Pool(SLURM_CPUS)
         args = []
-        for _, row in sv_subset.iterrows():
+        for _, row in sv_df.iterrows():
             args.append(
                 (
                     row,
@@ -361,11 +360,11 @@ def run_calibration_test(
     concat_multi_processed_sv_files(
         processed_file_dir, OUTPUT_FILE_NAME, results_dir
     )
-    write_post_processed_files(input_dir, results_dir, sv_subset, True)
+    write_post_processed_files(input_dir, results_dir, sv_df[["id"]], True)
     shutil.rmtree(processed_file_dir)
 
     svs_n_modes = pd.read_csv(os.path.join(results_dir, "svs_n_modes.csv"))
-    results = get_confusion_matrix(sv_subset, svs_n_modes)
+    results = get_confusion_matrix(sv_df[["id", "n_svs_actual"]], svs_n_modes)
 
     final_output_file = os.path.join(output_dir, "results.csv")
     if not os.path.exists(final_output_file):
@@ -396,7 +395,6 @@ def snap_to_grid(value: float, min_val: float, step: float) -> float:
 
 def run_calibration_bayesian_opt(
     sv_df: pd.DataFrame,
-    sv_subset: pd.DataFrame,
     sample_ids: Set[str],
     *,
     input_dir: str,
@@ -498,7 +496,6 @@ def run_calibration_bayesian_opt(
             # this function is parallelized for each SV but runs one calibration test for the given parameters
             results = run_calibration_test(
                 sv_df,
-                sv_subset,
                 d=d,
                 r=r,
                 q=q,
@@ -546,7 +543,6 @@ def run_calibration_bayesian_opt(
 
 def run_calibration_grid_search(
     sv_df: pd.DataFrame,
-    sv_subset: pd.DataFrame,
     sample_ids: Set[str],
     *,
     input_dir: str,
@@ -572,7 +568,6 @@ def run_calibration_grid_search(
                 for pen in range(p_min, p_max + 1, p_step):
                     run_calibration_test(
                         sv_df,
-                        sv_subset,
                         d=d,
                         r=round(r, 2),
                         q=round(q, 2),
@@ -654,6 +649,8 @@ def run_calibration(
         axis=1,
     )
     sv_df = pd.read_csv(os.path.join(input_dir, sv_lookup_file))
+    sv_df.rename(columns={"id": "og_sv_id"}, inplace=True)
+    merged_df = sv_subset.merge(sv_df, on=["chr", "start", "stop"], how="left")
     sample_ids = set()
     with open(os.path.join(input_dir, sample_ids_file), "r") as f:
         for line in f:
@@ -666,9 +663,9 @@ def run_calibration(
         download_stix_data(sv_subset, input_dir, round(q, 2))
 
     if search_func == "bayesian_optimization":
-        run_calibration_bayesian_opt(sv_df, sv_subset, sample_ids, **kwargs)
+        run_calibration_bayesian_opt(merged_df, sample_ids, **kwargs)
     else:
-        run_calibration_grid_search(sv_df, sv_subset, sample_ids, **kwargs)
+        run_calibration_grid_search(merged_df, sample_ids, **kwargs)
 
 
 def main():
