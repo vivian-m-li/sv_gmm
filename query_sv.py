@@ -432,19 +432,27 @@ def write_processed_output(
 
 def query_stix(
     *,
+    # sv identifier
     l: str = "",
     r: str = "",
     sv_id: str = "",
+    # file i/o
     input_dir: str = "assets",
     output_dir: Optional[str] = None,
     sv_lookup_file: str = "deletions.csv",
     insert_size_file: str = "insert_sizes.csv",
     stix_file_dir: str = "stix_output",
+    # query/model parameters
     read_overlap: float = 1.0,
+    d_threshold: int | None = None,
+    r_threshold: float | None = None,
+    max_penalty: int | None = None,
+    # stix setup
     stix_bin: Optional[str] = None,
     stix_index: Optional[str] = None,
     stix_database: Optional[str] = None,
     num_stix_shards: int = 1,
+    # flags
     run_gmm: bool = True,
     filter_reference: bool = True,
     single_trial: bool = True,
@@ -554,6 +562,9 @@ def query_stix(
                 chr=chr,
                 L=start,
                 R=stop,
+                d_threshold=d_threshold,
+                r_threshold=r_threshold,
+                max_penalty=max_penalty,
                 plot=plot,
                 stem=input_dir,
                 plot_file=f"{plot_dir}/{file_name}",
@@ -567,6 +578,9 @@ def query_stix(
                     "chr": chr,
                     "L": start,
                     "R": stop,
+                    "d_threshold": d_threshold,
+                    "r_threshold": r_threshold,
+                    "max_penalty": max_penalty,
                     "stem": input_dir,
                     "plot": plot,
                     "plot_file": f"{plot_dir}/{file_name}",
