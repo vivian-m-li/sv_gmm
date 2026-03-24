@@ -119,7 +119,7 @@ def load_synthetic_data_results(
         "synthetic_data", path, f"resultsn={sample_size}.csv"
     )
     split_df = pd.read_csv(split_file)
-    split_df = split_df[split_df["gmm_model"] == "2d"]
+    split_df = split_df[split_df["gmm_model"].isin(["2d", "2d-opt"])]
     if not add_gatk_results:
         return split_df
 
@@ -269,9 +269,9 @@ def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
     df = load_synthetic_data_results(sample_size, path=path)
     df = df[df["svlen"] == svlen]
 
-    models = ["2d", "gatk_MAX_CLIQUE", "gatk_SINGLE_LINKAGE"]
-    colors = ["#bfdbf7", "#1f7a8c", "#022b3a"]
-    markers = ["o", "s", "D"]
+    models = ["2d", "gatk_MAX_CLIQUE", "gatk_SINGLE_LINKAGE", "2d-opt"]
+    colors = ["#bfdbf7", "#1f7a8c", "#022b3a", "gold"]
+    markers = ["o", "s", "D", "X"]
 
     svs = [
         [(100000, 100802), (100200, 100601)],
@@ -1514,10 +1514,9 @@ if __name__ == "__main__":
 
     # Figure 2
     if 2 in figures:
-        path = "poly_loss"
-        for case in ["B", "C", "D"]:
-            parameter_sweep(case, path)
-        synthetic_data_fig(100, 200, path)
+        # for case in ["B", "C", "D"]:
+        #     parameter_sweep(case, "")
+        synthetic_data_fig(100, 200, "")
         # synthetic_data_additional_svs()
 
     # Figure 3
