@@ -604,6 +604,7 @@ def plot_2d_coords_fig(evidence_by_mode, plot_file, **kwargs):
         plt.savefig(plot_file)
     else:
         plt.show()
+    plt.close()
 
 
 def plot_single_sv(

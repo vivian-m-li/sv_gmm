@@ -39,7 +39,7 @@ def run_gmm(case, r, svs, weights, n_samples, results):
         p=weights,
     )
     results.append(
-        [case, r, "2d", svs, n_samples, weights, gmm, evidence_by_mode]
+        [case, r, "2d-opt", svs, n_samples, weights, gmm, evidence_by_mode]
     )
 
 
