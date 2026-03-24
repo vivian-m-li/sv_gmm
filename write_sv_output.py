@@ -317,7 +317,14 @@ def write_sv_stats_collapsed(output_dir: str):
             row = rows.loc[samples_by_row[most_common]].copy()
             row["num_gmm_runs"] = num_gmm_runs
             row = row.drop(
-                ["consensus_num_modes", "ci_lower", "ci_upper", "num_modes_2", "sv_id", "confidence"]
+                [
+                    "consensus_num_modes",
+                    "ci_lower",
+                    "ci_upper",
+                    "num_modes_2",
+                    "sv_id",
+                    "confidence",
+                ]
             )
             csv_writer.writerow(row.to_dict())
 

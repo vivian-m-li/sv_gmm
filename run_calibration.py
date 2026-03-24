@@ -187,16 +187,13 @@ def get_confusion_matrix(
     merged = sv_subset.merge(svs_n_modes, on="id", how="right")
 
     TP = merged[
-        (merged["n_svs_actual"] == 2) & (merged["n_svs_predicted"] == 2)
+        (merged["n_svs_actual"] == 2) & (merged["n_svs_predicted"] >= 2)
     ].shape[0]
-    FP = (
-        merged[
-            (merged["n_svs_actual"] == 1) & (merged["n_svs_predicted"] == 2)
-        ].shape[0]
-        + merged[merged["n_svs_predicted"] == 3].shape[
-            0
-        ]  # this covers cases where we predicted 3 modes when actual is 1 or 2
-    )
+    FP = merged[
+        (merged["n_svs_actual"] == 1) & (merged["n_svs_predicted"] >= 2)
+    ].shape[
+        0
+    ]  # this covers cases where we predicted 3 modes when actual is 1 or 2
     FN = merged[
         (merged["n_svs_actual"] == 2) & (merged["n_svs_predicted"] == 1)
     ].shape[0]
@@ -204,9 +201,14 @@ def get_confusion_matrix(
         (merged["n_svs_actual"] == 1) & (merged["n_svs_predicted"] == 1)
     ].shape[0]
 
-    n_svs = merged.shape[0]
-    values = {"TP": TP, "FP": FP, "FN": FN, "TN": TN}
-    values = {k: v / n_svs for k, v in values.items()}
+    values = {
+        "TP": TP,
+        "FP": FP,
+        "FN": FN,
+        "TN": TN,
+    }  # keep raw values instead of proportions
+    # n_svs = merged.shape[0]
+    # values = {k: v / n_svs for k, v in values.items()}
     return values
 
 
