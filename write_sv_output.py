@@ -112,6 +112,7 @@ def get_raw_data(
     *,
     stix_file_dir: str | None = None,
     filter_reference_samples: bool = True,
+    samples_to_keep: list[str] | None = None,
     print_messages: bool = True,
 ) -> Tuple[Dict[str, np.ndarray[float]], int]:
     """
@@ -139,6 +140,9 @@ def get_raw_data(
     if filter_reference_samples:
         reference_samples = get_reference_samples(row, reads)
         reads = reads[~reads["sample_id"].isin(reference_samples)]
+
+    if samples_to_keep is not None:
+        reads = reads[reads["sample_id"].isin(samples_to_keep)]
 
     return reads, num_samples
 

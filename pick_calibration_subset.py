@@ -266,6 +266,8 @@ def subset_svs_from_jaccard(
     sv_lookup_file: str,
     genotyping_results_file: str,
     n_svs: int,
+    filter_lr_samples_only: bool = False,
+    keep_svs_from: str | None = None,
 ):
     """
     Picks a subset of SVs for the calibration test based on Jaccard similarity of the genotyping results.
@@ -290,21 +292,93 @@ def subset_svs_from_jaccard(
 
     # merge dfs to get coordinates for the SVs in the genotyping results file
     df = geno_df.merge(
-        df[["id", "chr", "start", "stop"]],
+        df,
         on="id",
         how="left",
         suffixes=("", "_y"),
     )
 
-    # pick up to n_svs/2 SVs with jaccard index of 1 and n_svs/2 SVs with jaccard index < 1
-    svs_one_mode = df[df["jaccard"] == 1]
-    if svs_one_mode.shape[0] > n_svs / 2:
-        svs_one_mode = svs_one_mode.sample(n=int(n_svs / 2), random_state=42)
-    svs_multi_modes = df[df["jaccard"] < 1].sample(
-        n=svs_one_mode.shape[0], random_state=42
-    )
+    print(f"Number of SVs after merging with genotyping results: {df.shape[0]}")
+
+    # filter out SVs with <= 10 non-ref (from the SR genotype) samples in the LR set
+    if filter_lr_samples_only:
+        all_lr_samples = set(
+            pd.read_csv("long_reads/long_read_samples.csv")[
+                "sample_id"
+            ].tolist()
+        )
+        keep = set()
+        for _, row in df.iterrows():
+            non_ref_samples = []
+            for sample_id in all_lr_samples:
+                is_nonref = row[sample_id] != "(0, 0)"
+                if is_nonref:
+                    non_ref_samples.append(sample_id)
+            if len(non_ref_samples) > 10:
+                keep.add(row["id"])
+        df = df[df["id"].isin(keep)]
+        print(f"Number of SVs after filtering for LR samples: {df.shape[0]}")
+
+    df = df[
+        [
+            "#chrom",
+            "start",
+            "end",
+            "id",
+            "jaccard",
+            "size_diff",
+            "sr_lr_non_ref",
+            "sr_non_ref",
+            "chr",
+            "start_y",
+            "stop",
+        ]
+    ]
 
     subset_df = pd.DataFrame(columns=["chr", "start", "stop", "n_svs_actual"])
+
+    # keep all SVs in the previous subset that still match the criteria
+    if keep_svs_from is not None:
+        prev_subset = pd.read_csv(os.path.join(input_dir, keep_svs_from))
+        for _, row in prev_subset.iterrows():
+            sv_row = df[
+                (df["chr"] == row["chr"])
+                & (df["start"] == row["start"])
+                & (df["stop"] == row["stop"])
+            ]
+
+            # if a row exists, add it to the subset df and remove it from the main df so we don't pick it again
+            if sv_row.shape[0] > 0:
+                subset_df.loc[len(subset_df)] = [
+                    row["chr"],
+                    row["start"],
+                    row["stop"],
+                    row["n_svs_actual"],
+                ]
+                df = df.drop(sv_row.index)
+        print("Number of SVs kept from previous subset: ", subset_df.shape[0])
+
+    # pick up to n_svs/2 SVs with jaccard index of 1 and n_svs/2 SVs with jaccard index < 1
+    svs_one_mode = df[df["jaccard"] == 1]
+    n_svs_one_mode = min(
+        int(n_svs / 2) - subset_df[subset_df["n_svs_actual"] == 1].shape[0],
+        svs_one_mode.shape[0],
+    )
+
+    svs_one_mode = svs_one_mode.sample(n=n_svs_one_mode, random_state=42)
+    n_svs_multi_mode = (
+        subset_df[subset_df["n_svs_actual"] == 1].shape[0]
+        + n_svs_one_mode
+        - subset_df[subset_df["n_svs_actual"] == 2].shape[0]
+    )
+    svs_multi_modes = df[df["jaccard"] < 1].sample(
+        n=n_svs_multi_mode, random_state=42
+    )
+
+    print(
+        f"Picking {n_svs_one_mode} SVs with jaccard index of 1 and {n_svs_multi_mode} SVs with jaccard index < 1"
+    )
+
     for sv_df, n_svs_actual in zip([svs_one_mode, svs_multi_modes], (1, 2)):
         for _, row in sv_df.iterrows():
             subset_df.loc[len(subset_df)] = [
@@ -314,7 +388,12 @@ def subset_svs_from_jaccard(
                 n_svs_actual,
             ]
 
-    subset_path = os.path.join(input_dir, "sv_subset.csv")
+    out_filename = (
+        "sv_subset_sr_lr_nonref.csv"
+        if filter_lr_samples_only
+        else "sv_subset.csv"
+    )
+    subset_path = os.path.join(input_dir, out_filename)
     subset_df.to_csv(subset_path, index=False)
     print(f"Wrote subset of SVs to {subset_path}")
 
@@ -379,4 +458,6 @@ if __name__ == "__main__":
         sv_lookup_file="deletions.csv",
         genotyping_results_file="1k_sr_sv_non_ref-1k_sr_lr_gt_non_ref.bed.gz",
         n_svs=1000,
+        filter_lr_samples_only=True,
+        keep_svs_from="sv_subset.csv",
     )

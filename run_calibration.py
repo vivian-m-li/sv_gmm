@@ -261,8 +261,8 @@ def rewrite_calibration_results():
 
 
 def run_dirichlet_inner(
-    row: Dict,
-    population_size: int,
+    row: dict,
+    sample_ids: set[str],
     input_dir: str,
     output_dir: str,
     q: float,
@@ -276,6 +276,9 @@ def run_dirichlet_inner(
         input_dir,
         stix_file_dir=os.path.join(input_dir, f"stix_output_{q}"),
         filter_reference_samples=True,
+        samples_to_keep=list(
+            sample_ids
+        ),  # keep only samples with long reads (used in genotyping)
         print_messages=False,
     )
 
@@ -298,6 +301,7 @@ def run_dirichlet_inner(
             },
         )
 
+    population_size = len(sample_ids)
     for i, (gmm, evidence_by_mode) in enumerate(gmms):
         sv_stat = init_sv_stat_row(
             row,
@@ -330,7 +334,6 @@ def run_calibration_test(
     TODO: do analysis later on which combinations led to "partial correctness"
     """
     print(f"Running calibration for d={d}, r={r}, q={q}, p={pen}")
-    population_size = len(sample_ids)
     processed_file_dir = os.path.join(
         SCRATCH_FILE_DIR, "d{}_r{:.2f}_p{}".format(d, r, pen)
     )
@@ -344,7 +347,7 @@ def run_calibration_test(
             args.append(
                 (
                     row,
-                    population_size,
+                    sample_ids,
                     input_dir,
                     processed_file_dir,
                     q,
