@@ -1,4 +1,6 @@
 import os
+import shutil
+import subprocess
 import pandas as pd
 from get_bam_files import get_bam_files
 from query_sv import (
@@ -101,7 +103,70 @@ def merge_dfs(dir):
     return df
 
 
-def viz_subset(file: str | None = None):
+def copy_viz_files():
+    df = pd.read_csv("calibration/viz_subset.csv")
+    # copy cluster files over
+    subprocess.run(
+        [
+            "scp",
+            "vili4418@fiji.colorado.edu:/Users/vili4418/sv/sv_gmm/calibration/plots/*",
+            "calibration/plots/",
+        ]
+    )
+
+    for _, row in df.iterrows():
+        sv_id = row["id"]
+        label = row["label"]
+        sv_string = f"{giggle_format(row['chr'], row['start'])}_{giggle_format(row['chr'], row['stop'])}"
+
+        print(f"Processing {sv_id}...")
+
+        # copy cluster files and move them to appropriate directory
+        cluster_dir = f"calibration/viz/clusters/{label}"
+        if not os.path.exists(cluster_dir):
+            os.mkdir(cluster_dir)
+        cluster_file = f"calibration/plots/{sv_string}.png"
+        shutil.move(
+            cluster_file,
+            f"calibration/viz/clusters/{label}/{sv_id}.png",
+        )
+
+        # copy bam files
+        samplot_dir = f"calibration/viz/samplots/{label}"
+        if not os.path.exists(samplot_dir):
+            os.mkdir(samplot_dir)
+
+        if not os.path.exists(f"calibration/bam_files/{sv_id}"):
+            subprocess.run(
+                [
+                    "scp",
+                    "-r",
+                    f"vili4418@fiji.colorado.edu:/Users/vili4418/sv/sv_gmm/long_reads/bam_files/{sv_id}",
+                    "calibration/bam_files",
+                ]
+            )
+
+        # run samplot on the bam files
+        if not os.path.exists(f"calibration/viz/samplots/{label}/{sv_id}.png"):
+            print("Compiling samplot")
+            subprocess.run(
+                ["bash", "samplot_viz.sh"]
+                + [
+                    sv_id,
+                    str(row["chr"]),
+                    str(row["start"]),
+                    str(row["stop"]),
+                    "calibration/bam_files",
+                    f"calibration/viz/samplots/{label}",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+
+def build_viz_subset():
+    filename = "calibration/viz_subset.csv"
+
     best_results = pd.read_csv("calibration/results/best_params.csv").loc[0]
     best_results_dir = "d{}_r{:.2f}_q{:.2f}_p{}".format(
         int(best_results["d"]),
@@ -109,7 +174,7 @@ def viz_subset(file: str | None = None):
         best_results["q"],
         int(best_results["p"]),
     )
-    if file is None:
+    if not os.path.exists(filename):
         full_df = merge_dfs(best_results_dir)
         full_df.to_csv("calibration/merged.csv", index=False)
         df = pd.concat(
@@ -118,9 +183,9 @@ def viz_subset(file: str | None = None):
                 for label in ["tp", "fp", "tn", "fn"]
             ]
         )
-        df.to_csv("calibration/viz_subset.csv", index=False)
+        df.to_csv(filename, index=False)
     else:
-        df = pd.read_csv(file)
+        df = pd.read_csv(filename)
 
     for _, row in df.iterrows():
         sv_id = row["id"]
@@ -141,3 +206,8 @@ def viz_subset(file: str | None = None):
                 input_dir="calibration",
                 stix_file_dir=f"stix_output_{best_results['q']}",
             )
+
+
+if __name__ == "__main__":
+    build_viz_subset()
+    copy_viz_files()
