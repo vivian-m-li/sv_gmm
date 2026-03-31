@@ -7,6 +7,13 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from ax.service.ax_client import AxClient, ObjectiveProperties
+from ax.api.configs import RangeParameterConfig
+from ax.generation_strategy.center_generation_node import CenterGenerationNode
+from ax.generation_strategy.transition_criterion import MinTrials
+from ax.generation_strategy.generation_strategy import GenerationStrategy
+from ax.generation_strategy.generation_node import GenerationNode
+from ax.generation_strategy.generator_spec import GeneratorSpec
+from ax.adapter.registry import Generators
 from run_dirichlet import run_dirichlet
 from query_sv import (
     giggle_format,
@@ -431,49 +438,76 @@ def run_calibration_bayesian_opt(
     the BO model as prior observations before any new runs are launched.
     """
 
+    # define a BO generation strategy that starts with the center node, then transitions to Sobol for 5 trials, then transitions to BoTorch for the rest of the trials
+    generator_spec = GeneratorSpec(generator_enum=Generators.BOTORCH_MODULAR)
+    botorch_node = GenerationNode(
+        name="BoTorch",
+        generator_specs=[generator_spec],
+    )
+    sobol_node = GenerationNode(
+        name="Sobol",
+        generator_specs=[
+            GeneratorSpec(
+                generator_enum=Generators.SOBOL,
+                generator_kwargs={"seed": 42},
+            ),
+        ],
+        transition_criteria=[
+            # transition to BoTorch node once there are 10 trials on the experiment.
+            MinTrials(
+                threshold=5,
+                transition_to=botorch_node.name,
+                use_all_trials_in_exp=True,
+            )
+        ],
+    )
+    center_node = CenterGenerationNode(next_node_name=sobol_node.name)
+    gs = GenerationStrategy(
+        name="Center+Sobol+BoTorch",
+        nodes=[center_node, sobol_node, botorch_node],
+    )
+
     # define the search space
-    ax_client = AxClient()
+    ax_client = AxClient(generation_strategy=gs, verbose_logging=False)
     ax_client.create_experiment(
         name="calibration_experiment",
         parameters=[
-            {
-                "name": "d",
-                "type": "range",
-                "bounds": [float(d_min), float(d_max)],
-                "value_type": "float",
-            },
-            {
-                "name": "r",
-                "type": "range",
-                "bounds": [r_min, r_max],
-                "value_type": "float",
-            },
-            {
-                "name": "q",
-                "type": "range",
-                "bounds": [q_min, q_max],
-                "value_type": "float",
-            },
-            {
-                "name": "p",
-                "type": "range",
-                "bounds": [float(p_min), float(p_max)],
-                "value_type": "float",
-            },
+            RangeParameterConfig(
+                name="d",
+                parameter_type="int",
+                bounds=(d_min, d_max),
+            ),
+            RangeParameterConfig(
+                name="r",
+                parameter_type="float",
+                bounds=(r_min, r_max),
+            ),
+            RangeParameterConfig(
+                name="q",
+                parameter_type="float",
+                bounds=(q_min, q_max),
+            ),
+            RangeParameterConfig(
+                name="p",
+                parameter_type="int",
+                bounds=(p_min, p_max),
+            ),
         ],
         objectives={"pr_auc": ObjectiveProperties(minimize=False)},
     )
 
     # load pre-existing results
+    # if BO has been searching in one space for a while, then we should subsample
+    # the existing results so the model doesn't get stuck in one space
     results_file = os.path.join(output_dir, "results.csv")
     if os.path.exists(results_file):
         df = pd.read_csv(results_file)
         for i, row in df.iterrows():
             params = {
-                "d": float(row["d"]),
+                "d": row["d"],
                 "r": round(row["r"], 2),
                 "q": round(snap_to_grid(row["q"], q_min, q_step), 2),
-                "p": float(row["p"]),
+                "p": row["p"],
             }
             score = calc_pr_auc(row["TP"], row["FP"], row["FN"])
             _, trial_index = ax_client.attach_trial(params)
