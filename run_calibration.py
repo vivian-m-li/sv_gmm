@@ -7,7 +7,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from ax.service.ax_client import AxClient, ObjectiveProperties
-from ax.api.configs import RangeParameterConfig
 from ax.generation_strategy.center_generation_node import CenterGenerationNode
 from ax.generation_strategy.transition_criterion import MinTrials
 from ax.generation_strategy.generation_strategy import GenerationStrategy
@@ -184,6 +183,7 @@ def find_pareto_front():
 def get_confusion_matrix(
     sv_subset: pd.DataFrame,
     svs_n_modes: pd.DataFrame,
+    q: float,
 ) -> Dict[str, float]:
     """
     Calculate confusion matrix based on predicted vs actual number of SVs.
@@ -195,7 +195,11 @@ def get_confusion_matrix(
         columns={"sv_id": "id", "num_modes": "n_svs_predicted"},
     )
     svs_n_modes = svs_n_modes[svs_n_modes["confidence"] != "inconclusive"]
-    merged = sv_subset.merge(svs_n_modes, on="id", how="right")
+    if "q" in sv_subset.columns:
+        sv_subset_q = sv_subset[sv_subset["q"] == q]
+    else:
+        sv_subset_q = sv_subset
+    merged = sv_subset_q.merge(svs_n_modes, on="id", how="right")
 
     TP = merged[
         (merged["n_svs_actual"] == 2) & (merged["n_svs_predicted"] >= 2)
@@ -380,7 +384,9 @@ def run_calibration_test(
     shutil.rmtree(processed_file_dir)
 
     svs_n_modes = pd.read_csv(os.path.join(results_dir, "svs_n_modes.csv"))
-    results = get_confusion_matrix(sv_df[["id", "n_svs_actual"]], svs_n_modes)
+    results = get_confusion_matrix(
+        sv_df[["id", "n_svs_actual", "q"]], svs_n_modes, q
+    )
 
     final_output_file = os.path.join(output_dir, "results.csv")
     if not os.path.exists(final_output_file):
@@ -415,7 +421,7 @@ def run_calibration_bayesian_opt(
     *,
     input_dir: str,
     output_dir: str,
-    n_trials: int = 30,
+    n_trials: int = 40,
     batch_size: int = 1,
     d_min: int,
     d_max: int,
@@ -453,9 +459,9 @@ def run_calibration_bayesian_opt(
             ),
         ],
         transition_criteria=[
-            # transition to BoTorch node once there are 10 trials on the experiment.
+            # transition to BoTorch node once there are 15 trials on the experiment.
             MinTrials(
-                threshold=5,
+                threshold=15,
                 transition_to=botorch_node.name,
                 use_all_trials_in_exp=True,
             )
@@ -472,26 +478,30 @@ def run_calibration_bayesian_opt(
     ax_client.create_experiment(
         name="calibration_experiment",
         parameters=[
-            RangeParameterConfig(
-                name="d",
-                parameter_type="int",
-                bounds=(d_min, d_max),
-            ),
-            RangeParameterConfig(
-                name="r",
-                parameter_type="float",
-                bounds=(r_min, r_max),
-            ),
-            RangeParameterConfig(
-                name="q",
-                parameter_type="float",
-                bounds=(q_min, q_max),
-            ),
-            RangeParameterConfig(
-                name="p",
-                parameter_type="int",
-                bounds=(p_min, p_max),
-            ),
+            {
+                "name": "d",
+                "type": "range",
+                "bounds": [d_min, d_max],
+                "value_type": "int",
+            },
+            {
+                "name": "r",
+                "type": "range",
+                "bounds": [r_min, r_max],
+                "value_type": "float",
+            },
+            {
+                "name": "q",
+                "type": "range",
+                "bounds": [q_min, q_max],
+                "value_type": "float",
+            },
+            {
+                "name": "p",
+                "type": "range",
+                "bounds": [p_min, p_max],
+                "value_type": "int",
+            },
         ],
         objectives={"pr_auc": ObjectiveProperties(minimize=False)},
     )
