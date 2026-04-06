@@ -26,9 +26,9 @@ def get_sv_stats_df(stem: str = "1kgp"):
     return pd.read_csv(file)
 
 
-def get_sv_stats_converge_df(stem: str = "1kgp"):
+def get_all_split_trials_df(stem: str = "1kgp"):
     """Returns a dataframe of all SVs and GMM results for each run of the SV."""
-    file = os.path.join(stem, "sv_stats_converge.csv")
+    file = os.path.join(stem, "all_split_trials.csv")
     return pd.read_csv(file, low_memory=False)
 
 

@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from scipy.stats import dirichlet
 from process_data import run_viz_gmm
-from helper import calculate_posteriors, calculate_ci, get_sv_stats_converge_df
+from helper import calculate_posteriors, calculate_ci
 from viz import plot_2d_coords
 from gmm_types import COLORS, GMM, Evidence
 from typing import List, Tuple
@@ -230,9 +230,3 @@ def run_dirichlet(
         # animate_dirichlet(posterior_distributions)
 
     return gmms, alphas, posterior_distributions
-
-
-if __name__ == "__main__":
-    df = get_sv_stats_converge_df()
-    df = df[df["id"] == "DEL_pindel_98"]
-    animate_dirichlet_history(df)

@@ -21,6 +21,7 @@ from process_data import process_data, get_evidence_by_mode, run_viz_gmm
 from em import run_gmm
 from helper import (
     get_sv_stats_collapsed_df,
+    get_all_split_trials_df,
     get_sv_lookup,
     get_sv_chr,
     calc_af,
@@ -1309,7 +1310,7 @@ def plot_num_trials(path: str = ""):
     plt.tight_layout()
     plt.show()
 
-    converge = pd.read_csv("results/sv_stats_converge.csv")
+    converge = get_all_split_trials_df("results")
     # get all rows where num_gmm_runs > 50
     subset = df[(df["confidence"] == "high") & (df["num_gmm_runs"] > 50)].copy()
     for _, row in subset.iterrows():
