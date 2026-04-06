@@ -319,6 +319,7 @@ def run_dirichlet_inner(
             num_samples=num_samples,
             num_reference=num_samples - reads["sample_id"].nunique(),
         )
+        # TODO: in this function, a mode is getting added as a separate row. could just be a one-time issue
         write_sv_stats(
             sv_stat, gmm, evidence_by_mode, population_size, output_dir, i
         )
@@ -421,7 +422,7 @@ def run_calibration_bayesian_opt(
     *,
     input_dir: str,
     output_dir: str,
-    n_trials: int = 40,
+    n_trials: int = 30,
     batch_size: int = 1,
     d_min: int,
     d_max: int,
@@ -443,6 +444,9 @@ def run_calibration_bayesian_opt(
     If calibration/results/results.csv already exists, those reults are fed into
     the BO model as prior observations before any new runs are launched.
     """
+
+    results_file = os.path.join(output_dir, "results.csv")
+    has_prev_results = os.path.exists(results_file)
 
     # define a BO generation strategy that starts with the center node, then transitions to Sobol for 5 trials, then transitions to BoTorch for the rest of the trials
     generator_spec = GeneratorSpec(generator_enum=Generators.BOTORCH_MODULAR)
@@ -468,10 +472,17 @@ def run_calibration_bayesian_opt(
         ],
     )
     center_node = CenterGenerationNode(next_node_name=sobol_node.name)
-    gs = GenerationStrategy(
-        name="Center+Sobol+BoTorch",
-        nodes=[center_node, sobol_node, botorch_node],
-    )
+    
+    if has_prev_results:
+        gs = GenerationStrategy(
+            name="BoTorch",
+            nodes=[botorch_node],
+        )
+    else:
+        gs = GenerationStrategy(
+            name="Center+Sobol+BoTorch",
+            nodes=[center_node, sobol_node, botorch_node],
+        )
 
     # define the search space
     ax_client = AxClient(generation_strategy=gs, verbose_logging=False)
@@ -509,15 +520,14 @@ def run_calibration_bayesian_opt(
     # load pre-existing results
     # if BO has been searching in one space for a while, then we should subsample
     # the existing results so the model doesn't get stuck in one space
-    results_file = os.path.join(output_dir, "results.csv")
-    if os.path.exists(results_file):
+    if has_prev_results:
         df = pd.read_csv(results_file)
         for i, row in df.iterrows():
             params = {
-                "d": row["d"],
+                "d": int(row["d"]),
                 "r": round(row["r"], 2),
                 "q": round(snap_to_grid(row["q"], q_min, q_step), 2),
-                "p": row["p"],
+                "p": int(row["p"]),
             }
             score = calc_pr_auc(row["TP"], row["FP"], row["FN"])
             _, trial_index = ax_client.attach_trial(params)
