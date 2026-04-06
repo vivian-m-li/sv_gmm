@@ -1,12 +1,15 @@
 import os
 import shutil
 import subprocess
+import numpy as np
 import pandas as pd
 from get_bam_files import get_bam_files
 from query_sv import (
     giggle_format,
     query_stix,
 )
+
+FIJI_PATH = "vili4418@fiji.colorado.edu:/Users/vili4418/sv/sv_gmm"
 
 
 def merge_dfs(dir):
@@ -50,6 +53,7 @@ def merge_dfs(dir):
             "af",
             "num_samples",
             "num_samples_run",
+            "sample_ids",
             "num_gmm_runs",
             "modes",
         ]
@@ -101,6 +105,80 @@ def merge_dfs(dir):
         ]
     ]
     return df
+
+
+def copy_result_files():
+    results_file = "calibration/results/results.csv"
+    if not os.path.exists(results_file):
+        for file in [results_file, "calibration/results/best_params.csv"]:
+            subprocess.run(
+                [
+                    "scp",
+                    f"{FIJI_PATH}/calibration/results/{os.path.basename(file)}",
+                    file,
+                ]
+            )
+    results = pd.read_csv(results_file)
+    for _, row in results.iterrows():
+        d = int(row["d"])
+        r = f"{row['r']:.2f}"
+        q = f"{row['q']:.2f}"
+        p = int(row["p"])
+        dir_name = os.path.join("calibration/results", f"d{d}_r{r}_q{q}_p{p}")
+        if not os.path.exists(dir_name):
+            os.mkdir(dir_name)
+            for filename in ["svs_n_modes.csv", "sv_stats_collapsed.csv"]:
+                subprocess.run(
+                    [
+                        "scp",
+                        f"{FIJI_PATH}/{dir_name}/{filename}",
+                        dir_name,
+                    ]
+                )
+
+
+def add_evaluation_metrics():
+    results = pd.read_csv("calibration/results/results.csv")
+    results["accuracy"] = (results["TP"] + results["TN"]) / (
+        results["TP"] + results["FP"] + results["TN"] + results["FN"]
+    )
+    results["precision"] = results["TP"] / (results["TP"] + results["FP"])
+    results["recall"] = results["TP"] / (results["TP"] + results["FN"])
+    results["f1"] = (2 * results["precision"] * results["recall"]) / (
+        results["precision"] + results["recall"]
+    )
+    results.to_csv("calibration/results/results.csv", index=False)
+
+
+def print_class_distribution():
+    best_results = pd.read_csv("calibration/results/best_params.csv").loc[0]
+    best_results_dir = "d{}_r{:.2f}_q{:.2f}_p{}".format(
+        int(best_results["d"]),
+        best_results["r"],
+        best_results["q"],
+        int(best_results["p"]),
+    )
+    merged = pd.read_csv(
+        os.path.join("calibration/results", best_results_dir, "merged.csv")
+    )
+    for label in ["tp", "fn", "tn", "fp"]:
+        print(label)
+        subset = merged[merged["label"] == label]
+        print(f"n_svs={subset.shape[0]}")
+        for col in [
+            "jaccard",
+            "num_samples_run",
+            "num_gmm_runs",
+            "svlen",
+            "af",
+        ]:
+            print(
+                col,
+                f"mean={np.mean(subset[col]):.2f}",
+                f"median={np.std(subset[col]):.2f}",
+            )
+        print("confidence:", subset["confidence"].value_counts())
+        print("\n")
 
 
 def copy_viz_files():
@@ -176,7 +254,10 @@ def build_viz_subset():
     )
     if not os.path.exists(filename):
         full_df = merge_dfs(best_results_dir)
-        full_df.to_csv("calibration/merged.csv", index=False)
+        full_df.to_csv(
+            os.path.join("calibration/results", best_results_dir, "merged.csv"),
+            index=False,
+        )
         df = pd.concat(
             [
                 full_df[full_df["label"] == label].sample(n=10)
@@ -209,5 +290,8 @@ def build_viz_subset():
 
 
 if __name__ == "__main__":
-    build_viz_subset()
-    copy_viz_files()
+    # copy_result_files()
+    # add_evaluation_metrics()
+    # build_viz_subset()
+    # copy_viz_files()
+    print_class_distribution()

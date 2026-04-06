@@ -622,6 +622,6 @@ if __name__ == "__main__":
         genotyping_results_file="1k_sr_sv_non_ref-1k_sr_lr_gt_non_ref.bed.gz",
         n_svs=1000,
         filter_lr_samples_only=True,
-        keep_svs_from="sv_subset_no_q.csv",
-        # subset_per_q=True,
+        keep_svs_from="sv_subset.csv",
+        subset_per_q=True,
     )

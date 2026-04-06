@@ -385,9 +385,11 @@ def run_calibration_test(
     shutil.rmtree(processed_file_dir)
 
     svs_n_modes = pd.read_csv(os.path.join(results_dir, "svs_n_modes.csv"))
-    results = get_confusion_matrix(
-        sv_df[["id", "n_svs_actual", "q"]], svs_n_modes, q
-    )
+
+    columns = ["id", "n_svs_actual"]
+    if "q" in sv_df.columns:
+        columns.append("q")
+    results = get_confusion_matrix(sv_df[columns], svs_n_modes, q)
 
     final_output_file = os.path.join(output_dir, "results.csv")
     if not os.path.exists(final_output_file):
@@ -667,7 +669,7 @@ def download_stix_data_inner(
         8,
         True,
     )
-    print(f"Downloaded STIX data {stix_file}")
+    print(f"Downloaded STIX data {stix_file}", flush=True)
 
 
 def download_stix_data(
