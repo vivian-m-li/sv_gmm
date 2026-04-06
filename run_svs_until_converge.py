@@ -84,10 +84,12 @@ def run_dirichlet_wrapper(
 
 @break_after(hours=30, minutes=00)
 def run_svs_until_convergence(
-    stem: str, intermediate_output_dir: str, model_params: Dict
+    stem: str,
+    intermediate_output_dir: str,
+    sample_ids: set[str],
+    model_params: dict,
 ):
     deletions_df = get_deletions_df(stem)
-    sample_ids = set(get_sample_ids(stem))
     population_size = len(sample_ids)
 
     with multiprocessing.Manager():
@@ -117,6 +119,9 @@ def run_svs(config_path: str = "config.toml"):
     local_intermediate_output_dir = cfg["paths"][
         "local_intermediate_output_dir"
     ]
+
+    sample_id_file = cfg["input_files"]["sample_id_file"]
+    sample_ids = get_sample_ids(sample_id_file)
 
     # load model parameters from the config file
     raw_model = cfg.get("model", {})
@@ -150,7 +155,7 @@ def run_svs(config_path: str = "config.toml"):
         local_intermediate_output_dir, "all_split_trials.csv", output_dir
     )
     print("Writing post-processed files...")
-    write_post_processed_files(input_dir, output_dir)
+    write_post_processed_files(input_dir, output_dir, sample_ids)
 
     end = time.time()
     elapsed_time = end - start

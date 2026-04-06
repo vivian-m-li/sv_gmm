@@ -157,7 +157,10 @@ def write_default_insert_sizes(
 
 
 def process_input_files(
-    dir: str, sv_lookup_file: str, insert_size_file: Optional[str]
+    dir: str,
+    sv_lookup_file: str,
+    sample_id_file: str,
+    insert_size_file: Optional[str],
 ):
     """Processes input files for more efficient lookup during querying."""
 
@@ -174,7 +177,7 @@ def process_input_files(
             df = pd.read_csv(os.path.join(dir, sv_lookup_file))
         sample_ids = write_sample_ids_file(dir, df)
     else:
-        sample_ids = get_sample_ids(dir)
+        sample_ids = get_sample_ids(os.path.join(dir, sample_id_file))
 
     if not os.path.isfile(os.path.join(dir, "sv_lookup.csv")):
         if df is None:
@@ -445,6 +448,7 @@ def query_stix(
     output_dir: Optional[str] = None,
     sv_lookup_file: str = "deletions.csv",
     insert_size_file: str = "insert_sizes.csv",
+    sample_id_file: str = "sample_ids.txt",
     stix_file_dir: str = "stix_output",
     # query/model parameters
     read_overlap: float = 1.0,
@@ -473,7 +477,7 @@ def query_stix(
 
     # write input files that will be used later on during querying
     insert_size_lookup = process_input_files(
-        input_dir, sv_lookup_file, insert_size_file
+        input_dir, sv_lookup_file, sample_id_file, insert_size_file
     )
 
     # if an SV id is provided, then get the chromosomes for that
@@ -546,7 +550,7 @@ def query_stix(
 
     # remove samples queried by STIX but missing in the vcf/csv
     # in 1KG, this happens because the extended high coverage dataset includes samples that did not appear in the original study
-    sample_ids = get_sample_ids(input_dir)
+    sample_ids = get_sample_ids(os.path.join(input_dir, sample_id_file))
     reads = reads[reads["sample_id"].isin(sample_ids)]
 
     # remove samples with a genotype of (0, 0)
@@ -611,6 +615,7 @@ def main():
     --input_dir:        Input directory
     --output_dir:       Output directory
     --sv_lookup:        VCF or CSV file with structural variants
+    --sample_id_file:   Text file with sample IDs
     --insert_size_file: Insert size for each sample
     --read_overlap:     Overlap allowed when querying STIX
     --stix_bin:         Path to STIX executable
@@ -682,6 +687,12 @@ def main():
         type=str,
         default=None,
         help="VCF or CSV file with structural variants",
+    )
+    parser.add_argument(
+        "--sample_id_file",
+        type=str,
+        default=None,
+        help="Text file with sample IDs",
     )
     parser.add_argument(
         "--insert_size_file",
@@ -762,6 +773,9 @@ def main():
     sv_lookup_file = _get(
         args.sv_lookup, "input_files", "sv_lookup_file", "deletions.csv"
     )
+    sample_id_file = _get(
+        args.sample_id_file, "input_files", "sample_id_file", "sample_ids.txt"
+    )
     insert_size_file = _get(
         args.insert_size_file,
         "input_files",
@@ -788,6 +802,7 @@ def main():
         input_dir=input_dir,
         output_dir=output_dir,
         sv_lookup_file=sv_lookup_file,
+        sample_id_file=sample_id_file,
         insert_size_file=insert_size_file,
         read_overlap=read_overlap,
         d_threshold=d_threshold,

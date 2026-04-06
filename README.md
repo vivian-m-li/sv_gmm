@@ -255,10 +255,9 @@ Long-read data is found in the `LR_vivian` directory. Once the data has been pre
 
 ### Post-Processing & Figures
 
-After writing the `sv_stats_converge.csv` file, run the `write_post_processed_files` function in `helper.py` to generate several other files useful in downstream analysis.
+After writing the `all_split_trials.csv` file, run the `write_post_processed_files` function in `helper.py` to generate several other files useful in downstream analysis.
 
 - `svs_n_modes.csv`: number of modes and confidence predicted for each SV with evidence in STIX
-- `sr_lr_merged.csv` (for long reads only): compares the number of modes and the confidence for each SV outcome between short and long read results
 - `consensus_svs.csv`: consensus SVs by averaging the start/stop/length of each mode across all runs of the SV
 - `sv_stats_collapsed.csv`: SV stats with 1 row for each SV based on the most common SV clustering
 - `outliers.csv`: outliers identified based on a threshold

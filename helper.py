@@ -38,10 +38,10 @@ def get_sv_stats_collapsed_df(stem: str = "1kgp"):
     return pd.read_csv(file)
 
 
-def get_sample_ids(file_root: str = "1kgp"):
+def get_sample_ids(file: str):
     """Read and return the sample ids from a file."""
     sample_ids = set()
-    with open(f"{file_root}/sample_ids.txt", "r") as f:
+    with open(file, "r") as f:
         for line in f:
             sample_ids.add(line.strip())
     return sample_ids

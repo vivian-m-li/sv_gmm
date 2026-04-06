@@ -381,7 +381,9 @@ def run_calibration_test(
     concat_multi_processed_sv_files(
         processed_file_dir, OUTPUT_FILE_NAME, results_dir
     )
-    write_post_processed_files(input_dir, results_dir, sv_df[["id"]], True)
+    write_post_processed_files(
+        input_dir, results_dir, sample_ids, sv_df[["id"]], True
+    )
     shutil.rmtree(processed_file_dir)
 
     svs_n_modes = pd.read_csv(os.path.join(results_dir, "svs_n_modes.csv"))
@@ -474,7 +476,7 @@ def run_calibration_bayesian_opt(
         ],
     )
     center_node = CenterGenerationNode(next_node_name=sobol_node.name)
-    
+
     if has_prev_results:
         gs = GenerationStrategy(
             name="BoTorch",

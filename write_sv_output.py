@@ -11,7 +11,7 @@ from dataclasses import fields, asdict
 from query_sv import query_stix, giggle_format
 from helper import (
     get_deletions_df,
-    get_sv_stats_converge_df,
+    get_all_split_trials_df,
     get_sv_stats_collapsed_df,
     get_sv_lookup,
     get_sv_chr,
@@ -23,7 +23,14 @@ from helper import (
     reciprocal_overlap,
     df_to_bed,
 )
-from gmm_types import SVInfoGMM, GMM, Evidence, ModeStat, SUPERPOPULATIONS
+from gmm_types import (
+    SVInfoGMM,
+    GMM,
+    Evidence,
+    ModeStat,
+    SUPERPOPULATIONS,
+    CHR_LENGTHS,
+)
 from typing import Dict, List, Optional, Tuple
 from collections import defaultdict, Counter
 
@@ -277,8 +284,8 @@ Analyze SVs that have been run
 
 
 def write_sv_stats_collapsed(output_dir: str):
-    """Collapse sv_stats_converge.csv to sv_stats_collapsed.csv by picking the most common result for each SV."""
-    df = get_sv_stats_converge_df(output_dir)
+    """Collapse all_split_trials.csv to sv_stats_collapsed.csv by picking the most common result for each SV."""
+    df = get_all_split_trials_df(output_dir)
     svs_n_modes = pd.read_csv(f"{output_dir}/svs_n_modes.csv")
     svs_n_modes.rename(
         columns={"num_modes": "consensus_num_modes"}, inplace=True
@@ -331,6 +338,53 @@ def write_sv_stats_collapsed(output_dir: str):
                 ]
             )
             csv_writer.writerow(row.to_dict())
+
+
+def write_consensus_vcf(output_dir: str, sample_ids: set[str]):
+    """Converts sv_stats_collapsed.csv into a vcf where each mode is represented as a separate SV."""
+    df = get_sv_stats_collapsed_df(output_dir)
+    vcf_records = []
+    for _, row in df.iterrows():
+        modes = ast.literal_eval(row["modes"])
+        for i, mode in enumerate(modes):
+            info = f"END={mode['stop']};SVTYPE=DEL;ALGORITHMS=SPLIT;AF={mode['af']}"
+            record = [
+                row["chr"],
+                mode["start"],
+                f"{row['id']}_{i + 1}",
+                row["ref"],
+                row["alt"],
+                row["qual"],
+                row["filter"],
+                info,
+            ]
+            for sample_id in sample_ids:
+                gt = "(1, 1)" if sample_id in mode["sample_ids"] else "(0, 0)"
+                record.append(gt)
+            vcf_records.append(record)
+
+    vcf_df = pd.DataFrame(
+        vcf_records,
+        columns=["CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"]
+        + list(sample_ids),
+    )
+    vcf_df = vcf_df.sort_values(by=["CHROM", "POS"]).reset_index(drop=True)
+    with open("split_consensus.vcf", "w") as f:
+        f.write("##fileformat=VCFv4.2\n")
+        f.write('##ALT=<ID=DEL,Description="Deletion">\n')
+        f.write(
+            '##INFO=<ID=END,Number=1,Type=Integer,Description="End position of the variant">\n'
+        )
+        f.write(
+            '##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">\n'
+        )
+        f.write(
+            '##INFO=<ID=ALGORITHMS,Number=.,Type=String,Description="Algorithms that discovered this variant">\n'
+        )
+        for chr, length in CHR_LENGTHS.items():
+            f.write(f"##contig=<ID=chr{chr},length={length}>\n")
+        f.write("#" + "\t".join(vcf_df.columns) + "\n")
+        vcf_df.to_csv(f, sep="\t", index=False, header=False)
 
 
 def write_ancestry_dissimilarity(output_dir: str):
@@ -416,7 +470,7 @@ def get_n_modes(
         deletions_df = get_deletions_df(input_dir)
         deletions_df = deletions_df[deletions_df["num_samples"] > 0]
     svs = deletions_df["id"].unique()
-    df = get_sv_stats_converge_df(output_dir)
+    df = get_all_split_trials_df(output_dir)
     for sv_id in svs:
         rows = df[df["id"] == sv_id]
 
@@ -477,7 +531,7 @@ def get_outliers(output_dir: str, threshold: float = 0.9):
     """Get outlier samples for each SV and write to a file."""
     n_modes_df = pd.read_csv(f"{output_dir}/svs_n_modes.csv")
     n_modes_df = n_modes_df[n_modes_df["num_modes"] > 1]
-    df = get_sv_stats_converge_df(output_dir)
+    df = get_all_split_trials_df(output_dir)
     with open(f"{output_dir}/outliers.csv", "w") as f:
         csv_writer = csv.writer(f)
         csv_writer.writerow(["sv_id", "sample_ids"])
@@ -490,7 +544,7 @@ def get_outliers(output_dir: str, threshold: float = 0.9):
 
 def get_consensus_svs(output_dir: str):
     """Get consensus SVs by averaging the start/stop/length of each mode across all runs of the SV."""
-    df = get_sv_stats_converge_df(output_dir)
+    df = get_all_split_trials_df(output_dir)
     svs_n_modes = pd.read_csv(f"{output_dir}/svs_n_modes.csv")
     sv_ids = svs_n_modes["sv_id"].unique()
     consensus_df = pd.DataFrame(
@@ -784,21 +838,26 @@ def write_samplot_files():
 def write_post_processed_files(
     input_dir: str,
     output_dir: str,
+    sample_ids: set[str],
     sv_df: Optional[pd.DataFrame] = None,
     synthetic_data: bool = False,
 ):
-    """Write all post-processed files after running the dirichlet process with short or long reads."""
+    """Write all post-processed files after running SPLIT2."""
     get_n_modes(input_dir, output_dir, sv_df)
     print("wrote svs_n_modes.csv")
-    if input_dir == "long_reads":
-        compare_short_long_reads()
-        print("wrote sr_lr_merged.csv")
+
     get_consensus_svs(output_dir)
     print("wrote consensus_svs.csv")
+
     write_sv_stats_collapsed(output_dir)
     print("wrote sv_stats_collapsed.csv")
+
+    write_consensus_vcf(output_dir, sample_ids)
+    print("wrote split_consensus.vcf")
+
     get_outliers(output_dir)
     print("wrote outliers.csv")
+
     if not synthetic_data:
         write_ancestry_dissimilarity(output_dir)
         print("wrote ancestry_dissimilarity.csv")
