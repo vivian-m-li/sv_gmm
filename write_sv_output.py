@@ -347,7 +347,9 @@ def write_consensus_vcf(output_dir: str, sample_ids: set[str]):
     for _, row in df.iterrows():
         modes = ast.literal_eval(row["modes"])
         for i, mode in enumerate(modes):
-            info = f"END={mode['stop']};SVTYPE=DEL;ALGORITHMS=SPLIT;AF={mode['af']}"
+            info = (
+                f"END={mode['end']};SVTYPE=DEL;ALGORITHMS=SPLIT;AF={mode['af']}"
+            )
             record = [
                 row["chr"],
                 mode["start"],
@@ -355,21 +357,20 @@ def write_consensus_vcf(output_dir: str, sample_ids: set[str]):
                 row["ref"],
                 row["alt"],
                 row["qual"],
-                row["filter"],
                 info,
             ]
             for sample_id in sample_ids:
-                gt = "(1, 1)" if sample_id in mode["sample_ids"] else "(0, 0)"
+                gt = "1/1" if sample_id in mode["sample_ids"] else "0/0"
                 record.append(gt)
             vcf_records.append(record)
 
     vcf_df = pd.DataFrame(
         vcf_records,
-        columns=["CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO"]
+        columns=["CHROM", "POS", "ID", "REF", "ALT", "QUAL", "INFO"]
         + list(sample_ids),
     )
     vcf_df = vcf_df.sort_values(by=["CHROM", "POS"]).reset_index(drop=True)
-    with open("split_consensus.vcf", "w") as f:
+    with open(os.path.join(output_dir, "split_consensus.vcf"), "w") as f:
         f.write("##fileformat=VCFv4.2\n")
         f.write('##ALT=<ID=DEL,Description="Deletion">\n')
         f.write(
