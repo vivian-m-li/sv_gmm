@@ -387,6 +387,7 @@ def subset_svs_from_jaccard(
     filter_lr_samples_only: bool = False,
     keep_svs_from: str | None = None,
     subset_per_q: bool = False,
+    random_sampling: bool = True,
 ):
     """
     Picks a subset of SVs for the calibration test based on Jaccard similarity of the genotyping results.
@@ -488,7 +489,14 @@ def subset_svs_from_jaccard(
                 rows_to_drop.add(sv_row.index.values[0])
         print("Number of SVs kept from previous subset: ", subset_df.shape[0])
 
+    # select from the remaining SVs until we have n_svs total in the subset
     unseen_svs = df[~df.index.isin(rows_to_drop)]
+    if not random_sampling:
+        unseen_svs["n_samples"] = unseen_svs["sr_non_ref"].apply(
+            lambda row: len(row.split(","))
+        )
+        unseen_svs = unseen_svs.sort_values(by="n_samples", ascending=False)
+
     # pick up to n_svs/2 SVs with jaccard index of 1 and n_svs/2 SVs with jaccard index < 1
     svs_one_mode = unseen_svs[unseen_svs["jaccard"] == 1]
     n_svs_one_mode = min(
@@ -496,15 +504,25 @@ def subset_svs_from_jaccard(
         svs_one_mode.shape[0],
     )
 
-    svs_one_mode = svs_one_mode.sample(n=n_svs_one_mode, random_state=42)
+    if random_sampling:
+        svs_one_mode = svs_one_mode.sample(n=n_svs_one_mode, random_state=42)
+    else:
+        svs_one_mode = svs_one_mode.head(n_svs_one_mode)
+
+    # ensure the number of SVs with jaccard index < 1 is the same as the number of SVs with jaccard index of 1 to balance the dataset
+    # there should be more SVs with jaccard index < 1
     n_svs_multi_mode = (
         subset_df[subset_df["n_svs_actual"] == 1].shape[0]
         + n_svs_one_mode
         - subset_df[subset_df["n_svs_actual"] == 2].shape[0]
     )
-    svs_multi_modes = unseen_svs[unseen_svs["jaccard"] < 1].sample(
-        n=n_svs_multi_mode, random_state=42
-    )
+    svs_multi_modes = unseen_svs[unseen_svs["jaccard"] < 1]
+    if random_sampling:
+        svs_multi_modes = svs_multi_modes.sample(
+            n=n_svs_multi_mode, random_state=42
+        )
+    else:
+        svs_multi_modes = svs_multi_modes.head(n_svs_multi_mode)
 
     print(
         f"Picking {n_svs_one_mode} SVs with jaccard index of 1 and {n_svs_multi_mode} SVs with jaccard index < 1"
@@ -622,6 +640,7 @@ if __name__ == "__main__":
         genotyping_results_file="1k_sr_sv_non_ref-1k_sr_lr_gt_non_ref.bed.gz",
         n_svs=1000,
         filter_lr_samples_only=True,
-        keep_svs_from="sv_subset.csv",
+        random_sampling=False,
+        # keep_svs_from="sv_subset.csv",
         subset_per_q=True,
     )
