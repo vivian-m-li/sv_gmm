@@ -1,28 +1,19 @@
 /__pycache__
 .venv
 venv
-*stix_output*
-plots
-gnomad_svs
-samples
-hs37d5.fa.gz
-*1kgp*
-grch37
-processed_svs
-processed_svs_converge
-synthetic_data*
-*.ipynb
-profile
-long_reads
-sr*
-lr*
-data_dump
-*.cram*
-assets
-results
-calibration*
-test_stix_queries
-plot_critic*
-sv_genotyping
+profile/
+
+# data files
+data/
 cram_index_files/
-config.toml
+data_dump/
+*.cram*
+calibration/
+sv_genotyping
+
+# experiment outputs
+synthetic_data/
+output/
+
+# to deal with later
+temp/

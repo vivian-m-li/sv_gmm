@@ -1,0 +1,109 @@
+# ============================================================
+# SPLIT Configuration File
+# ============================================================
+# Copy this file to your working directory and fill in the
+# paths and parameters for your environment before running.
+# All path values are relative to the working directory unless
+# they begin with / (absolute paths are also accepted).
+# ============================================================
+
+
+# ------------------------------------------------------------
+# [paths] — Input and output directories
+# ------------------------------------------------------------
+[paths]
+
+# Directory containing your input data (VCF/CSV callset,
+# sample IDs, insert sizes, etc.)
+input_dir = "assets"
+
+# Directory where results will be written.
+output_dir = "results"
+
+# Sub-directory where raw STIX query output files are cached between runs.
+stix_output_dir = "stix_output"
+
+# Intermediate directory used during processing.
+# On HPC clusters, point this to a fast local scratch filesystem.
+# On a local machine, a subdirectory of output_dir is fine.
+intermediate_output_dir = "/scratch/Users/vili4418/processed_svs"
+
+# Local directory to store intermediate output files.
+# Files are first written to scratch_dir, then moved to
+# intermediate_file_dir if they are not the same.
+# local_intermediate_output_dir = "results/processed_svs"
+
+# ------------------------------------------------------------
+# [input_files] — Files expected inside input_dir
+# ------------------------------------------------------------
+[input_files]
+
+# VCF or CSV file listing structural variants.
+# Supported formats: .vcf, .vcf.gz, .csv
+sv_lookup_file = "deletions.csv"
+
+# txt file with one row for each sample ID
+sample_id_file = "sample_ids.txt"
+
+# Per-sample mean insert size file (two columns: sample_id,
+# mean_insert_size). If this file is absent a uniform default
+# of default_insert_size bp is written automatically.
+insert_size_file = "insert_sizes.csv"
+
+# Default insert size (bp) written when insert_size_file is
+# missing. Only used if the file above does not exist.
+default_insert_size = 450
+
+
+# ------------------------------------------------------------
+# [stix] — Paths to the STIX executable and index
+# Required only when querying variants that have not been
+# previously cached in stix_output_dir.
+# ------------------------------------------------------------
+[stix]
+
+# Absolute path to the compiled STIX binary.
+# Example: "/home/user/tools/stix/stix"
+bin = "/Users/vili4418/sv/stix/bin/stix"
+
+# Absolute path to the STIX index file (or the first shard if
+# num_shards > 1, e.g. "/data/stix/index_0.idx").
+index = "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard"
+
+# Absolute path to the STIX database (or first shard).
+database = "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard"
+
+# Number of shards the index and database are split into.
+# Set to 1 if your index is a single file.
+num_shards = 8
+
+
+# ------------------------------------------------------------
+# [query] — Read-level querying parameters
+# ------------------------------------------------------------
+[query]
+
+# Fraction of the SV length that a flanking read is allowed
+# to overlap the SV region and still be included.
+# 1.0 = full overlap allowed; 0.5 = half the SV length.
+read_overlap = 0.6
+
+
+# ------------------------------------------------------------
+# [model] — Gaussian mixture model / Dirichlet process parameters
+# These are passed directly into the GMM; leave a value
+# commented out to use the model's built-in default.
+# ------------------------------------------------------------
+[model]
+
+# Distance threshold for merging nearby read clusters (bp).
+# Uncomment and set to override the model default.
+d_threshold = 50
+
+# Reciprocal-overlap threshold for cluster assignment.
+# Uncomment and set to override the model default.
+r_threshold = 0.9
+
+# Maximum penalty term for spurious cluster suppression.
+# Uncomment and set to override the model default.
+max_penalty = 100
