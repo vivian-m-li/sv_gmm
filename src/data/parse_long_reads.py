@@ -1,19 +1,26 @@
+import argparse
 import ast
 import csv
-import re
 import os
-import argparse
+import re
 import subprocess
-import pysam
-import pandas as pd
+
 from bs4 import BeautifulSoup
-from helper import get_sv_lookup, get_sv_stats_collapsed_df, reciprocal_overlap
-from typing import List, Dict, Tuple, Optional
 from collections import defaultdict
+import pandas as pd
+import pysam
+
+from src.utils.helper import (
+    get_sv_lookup,
+    get_sv_stats_collapsed_df,
+    reciprocal_overlap,
+)
 
 SCRATCH_DIR = "/scratch/Users/vili4418/"
 
-"""Standalone functions"""
+# ---------------------
+# Standalone functions
+# ---------------------
 
 
 def parse_long_read_samples():
@@ -125,7 +132,7 @@ def remove_bam_file(file: str, *, scratch: bool = False):
 
 
 def write_sample_long_read_evidence(
-    sv_id: str, sample_id: str, deletions: List
+    sv_id: str, sample_id: str, deletions: list
 ) -> bool:
     """Writes the long read evidence from one sample to a file for a given SV."""
     # assumes file is in home directory and not in scratch
@@ -143,7 +150,7 @@ def write_sample_long_read_evidence(
 """Helper functions"""
 
 
-def get_sv_region(sv_id: str, tolerance: int) -> Tuple[str, int, int, int]:
+def get_sv_region(sv_id: str, tolerance: int) -> tuple[str, int, int, int]:
     """For a given SV, returns the frame (chr:start-stop, with a tolerance) to extract reads from. The actual start, stop, and sv_len values (without an added tolerance) are also returned."""
     sv_lookup = get_sv_lookup()
     row = sv_lookup[sv_lookup["id"] == sv_id]
@@ -155,7 +162,7 @@ def get_sv_region(sv_id: str, tolerance: int) -> Tuple[str, int, int, int]:
     return region, chr, start, stop, sv_len
 
 
-def get_processed_samples(sv_id: str) -> Dict[str, List[dict]]:
+def get_processed_samples(sv_id: str) -> dict[str, list[dict]]:
     """For a given SV, returns the evidence (start, stop, and length of each long read for each sample) that has already been processed."""
     file_name = f"long_reads/evidence/{sv_id}.csv"
     if not os.path.exists(file_name):
@@ -223,9 +230,9 @@ def filter_evidence_all():
 
 def read_cigars_from_file(
     bam_file: str,
-    sv: Tuple[int, int],
-    stix_read: Optional[Tuple[int, int]] = None,
-) -> List[dict]:
+    sv: tuple[int, int],
+    stix_read: tuple[int, int] | None = None,
+) -> list[dict]:
     """For a given bam file (sample-specific, filtered by SV region), read the cigar strings to identify deletions that match the given SV size."""
     try:
         # open the sample's bam file (corresponding to an SV region), read the cigar strings that
@@ -269,7 +276,7 @@ def read_cigars_from_file(
                     "r": r,
                 }
             )
-        
+
         # there should only be one read per bam file that corresponds with the stix output
         if stix_read is not None:
             break
@@ -323,11 +330,11 @@ def write_all_long_read_evidence():
 
 def get_long_read_svs(
     sv_id: str,
-    samples: List[str],
+    samples: list[str],
     *,
     tolerance: int = 100,
     scratch: bool = False,
-) -> Dict[str, List[dict]]:
+) -> dict[str, list[dict]]:
     """
     Data processing workflow for one SV using long read data.
     Process sequences for samples that have not been processed yet for a given SV.

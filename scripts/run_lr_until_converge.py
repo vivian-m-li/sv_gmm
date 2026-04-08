@@ -1,20 +1,21 @@
-import time
-import os
-import sys
-import shutil
 import multiprocessing
+import os
+import shutil
+import sys
+import time
+
 import pandas as pd
-from write_sv_output import (
+
+from src.data.download_long_read_evidence import get_samples_to_redo
+from src.model.dirichlet import run_dirichlet
+from src.utils.helper import get_deletions_df, stix_output_to_df
+from src.utils.timeout import break_after
+from src.utils.write_sv_output import (
     init_sv_stat_row,
     write_sv_stats,
     write_posterior_distributions,
     concat_multi_processed_sv_files,
 )
-from download_long_read_evidence import get_samples_to_redo
-from run_dirichlet import run_dirichlet
-from helper import get_deletions_df, stix_output_to_df
-from typing import Set, Dict
-from timeout import break_after
 
 
 FILE_DIR = "long_reads/processed_svs_converge"
@@ -23,10 +24,10 @@ OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
 
 def run_lr_dirichlet_wrapper(
-    row: Dict,
+    row: dict,
     population_size: int,
-    sample_set: Set[str],
-    samples_to_skip: Set[str] = set(),
+    sample_set: set[str],
+    samples_to_skip: set[str] = set(),
 ):
     """Runs the dirichlet/GMM process for a single SV using long read data."""
     sv_id = row["id"]

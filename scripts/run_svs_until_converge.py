@@ -4,13 +4,11 @@ import os
 import shutil
 import time
 
-from typing import Dict
-
-from config_loader import load_config
-from helper import get_deletions_df, get_sample_ids
-from run_dirichlet import run_dirichlet
-from timeout import break_after
-from write_sv_output import (
+from src.model.dirichlet import run_dirichlet
+from src.utils.config_loader import load_config
+from src.utils.helper import get_deletions_df, get_sample_ids
+from src.utils.timeout import break_after
+from src.utils.write_sv_output import (
     get_raw_data,
     init_sv_stat_row,
     write_sv_stats,
@@ -21,11 +19,11 @@ from write_sv_output import (
 
 
 def run_dirichlet_inner(
-    row: Dict,
+    row: dict,
     population_size: int,
     stem: str,
     intermediate_output_dir: str,
-    model_params: Dict,
+    model_params: dict,
 ):
     sv_id = row["id"]
     reads, num_samples = get_raw_data(row, stem)
@@ -68,11 +66,11 @@ def run_dirichlet_inner(
 
 
 def run_dirichlet_wrapper(
-    row: Dict,
+    row: dict,
     population_size: int,
     stem: str,
     intermediate_output_dir: str,
-    model_params: Dict,
+    model_params: dict,
 ):
     try:
         run_dirichlet_inner(

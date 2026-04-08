@@ -1,9 +1,9 @@
 import numpy as np
 from scipy.stats import multivariate_normal
 from sklearn.cluster import KMeans
-from helper import reciprocal_overlap
-from gmm_types import GMM2D, EstimatedGMM2D
-from typing import Tuple, List, Optional
+
+from src.utils.helper import reciprocal_overlap
+from src.utils.types import GMM2D, EstimatedGMM2D
 
 RESPONSIBILITY_THRESHOLD = 1e-10
 
@@ -13,7 +13,7 @@ GMM/EM helper functions
 
 
 def hinge_loss_distance(
-    mu: List[np.ndarray], *, cutoff=100, max_penalty=200
+    mu: list[np.ndarray], *, cutoff=100, max_penalty=200
 ) -> float:
     """Adds a penalty to the log-likelihood to prevent cluster centroids from getting too close to each other (decreasing d), accounting for sequencing noise."""
     # c - alpha * d(mu_i, mu_j)
@@ -34,7 +34,7 @@ def hinge_loss_distance(
     return loss
 
 
-def get_sv_from_mu(mu: np.ndarray, L: int, R: int) -> Tuple[int, int]:
+def get_sv_from_mu(mu: np.ndarray, L: int, R: int) -> tuple[int, int]:
     """Converts the mu value (length, L-coordinate) to the SV coordinates (L, R)."""
     svlen = R - L
     sv_L = int(mu[1] + L)
@@ -43,7 +43,7 @@ def get_sv_from_mu(mu: np.ndarray, L: int, R: int) -> Tuple[int, int]:
 
 
 def hinge_loss_overlap(
-    mu: List[np.ndarray], L: int, R: int, *, cutoff=0.8, max_penalty=200
+    mu: list[np.ndarray], L: int, R: int, *, cutoff=0.8, max_penalty=200
 ) -> float:
     """Adds a penalty to the log-likelihood to prevent high reciprocal overlap and avoid over-clustering."""
     num_modes = len(mu)
@@ -98,8 +98,8 @@ def model_penalty(
 
 def calc_log_likelihood(
     x: np.ndarray,
-    mu: List[np.ndarray],
-    cov: List[np.ndarray],
+    mu: list[np.ndarray],
+    cov: list[np.ndarray],
     p: np.ndarray,
     L: int,
     R: int,
@@ -151,7 +151,7 @@ def init_em(
     d_threshold: int,
     r_threshold: float,
     max_penalty: int,
-) -> Tuple[int, np.ndarray, List[np.ndarray], np.ndarray, np.ndarray]:
+) -> tuple[int, np.ndarray, list[np.ndarray], np.ndarray, np.ndarray]:
     """
     Initializes the expectation-maximization algorithm using k-means clustering on the data.
     Returns the sample size, means, variances, weights, and log likelihood of the initial GMM.
@@ -190,8 +190,8 @@ def init_em(
 def calc_responsibility(
     x: np.ndarray,
     n: int,
-    mu: List[np.ndarray],
-    cov: List[np.ndarray],
+    mu: list[np.ndarray],
+    cov: list[np.ndarray],
     p: np.ndarray,
 ):
     """Calculates the responsibility matrix for each point/mode."""
@@ -210,8 +210,8 @@ def em(
     x: np.ndarray,
     num_modes: int,
     n: int,
-    mu: List[np.ndarray],
-    cov: List[np.ndarray],
+    mu: list[np.ndarray],
+    cov: list[np.ndarray],
     p: np.ndarray,
     L: int,
     R: int,
@@ -257,13 +257,13 @@ def run_em(
     r_threshold: float = 0.8,
     max_penalty: int = 200,
     plot: bool = False,
-) -> Tuple[List[GMM2D], int]:
+) -> tuple[list[GMM2D], int]:
     """
     Given a dataset and an estimated number of modes for the GMM, estimates the parameters for each distribution.
     The algorithm is initialized using the k-means clustering approach, then the EM algorithm is run for up to 30 iterations, or a convergence of the log-likelihood; whichever comes first.
     Returns the GMM estimated by each iteration of the EM algorithm.
     """
-    all_params: List[GMM2D] = []
+    all_params: list[GMM2D] = []
 
     n, mu, cov, p, logL = init_em(
         x, num_modes, L, R, d_threshold, r_threshold, max_penalty
@@ -307,9 +307,9 @@ def assign_values_to_modes(
     x: np.ndarray,
     num_modes: int,
     mu: np.ndarray,
-    cov: List[np.ndarray],
+    cov: list[np.ndarray],
     p: np.ndarray,
-) -> Tuple[List[np.ndarray], List[int]]:
+) -> tuple[list[np.ndarray], list[int]]:
     """Assigns each data point to a mode based on the highest responsibility value."""
     gz = calc_responsibility(x, len(x), mu, cov, p)
     assignments = np.argmax(gz, axis=1)
@@ -322,7 +322,7 @@ def assign_values_to_modes(
 
 
 def run_gmm(
-    x: np.ndarray[Tuple[float, int]],
+    x: np.ndarray[tuple[float, int]],
     *,
     L,
     R,
@@ -331,8 +331,8 @@ def run_gmm(
     max_penalty: int = 200,
     plot: bool = False,
     pr: bool = False,
-    force_n_modes: Optional[int] = None,
-) -> Optional[EstimatedGMM2D]:
+    force_n_modes: int | None = None,
+) -> EstimatedGMM2D | None:
     """
     Runs the GMM estimation process to determine the number of structural variants in a DNA reading frame.
     x is a 2D list of data points where each data point consists of:

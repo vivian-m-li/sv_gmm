@@ -1,13 +1,18 @@
-import uuid
-import subprocess
-import multiprocessing
-import csv
-import pysam
 import argparse
+import csv
+import multiprocessing
+import subprocess
+import uuid
+
 import pandas as pd
+import pysam
+
 from synthetic_tests import generate_data_r
-from generate_data import generate_synthetic_sv_data, generate_synthetic_sv_vcf
-from timeout import break_after
+from src.synthetic.generate_data import (
+    generate_synthetic_sv_data,
+    generate_synthetic_sv_vcf,
+)
+from src.utils.timeout import break_after
 from typing import Optional
 
 PLOIDY_TABLE = (
@@ -151,7 +156,7 @@ def gatk_cluster_reads(case, r, svs, weights, n_samples, gatk_alg, results):
         f"/scratch/Users/vili4418/synthetic_data/clustered/{run_id}.vcf"
     )
     result = subprocess.run(  # noqa: F841
-        ["bash", "gatk_svcluster.sh"]
+        ["bash", "bash/gatk_svcluster.sh"]
         + [  # noqa: W503
             filename,
             output_file,
@@ -289,5 +294,5 @@ if __name__ == "__main__":
     # for testing
     # svs = [(100000, 102553), (100000 + 500, 102553 - 500)]
     # gatk_cluster_inner("B", 0.61, svs, [0.5, 0.5], 100, "SINGLE_LINKAGE", [])
-    
+
     main()

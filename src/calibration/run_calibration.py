@@ -1,26 +1,28 @@
-import os
-import re
 import argparse
 import multiprocessing
+import os
+import re
 import shutil
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from ax.service.ax_client import AxClient, ObjectiveProperties
+
+from ax.adapter.registry import Generators
 from ax.generation_strategy.center_generation_node import CenterGenerationNode
 from ax.generation_strategy.transition_criterion import MinTrials
 from ax.generation_strategy.generation_strategy import GenerationStrategy
 from ax.generation_strategy.generation_node import GenerationNode
 from ax.generation_strategy.generator_spec import GeneratorSpec
-from ax.adapter.registry import Generators
-from run_dirichlet import run_dirichlet
+from ax.service.ax_client import AxClient, ObjectiveProperties
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from src.model.dirichlet import run_dirichlet
 from query_sv import (
     giggle_format,
     query_stix_bash,
     get_query_region,
 )
-from helper import calc_pr_auc
-from write_sv_output import (
+from src.utils.helper import calc_pr_auc
+from src.utils.write_sv_output import (
     get_raw_data,
     init_sv_stat_row,
     write_sv_stats,
@@ -29,7 +31,7 @@ from write_sv_output import (
     write_post_processed_files,
 )
 from collections import defaultdict, Counter
-from typing import Set, Dict
+from typing import set, dict
 
 SLURM_CPUS = int(os.environ.get("SLURM_CPUS_ON_NODE", 1))
 FILE_DIR = "calibration_outputs"
@@ -184,7 +186,7 @@ def get_confusion_matrix(
     sv_subset: pd.DataFrame,
     svs_n_modes: pd.DataFrame,
     q: float,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Calculate confusion matrix based on predicted vs actual number of SVs.
     The actual number of SVs are determined based on the long read data
@@ -339,7 +341,7 @@ def run_calibration_test(
     pen: int,
     input_dir: str,
     output_dir: str,
-    sample_ids: Set[str],
+    sample_ids: set[str],
 ):
     """
     Run a single calibration test for given distance and reciprocal overlap thresholds.
@@ -422,7 +424,7 @@ def snap_to_grid(value: float, min_val: float, step: float) -> float:
 
 def run_calibration_bayesian_opt(
     sv_df: pd.DataFrame,
-    sample_ids: Set[str],
+    sample_ids: set[str],
     *,
     input_dir: str,
     output_dir: str,
@@ -610,7 +612,7 @@ def run_calibration_bayesian_opt(
 
 def run_calibration_grid_search(
     sv_df: pd.DataFrame,
-    sample_ids: Set[str],
+    sample_ids: set[str],
     *,
     input_dir: str,
     output_dir: str,

@@ -8,13 +8,18 @@ import sys
 
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Optional
 
-from config_loader import load_config
-from gmm_types import StixQueryRegion, CHR_LENGTHS
-from helper import stix_output_to_df, get_sample_ids, get_deletions_df, calc_af
-from process_data import run_viz_gmm, get_insert_size_lookup
-from run_dirichlet import run_dirichlet
+from src.model.process_data import run_viz_gmm, get_insert_size_lookup
+from src.model.dirichlet import run_dirichlet
+from src.utils.config_loader import load_config
+from src.utils.constants import CHR_LENGTHS
+from src.utils.types import StixQueryRegion
+from src.utils.helper import (
+    stix_output_to_df,
+    get_sample_ids,
+    get_deletions_df,
+    calc_af,
+)
 
 # Increase the field size limit to avoid triggering the error
 csv.field_size_limit(sys.maxsize)
@@ -97,8 +102,8 @@ def load_vcf(dir: str, vcf_filename: str):
 
 def extract_data_from_deletions_df(
     input_dir: str = "1kgp",
-    chr: Optional[str] = None,
-    df: Optional[pd.DataFrame] = None,
+    chr: str | None = None,
+    df: pd.DataFrame | None = None,
 ):
     """Extracts sample ids and splits deletions into separate files by chromosome. Makes SV lookup more efficient if the SV chromosome is known."""
     deletions_df = get_deletions_df() if df is None else df
@@ -136,7 +141,7 @@ def write_sv_lookup(dir: str, df: pd.DataFrame):
     sv_lookup_df.to_csv(f"{dir}/sv_lookup.csv", index=False)
 
 
-def write_svs_by_chr(dir: str, df: pd.DataFrame, chr: Optional[str] = None):
+def write_svs_by_chr(dir: str, df: pd.DataFrame, chr: str | None = None):
     """Splits the SVs into separate files by chromosome for easier access during querying."""
     if not os.path.isdir(f"{dir}/svs_by_chr"):
         os.mkdir(f"{dir}/svs_by_chr")
@@ -160,7 +165,7 @@ def process_input_files(
     dir: str,
     sv_lookup_file: str,
     sample_id_file: str,
-    insert_size_file: Optional[str],
+    insert_size_file: str | None,
 ):
     """Processes input files for more efficient lookup during querying."""
 
@@ -315,7 +320,7 @@ def get_reference_samples(
     start: int,
     stop: int,
     input_dir: str,
-) -> List[str]:
+) -> list[str]:
     df = pd.read_csv(f"{input_dir}/svs_by_chr/chr{chr}.csv")
     row = df[(df["start"] == start) & (df["stop"] == stop)]
     if row.empty:  # query region does not correspond with an SV in the callset
@@ -407,7 +412,7 @@ def write_processed_output(
     processed_output_file: str,
     l_col: str = "l_end",
     r_col: str = "r_start",
-) -> Dict[str, np.ndarray[float]]:
+) -> dict[str, np.ndarray[float]]:
     """
     DEPRECATED: reads are now handled directly from the raw read file in the stix_output directory
     Parses the raw stix output (from the patched -g version) into pairs of coordinates for each sample. Each pair represents the start/stop of the deletion.
@@ -445,7 +450,7 @@ def query_stix(
     sv_id: str = "",
     # file i/o
     input_dir: str = "assets",
-    output_dir: Optional[str] = None,
+    output_dir: str | None = None,
     sv_lookup_file: str = "deletions.csv",
     insert_size_file: str = "insert_sizes.csv",
     sample_id_file: str = "sample_ids.txt",
@@ -456,9 +461,9 @@ def query_stix(
     r_threshold: float | None = None,
     max_penalty: int | None = None,
     # stix setup
-    stix_bin: Optional[str] = None,
-    stix_index: Optional[str] = None,
-    stix_database: Optional[str] = None,
+    stix_bin: str | None = None,
+    stix_index: str | None = None,
+    stix_database: str | None = None,
     num_stix_shards: int = 1,
     # flags
     run_gmm: bool = True,

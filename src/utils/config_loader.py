@@ -9,7 +9,6 @@ Usage:
 
 import sys
 import os
-from typing import Optional
 
 # tomllib is part of the stdlib from Python 3.11 onward.
 # For older interpreters, fall back to the third-party tomli package
@@ -27,7 +26,7 @@ else:
 DEFAULT_CONFIG_PATH = "config.toml"
 
 
-def load_config(path: Optional[str] = None) -> dict:
+def load_config(path: str | None = None) -> dict:
     """
     Load and return the configuration from a TOML file.
 

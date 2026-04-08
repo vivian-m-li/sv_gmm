@@ -1,10 +1,11 @@
+import argparse
 import os
 import subprocess
-import argparse
+
 import pandas as pd
+
 from query_sv import load_vcf, giggle_format
-from helper import stix_output_to_df
-from typing import Optional, Set, Tuple
+from src.utils.helper import stix_output_to_df
 
 """
 The purpose of this script is to pick a subset of structural variants (SVs) from a larger VCF file to be used for the calibration test.
@@ -16,7 +17,7 @@ Q_VALS = [0.6, 0.7, 0.8, 0.9, 1.0]
 
 def pick_pairs(
     df: pd.DataFrame, overlaps: pd.DataFrame, *, n_pairs: int, input_dir: str
-) -> Set[Tuple]:
+) -> set[tuple]:
     """Pick n_pairs of SVs with >= 30% reciprocal overlap. Ensure no SV is used more than once."""
     seen = set()
     pairs = set()
@@ -73,7 +74,7 @@ def pick_pairs(
 
 
 def pick_svs(
-    df: pd.DataFrame, pairs: Set[Tuple], *, n_svs: int, input_dir: str
+    df: pd.DataFrame, pairs: set[tuple], *, n_svs: int, input_dir: str
 ) -> pd.DataFrame:
     """Pick n_svs single SVs that are not in the pairs set."""
     seen = set([sv for pair in pairs for sv in pair])
@@ -158,7 +159,7 @@ def run_bedtools_intersect(
 
 
 def filter_svs(
-    df: pd.DataFrame, input_dir: str, sample_ids_file: Optional[str] = None
+    df: pd.DataFrame, input_dir: str, sample_ids_file: str | None = None
 ) -> pd.DataFrame:
     """
     Filters the initial list of deletions.
@@ -200,7 +201,7 @@ def subset_svs(
     input_dir: str,
     sv_lookup_file: str,
     filtered: bool,
-    sample_ids_file: Optional[str],
+    sample_ids_file: str | None,
     bedtools_path: str,
     n_svs: int,
 ) -> None:

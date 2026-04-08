@@ -1,8 +1,10 @@
+import multiprocessing
 import os
 import subprocess
-import multiprocessing
+
 import pandas as pd
-from helper import get_sv_chr, get_sv_lookup
+
+from src.utils.helper import get_sv_chr, get_sv_lookup
 
 
 def get_bam_files_region(region: str):

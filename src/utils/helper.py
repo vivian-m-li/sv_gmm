@@ -1,11 +1,12 @@
-import os
 import ast
-import subprocess
-import pandas as pd
-import numpy as np
 from collections import Counter
-from gmm_types import Evidence, SVStat
-from typing import List, Optional, Tuple
+import os
+import subprocess
+
+import numpy as np
+import pandas as pd
+
+from src.utils.types import Evidence, SVStat
 
 PROCESSED_SVS_DIR = "processed_svs"
 
@@ -66,7 +67,7 @@ def get_sv_chr(sv_id: str):
     return chr, start, stop
 
 
-def get_svlen(evidence_by_mode: List[List[Evidence]]) -> List[List[SVStat]]:
+def get_svlen(evidence_by_mode: list[list[Evidence]]) -> list[list[SVStat]]:
     """Calculates the mean length/start/stop for each mode of an SV."""
     all_stats = []
     for mode in evidence_by_mode:
@@ -139,8 +140,8 @@ def stix_output_to_df(
 def df_to_bed(
     *,
     out_file: str,
-    in_file: Optional[str] = None,
-    in_df: Optional[pd.DataFrame] = None,
+    in_file: str | None = None,
+    in_df: pd.DataFrame | None = None,
 ):
     """Converts a csv to a bed file to be used with bedtools. Requires the dataframe to have columns: chr, start, end, sv_id, id."""
     assert in_file or in_df is not None, "Must provide either in_file or in_df"
@@ -340,7 +341,7 @@ def calculate_posteriors_from_trials(outcomes):
     return calculate_posteriors(alpha)
 
 
-def reciprocal_overlap(sv1: Tuple[int, int], sv2: Tuple[int, int]) -> float:
+def reciprocal_overlap(sv1: tuple[int, int], sv2: tuple[int, int]) -> float:
     """
     Calculates the reciprocal overlap between two structural variants.
     r = min(% overlap sv 1, % overlap sv 2)

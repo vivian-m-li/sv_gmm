@@ -15,5 +15,5 @@ sv_genotyping
 synthetic_data/
 output/
 
-# to deal with later
-temp/
+# paper analysis
+paper/

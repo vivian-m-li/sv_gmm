@@ -1,32 +1,36 @@
-import random
-import numpy as np
-import matplotlib.pyplot as plt
+"""Fit a 1D Gaussian Mixture Model to the data using the expectation-maximization algorithm."""
+
+from collections import Counter
+
 from matplotlib.animation import FuncAnimation
 import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import numpy as np
+import random
 from scipy.stats import norm
 from sklearn.cluster import KMeans
 from sklearn.metrics import roc_auc_score
-from collections import Counter
-from gmm_types import COLORS, GMM1D, EstimatedGMM1D, SampleData
-from typing import Tuple, List, Dict, Union, Optional
+
+from src.utils.constants import COLORS
+from src.utils.types import GMM1D, EstimatedGMM1D, SampleData
 
 OUTLIER_THRESHOLD = 0.001
 RESPONSIBILITY_THRESHOLD = 1e-10
 MODE_WEIGHT_THRESHOLD = 0.05
 
 
-def round_lst(lst: List[float]) -> List[float]:
+def round_lst(lst: list[float]) -> list[float]:
     """Rounds the items of the list to 2 decimal places."""
     return [round(x, 2) for x in lst]
 
 
-def print_lst(lst: List[Union[str, float]]) -> str:
+def print_lst(lst: list[str | float]) -> str:
     """Formats and prints a list of items."""
     return ", ".join([str(x) for x in round_lst(lst)])
 
 
 def print_stats(
-    logL: float, mu: List[float], vr: List[float], p: List[float]
+    logL: float, mu: list[float], vr: list[float], p: list[float]
 ) -> str:
     """Formats and prints the parameters for a GMM."""
     return f"logL={round(logL, 2)}, means={round_lst(mu)}, variances={round_lst(vr)}, weights={round_lst(p)}"
@@ -37,7 +41,7 @@ Plotting functions
 """
 
 
-def get_scatter_data(x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def get_scatter_data(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Fits the data points to a histogram and returns the formatted data to be plotted as a scatter plot."""
     ux = np.arange(min(x), max(x) + 0.25, 0.25)
     hx, edges = np.histogram(x, bins=ux)
@@ -59,7 +63,7 @@ def plot_distributions(
     p: np.ndarray[float],
     *,
     title: str = None,
-    outliers: List[float] = [],
+    outliers: list[float] = [],
 ) -> None:
     """Plots the GMM."""
     # visualize the data and the generative model
@@ -87,7 +91,7 @@ def calc_y_vals(
     n: int,
     gmm: GMM1D,
     i: int,
-) -> List[float]:
+) -> list[float]:
     """Calculates the density for each x value in the GMM."""
     return 2 * (n * gmm.p[i]) * norm.pdf(ux, gmm.mu[i], np.sqrt(gmm.vr[i]))
 
@@ -140,7 +144,7 @@ class UpdateDist:
         return (self.scatter,) + self.lines
 
 
-def animate_distribution(x: np.ndarray[int], gmms: List[GMM1D]) -> None:
+def animate_distribution(x: np.ndarray[int], gmms: list[GMM1D]) -> None:
     """
     Animates the change in the GMM over each iteration of the EM algorithm.
     Note: This function does not produce an animation in Jupyter Notebook.
@@ -172,7 +176,7 @@ def plot_likelihood(logL: np.ndarray[float]) -> None:
 
 def plot_param_vs_aic(
     n: int,
-    gmm_lookup: Dict[float, EstimatedGMM1D],
+    gmm_lookup: dict[float, EstimatedGMM1D],
     xlabel: str,
     logL: bool = False,
 ) -> None:
@@ -205,9 +209,9 @@ def plot_param_vs_aic(
 
 def plot_mae(
     n: int,
-    mae: List[Tuple[int, float]],
+    mae: list[tuple[int, float]],
     *,
-    labels: List[str],
+    labels: list[str],
     legend_title: str,
 ) -> None:
     """Plots the mean average error as the sample size increases."""
@@ -229,9 +233,9 @@ def plot_mae(
 
 def plot_auc(
     n: int,
-    auc: List[Tuple[int, float]],
+    auc: list[tuple[int, float]],
     *,
-    labels: List[str],
+    labels: list[str],
     legend_title: str,
 ) -> None:
     """Plots the area under the curve of 2 Gaussian distributions as the sample size increases."""
@@ -253,7 +257,7 @@ def plot_auc(
 
 
 def plot_gmm_accuracy(
-    num_modes_estimated: List[int], num_modes_expected: int
+    num_modes_estimated: list[int], num_modes_expected: int
 ) -> None:
     """Plots the accuracy of detecting the correct number of modes for multiple trials of the GMM-estimation function."""
     counts = Counter(num_modes_estimated)
@@ -271,7 +275,7 @@ def plot_gmm_accuracy(
     plt.show()
 
 
-def plot_fitted_lines(y_intercepts: List[float]):
+def plot_fitted_lines(y_intercepts: list[float]):
     """Plots the L-R coordinate of each structural variant given their y-intercept."""
     xrange = [1000000, 1000200]
     plt.figure(figsize=(10, 8))
@@ -287,7 +291,7 @@ def plot_fitted_lines(y_intercepts: List[float]):
     plt.show()
 
 
-def plot_clusters(x: np.ndarray[int], kmeans_labels: List[int]):
+def plot_clusters(x: np.ndarray[int], kmeans_labels: list[int]):
     """Plots and colors each data point according to the k-means cluster they're inferred to belong in."""
     labels = set(kmeans_labels)
     color_lookup = {label: COLORS[i] for i, label in enumerate(labels)}
@@ -366,8 +370,8 @@ def calc_auc(data: SampleData) -> float:
 
 
 def match_mus(
-    list1: List[float], list2: List[float]
-) -> List[Tuple[float, float]]:
+    list1: list[float], list2: list[float]
+) -> list[tuple[float, float]]:
     """
     Matches the items in list1 and list2 based on the closeness of each value.
     The length of list2 must be greater than or equal to the length of list1.
@@ -379,13 +383,13 @@ def match_mus(
         [list1[-1]] * (len(list2) - len(list1))
     )  # fill in missing values in list1
 
-    pairs: List[Tuple[float, float]] = []
+    pairs: list[tuple[float, float]] = []
     for mu1, mu2 in zip(list1, list2):
         pairs.append((mu1, mu2))
     return pairs
 
 
-def calc_mae(true_mus: List[float], sample_mus: List[float]) -> float:
+def calc_mae(true_mus: list[float], sample_mus: list[float]) -> float:
     """Calculates the mean average error of the actual GMM compared to the estimated GMM."""
     if len(true_mus) > len(sample_mus):
         matched_mus = match_mus(sample_mus, true_mus)
@@ -417,7 +421,7 @@ def generate_weights(num_modes: int) -> np.ndarray[float]:
             return np.array(random_numbers)
 
 
-def generate_means(num_modes: int, x_range: List[int]) -> np.ndarray[int]:
+def generate_means(num_modes: int, x_range: list[int]) -> np.ndarray[int]:
     """
     Generates means between 0 and 100, inclusive, for multiple modes in a GMM.
     Means are guaranteed to be different values.
@@ -433,12 +437,12 @@ def generate_means(num_modes: int, x_range: List[int]) -> np.ndarray[int]:
 def generate_data(
     n: int,  # sample size
     *,
-    mode_means: Union[np.ndarray[float], List[float]] = None,
-    mode_variances: Union[np.ndarray[float], List[float]] = None,
-    weights: Union[np.ndarray[float], List[float]] = None,
+    mode_means: np.ndarray[float] | list[float] = None,
+    mode_variances: np.ndarray[float] | list[float] = None,
+    weights: np.ndarray[float] | list[float] = None,
     num_modes: int = None,
-    x_range: List[int] = [0, 100],
-    vr_range: List[int] = [1, 5],
+    x_range: list[int] = [0, 100],
+    vr_range: list[int] = [1, 5],
     plot: bool = False,
     pr: bool = False,
 ) -> SampleData:
@@ -494,7 +498,7 @@ def generate_data(
 def init_em(
     x: np.ndarray[int],
     num_modes: int,
-) -> Tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Initializes the expectation-maximization algorithm using k-means clustering on the data.
     Returns the sample size, means, variances, weights, and log likelihood of the initial GMM.
@@ -539,7 +543,7 @@ def assign_values_to_modes_inner(
     mu: np.ndarray[float],
     vr: np.ndarray[float],
     p: np.ndarray[float],
-) -> List[np.ndarray[int]]:
+) -> list[np.ndarray[int]]:
     gz = calc_responsibility(x, len(x), mu, vr, p)
     assignments = np.argmax(gz, axis=1)
     x_by_mode = [[] for _ in range(num_modes)]
@@ -594,13 +598,13 @@ def run_em(
     x: np.ndarray[int],  # data
     num_modes: int,
     plot: bool = False,
-) -> Tuple[List[GMM1D], int]:
+) -> tuple[list[GMM1D], int]:
     """
     Given a dataset and an estimated number of modes for the GMM, estimates the parameters for each distribution.
     The algorithm is initialized using the k-means clustering approach, then the EM algorithm is run for up to 30 iterations, or a convergence of the log-likelihood; whichever comes first.
     Returns the GMM estimated by each iteration of the EM algorithm.
     """
-    all_params: List[GMM1D] = []
+    all_params: list[GMM1D] = []
 
     n, mu, vr, p, logL = init_em(x, num_modes)  # initialize parameters
     all_params.append(GMM1D(mu, vr, p, logL[0]))
@@ -629,12 +633,12 @@ def run_em(
 
 def identify_outliers(
     x: np.ndarray[int], mu: np.ndarray[float], vr: np.ndarray
-) -> List[Tuple[int, float]]:
+) -> list[tuple[int, float]]:
     """
     Given the data and distribution, identifies the outlier values based on their contribution to each mode in the GMM.
     Returns the indices and values of the outliers, if any.
     """
-    outliers: List[Tuple[int, float]] = []
+    outliers: list[tuple[int, float]] = []
     for i, x_i in enumerate(x):
         contributions = norm.pdf(x_i, mu, np.sqrt(vr))
         poss_outlier = np.all(contributions < OUTLIER_THRESHOLD / len(x))
@@ -644,7 +648,7 @@ def identify_outliers(
 
 
 def remove_outliers(
-    outliers: List[Tuple[int, float]], x: np.ndarray
+    outliers: list[tuple[int, float]], x: np.ndarray
 ) -> np.ndarray:
     """Removes outlier values from the dataset."""
     for i, _ in outliers[::-1]:
@@ -652,7 +656,7 @@ def remove_outliers(
     return x
 
 
-def resize_data_window(data: np.ndarray) -> Tuple[np.ndarray, List[int]]:
+def resize_data_window(data: np.ndarray) -> tuple[np.ndarray, list[int]]:
     """Identifies and removes the outliers from the dataset."""
     x = data[:]
     outlier_values = []
@@ -672,7 +676,7 @@ def assign_values_to_modes(
     mu: np.ndarray[float],
     vr: np.ndarray[float],
     p: np.ndarray[float],
-) -> Tuple[List[np.ndarray[int]], List[int]]:
+) -> tuple[list[np.ndarray[int]], list[int]]:
     x_by_mode, pruned = assign_values_to_modes_inner(x, num_modes, mu, vr, p)
     filtered_x = np.concatenate(x_by_mode)
     gmm = em(filtered_x, num_modes, len(filtered_x), mu, vr, p)
@@ -684,13 +688,13 @@ def assign_values_to_modes(
 
 
 def run_gmm(
-    x: Union[List[int], np.ndarray],
+    x: list[int] | np.ndarray,
     *,
     L: int,
     R: int,
     plot: bool = False,
     pr: bool = False,
-) -> Optional[EstimatedGMM1D]:
+) -> EstimatedGMM1D | None:
     """
     Runs the GMM estimation process to determine the number of structural variants in a DNA reading frame.
     x is a list of data points corresponding to the y-intercept of the L-R position calculated after a shift in the genome due to a deletion of greater than 1 base pair.

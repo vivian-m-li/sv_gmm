@@ -1,16 +1,19 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+import numpy as np
 from scipy.stats import dirichlet
-from process_data import run_viz_gmm
-from helper import calculate_posteriors, calculate_ci
-from viz import plot_2d_coords
-from gmm_types import COLORS, GMM, Evidence
-from typing import List, Tuple
+
+from src.model.process_data import run_viz_gmm
+from src.utils.constants import COLORS
+from src.utils.helper import calculate_posteriors, calculate_ci
+from src.utils.types import GMM, Evidence
+from src.utils.viz import plot_2d_coords
 
 MAX_N = 100
 
-"""Visualizations of the Dirichlet process"""
+# ----------------------------------------
+# Visualizations of the Dirichlet process
+# ----------------------------------------
 
 
 def animate_dirichlet(posterior_distributions):
@@ -135,7 +138,7 @@ def animate_dirichlet_history(df):
     animate_dirichlet_heatmap(alphas)
 
 
-def run_trial(reads, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
+def run_trial(reads, **kwargs) -> tuple[GMM, list[list[Evidence]]]:
     """Runs a single trial of Gaussian Mixture Model."""
     kwargs["plot"] = False
     gmm, evidence_by_mode = run_viz_gmm(reads, **kwargs)
@@ -144,7 +147,7 @@ def run_trial(reads, **kwargs) -> Tuple[GMM, List[List[Evidence]]]:
 
 def run_dirichlet(
     reads, insert_size_file=None, **kwargs
-) -> Tuple[List[GMM], List[np.ndarray]]:
+) -> tuple[list[GMM], list[np.ndarray]]:
     """
     Runs the Dirichlet process until convergence or max iterations.
     1. Initialize alpha values and counts. Each outcome (1, 2, or 3 modes) is equally likely.

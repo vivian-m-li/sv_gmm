@@ -1,16 +1,17 @@
-import os
 import ast
-import sys
 import csv
+import math
 import multiprocessing
+import os
+import sys
+
 import numpy as np
 import pandas as pd
-import math
-from generate_data import generate_synthetic_sv_data
-from helper import reciprocal_overlap
-from gmm_types import Evidence
-from typing import Optional, List, Tuple
-from timeout import break_after
+
+from src.synthetic.generate_data import generate_synthetic_sv_data
+from src.utils.helper import reciprocal_overlap
+from src.utils.timeout import break_after
+from src.utils.types import Evidence
 
 
 def write_reciprocal_overlap():
@@ -43,7 +44,7 @@ def run_gmm(case, r, svs, weights, n_samples, results):
     )
 
 
-def get_len_L(evidence_by_mode: List[List[Evidence]]):
+def get_len_L(evidence_by_mode: list[list[Evidence]]):
     """Gets the average length and L coordinate for each mode from the evidence."""
     lengths = []
     Ls = []
@@ -72,8 +73,8 @@ def write_csv(
     all_results,
     *,
     write_new_file: bool = False,
-    fixed_n_samples: Optional[int] = None,
-    fixed_svlen: Optional[int] = None,
+    fixed_n_samples: int | None = None,
+    fixed_svlen: int | None = None,
 ):
     """Writes the results of the synthetic data tests to a CSV file."""
     file = f"synthetic_data/results{'' if fixed_n_samples is None else 'n=' + str(fixed_n_samples)}.csv"
@@ -155,7 +156,7 @@ def get_coordinates(sv1, sv2, d):
     return (x3, y3)
 
 
-def generate_data(case: str) -> List[Tuple[int, int]]:
+def generate_data(case: str) -> list[tuple[int, int]]:
     """
     DEPRECATED: Use generate_data_r instead.
     Generates synthetic data with increasing d (distance between cluster centroids) and runs the GMM on it to test accuracy.
@@ -209,7 +210,7 @@ def generate_data(case: str) -> List[Tuple[int, int]]:
 # DEPRECATED: Use `r_accuracy_test` instead
 @break_after(hours=17, minutes=55)
 def d_accuracy_test(
-    n_samples: int, test_case: Optional[str] = None, vary_weights: bool = False
+    n_samples: int, test_case: str | None = None, vary_weights: bool = False
 ):
     """
     DEPRECATED: Use `r_accuracy_test` instead.
@@ -311,7 +312,7 @@ def generate_data_r(case: str, svlen: int):
 def r_accuracy_test(
     n_samples: int,
     svlen: int,
-    test_case: Optional[str] = None,
+    test_case: str | None = None,
     vary_weights: bool = False,
 ):
     """Parallelized synthetic data tests with varying r and (optional) cluster weights. Each set of parameters is repeated 50 times. Run with the bash script run_synthetic_data_tests.sh to test different sample sizes and sv lengths."""

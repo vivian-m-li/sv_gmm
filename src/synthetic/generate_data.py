@@ -1,21 +1,22 @@
+from collections import defaultdict
 import random
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from pathlib import Path
-from process_data import run_viz_gmm
-from helper import stix_output_to_df
-from collections import defaultdict
-from typing import List, Tuple, Optional, Dict
+
+from src.model.process_data import run_viz_gmm
+from src.utils.helper import stix_output_to_df
 
 
-"""
-Generate data for GATK SVCluster pipeline
-"""
+# -----------------------------------------
+# Generate data for GATK SVCluster pipeline
+# -----------------------------------------
 
 
 def data_to_vcf(
-    evidence, insert_size_lookup: Dict[str, int], vcf_filename: str
+    evidence, insert_size_lookup: dict[str, int], vcf_filename: str
 ):
     """
     Writes the synthetic data to a VCF file to be used for the GATK SVCluster pipeline.
@@ -245,10 +246,10 @@ def get_random_insert_size(df):
 
 def generate_synthetic_sv_vcf(
     chr: int,  # chromosome number (does not support X/Y), as a str
-    svs: List[Tuple[int, int]],
+    svs: list[tuple[int, int]],
     *,
     vcf_filename: str,  # writes the data to the file
-):  # List of (start, stop) for each SV):
+):  # list of (start, stop) for each SV):
     """Writes 'called' SVs into VCF format."""
 
     vcf_records = []
@@ -361,10 +362,10 @@ def generate_mapped_pairs_for_sv(
 
 def generate_synthetic_sv_data(
     chr: int,  # chromosome number (does not support X/Y), as a str
-    svs: List[Tuple[int, int]],  # List of (start, stop) for each SV
+    svs: list[tuple[int, int]],  # list of (start, stop) for each SV
     *,
-    n_samples: Optional[int] = None,
-    p: Optional[List[float]] = None,
+    n_samples: int | None = None,
+    p: list[float] | None = None,
     gmm_model: str = "2d",
     run_gmm: bool = True,
     plot: bool = False,

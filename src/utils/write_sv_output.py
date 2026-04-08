@@ -1,15 +1,19 @@
 """Functions for writing synthetic or real data outputs."""
 
 import ast
+import csv
+from collections import defaultdict, Counter
+from dataclasses import fields, asdict
 import os
 import subprocess
-import csv
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 from scipy.spatial.distance import braycurtis
-from dataclasses import fields, asdict
+
 from query_sv import query_stix, giggle_format
-from helper import (
+from src.utils.constants import SUPERPOPULATIONS, CHR_LENGTHS
+from src.utils.helper import (
     get_deletions_df,
     get_all_split_trials_df,
     get_sv_stats_collapsed_df,
@@ -23,16 +27,12 @@ from helper import (
     reciprocal_overlap,
     df_to_bed,
 )
-from gmm_types import (
+from src.utils.types import (
     SVInfoGMM,
     GMM,
     Evidence,
     ModeStat,
-    SUPERPOPULATIONS,
-    CHR_LENGTHS,
 )
-from typing import Dict, List, Optional, Tuple
-from collections import defaultdict, Counter
 
 
 def concat_processed_sv_files(
@@ -75,7 +75,7 @@ def write_sv_file(sv: SVInfoGMM, file_dir: str, iteration: int):
         csv_writer.writerow(asdict(sv))
 
 
-def get_reference_samples(row: pd.Series, reads: pd.DataFrame) -> List[str]:
+def get_reference_samples(row: pd.Series, reads: pd.DataFrame) -> list[str]:
     """Returns the samples with evidence that are actually homozygous for the reference allele (0, 0)."""
     samples_with_reads = set(reads["sample_id"].tolist())
     ref_samples = [col for col in samples_with_reads if row[col] == "(0, 0)"]
@@ -83,10 +83,10 @@ def get_reference_samples(row: pd.Series, reads: pd.DataFrame) -> List[str]:
 
 
 def init_sv_stat_row(
-    row: Dict,
+    row: dict,
     *,
-    num_samples: Optional[int] = 0,
-    num_reference: Optional[int] = 0,
+    num_samples: int | None = 0,
+    num_reference: int | None = 0,
 ) -> SVInfoGMM:
     """Initializes a row for the SV output file."""
     sv_stat = SVInfoGMM(
@@ -121,7 +121,7 @@ def get_raw_data(
     filter_reference_samples: bool = True,
     samples_to_keep: list[str] | None = None,
     print_messages: bool = True,
-) -> Tuple[Dict[str, np.ndarray[float]], int]:
+) -> tuple[dict[str, np.ndarray[float]], int]:
     """
     Gets the samples and evidence for an SV. Filters out samples that are homozygous for the reference allele.
     The STIX index and paths are hardcoded for query_stix.
@@ -156,8 +156,8 @@ def get_raw_data(
 
 def write_sv_stats(
     sv_stat: SVInfoGMM,
-    gmm: Optional[GMM],
-    evidence_by_mode: List[List[Evidence]],
+    gmm: GMM | None,
+    evidence_by_mode: list[list[Evidence]],
     population_size: int,
     file_dir: str,
     iteration: int = 0,
@@ -453,7 +453,7 @@ def write_ancestry_dissimilarity(output_dir: str):
 def get_n_modes(
     input_dir: str,
     output_dir: str,
-    deletions_df: Optional[pd.DataFrame] = None,
+    deletions_df: pd.DataFrame | None = None,
 ):
     """Get the number of modes and confidence for each SV."""
     sv_df = pd.DataFrame(
@@ -840,7 +840,7 @@ def write_post_processed_files(
     input_dir: str,
     output_dir: str,
     sample_ids: set[str],
-    sv_df: Optional[pd.DataFrame] = None,
+    sv_df: pd.DataFrame | None = None,
     synthetic_data: bool = False,
 ):
     """Write all post-processed files after running SPLIT2."""

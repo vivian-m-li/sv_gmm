@@ -1,9 +1,11 @@
 import os
 import subprocess
 import time
+
 import pandas as pd
-from helper import get_sample_ids
-from timeout import break_after
+
+from src.utils.helper import get_sample_ids
+from src.utils.timeout import break_after
 
 FILE_DIR = "/Users/vili4418/sv/sv_gmm/1kgp/insert_size_files"
 TEMP_DIR = "/scratch/Users/vili4418/insert_size_files"

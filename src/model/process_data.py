@@ -4,14 +4,14 @@ import pandas as pd
 import matplotlib.cm as cm
 from bokeh.plotting import figure, output_file, save
 from bokeh.models import HoverTool, ColumnDataSource, NumeralTickFormatter
-from typing import Optional, List, Tuple, Dict
-from em import run_gmm
-from helper import reciprocal_overlap
-from viz import plot_2d_coords_fig
-from gmm_types import Evidence, Sample, EstimatedGMM
+
+from src.model.em import run_gmm
+from src.utils.helper import reciprocal_overlap
+from src.utils.types import Evidence, Sample, EstimatedGMM
+from src.utils.viz import plot_2d_coords_fig
 
 
-def sv_viz(data: List[np.ndarray[float]], *, file_name: str):
+def sv_viz(data: list[np.ndarray[float]], *, file_name: str):
     """Plots the paired-end read data as horizontal lines using Bokeh (written by Kit)."""
     p = figure(width=800, height=600)
     colors = cm.Set1.colors
@@ -36,14 +36,14 @@ def sv_viz(data: List[np.ndarray[float]], *, file_name: str):
 
 
 def bokeh_scatterplot(
-    data: List[np.ndarray[float]],
+    data: list[np.ndarray[float]],
     *,
     file_name: str,
     lower_bound: int,
     upper_bound: int,
-    L: Optional[int] = None,
-    R: Optional[int] = None,
-    read_length: Optional[int] = None,
+    L: int | None = None,
+    R: int | None = None,
+    read_length: int | None = None,
     sig: int = 50,  # allowed error in short reads
 ):
     """Creates a scatterplot with an SV region polygon using Bokeh, taking a list of arrays as input (written by Kit). Points have not been filtered yet."""
@@ -88,7 +88,7 @@ def bokeh_scatterplot(
 
 # Second Viz deviations from the line
 def plot_deviation_bokeh(
-    data: List[np.ndarray[float]],
+    data: list[np.ndarray[float]],
     *,
     file_name: str,
     L: int,
@@ -137,7 +137,7 @@ def plot_deviation_bokeh(
     save(p)
 
 
-def get_unique_x_values(data: List[np.ndarray]) -> np.ndarray[int]:
+def get_unique_x_values(data: list[np.ndarray]) -> np.ndarray[int]:
     """Extracts and returns unique x-values from a list of arrays."""
     all_x_values = []
     for array in data:
@@ -148,16 +148,16 @@ def get_unique_x_values(data: List[np.ndarray]) -> np.ndarray[int]:
 
 # Third Viz with 3 + more point
 def filter_and_plot_sequences_bokeh(
-    y: Dict[str, np.ndarray[float]],
+    y: dict[str, np.ndarray[float]],
     *,
-    file_name: Optional[str],
+    file_name: str | None,
     L: int,
     R: int,
-    insert_size_lookup: Dict[str, int],
+    insert_size_lookup: dict[str, int],
     sig: int = 50,
     min_pairs: int = 2,  # minimum number of paired end reads for a sample needed to keep the sample
     plot_bokeh: bool,
-) -> Tuple[np.ndarray[np.ndarray[float]], List[Evidence]]:
+) -> tuple[np.ndarray[np.ndarray[float]], list[Evidence]]:
     """
     DEPRECATED
     Filters out samples with too few paired-end reads and plots the remaining sequences using Bokeh (written by Kit).
@@ -293,9 +293,9 @@ def filter_and_plot_sequences_bokeh(
 # Viz 4 with the intercepts
 def plot_fitted_lines_bokeh(
     mb: np.ndarray[np.ndarray[float]],
-    sv_evidence_unfiltered: List[Evidence],
+    sv_evidence_unfiltered: list[Evidence],
     *,
-    file_name: Optional[str],
+    file_name: str | None,
     L: int,
     R: int,
     sig: int,
@@ -393,7 +393,7 @@ def plot_fitted_lines_bokeh(
 
 
 def populate_sample_info(
-    sv_evidence: List[Evidence],
+    sv_evidence: list[Evidence],
     chr: str,
     L: int,
     R: int,
@@ -444,12 +444,12 @@ def populate_sample_info(
 
 def get_evidence_by_mode(
     gmm: EstimatedGMM,
-    sv_evidence: List[Evidence],
+    sv_evidence: list[Evidence],
     L: int,
     R: int,
     *,
     gmm_model: str = "2d",
-) -> List[List[Evidence]]:
+) -> list[list[Evidence]]:
     sv_evidence = np.array(sv_evidence)
     data = []
     for mode in gmm.x_by_mode:
@@ -500,15 +500,15 @@ def get_evidence_by_mode(
 
 
 def get_intercepts(
-    squiggle_data: Dict[str, np.ndarray[float]],
+    squiggle_data: dict[str, np.ndarray[float]],
     *,
-    file_name: Optional[str],
+    file_name: str | None,
     L: int,
     R: int,
-    insert_size_lookup: Dict[str, int],
+    insert_size_lookup: dict[str, int],
     plot_bokeh: bool = False,
     min_pairs: int = 2,
-) -> Tuple[np.ndarray[Tuple[float, int]], List[Evidence]]:
+) -> tuple[np.ndarray[tuple[float, int]], list[Evidence]]:
     """
     DEPRECATED: use process_data instead
     Wrapper function that filters and plots sequences.
@@ -552,14 +552,14 @@ def get_intercepts(
 
 
 def process_squiggle_data(
-    squiggle_data: Dict[str, np.ndarray[float]],
+    squiggle_data: dict[str, np.ndarray[float]],
     *,
     L: int,
     R: int,
-    insert_size_lookup: Dict[str, int],
+    insert_size_lookup: dict[str, int],
     min_pairs: int = 2,  # minimum number of paired end reads for a sample needed to keep the sample
     plot_bokeh: bool = False,  # deprecated
-    file_name: Optional[str],  # deprecated - used for plotting
+    file_name: str | None,  # deprecated - used for plotting
 ):
     """
     DEPRECATED: processes data in the old format (sample_id, paired-end reads as a flat array)
@@ -611,7 +611,7 @@ def process_data(
     *,
     L: int,
     R: int,
-    insert_size_lookup: Dict[str, int],
+    insert_size_lookup: dict[str, int],
     min_pairs: int = 2,  # minimum number of paired end reads for a sample needed to keep the sample
 ):
     """
@@ -675,7 +675,7 @@ def process_data(
     return np.array(points), sv_evidence
 
 
-def get_insert_size_lookup(filename) -> Dict[str, int]:
+def get_insert_size_lookup(filename) -> dict[str, int]:
     """Returns a dictionary mapping sample IDs to their mean insert sizes from sequencing high-coverage short-reads."""
     insert_size_df = pd.read_csv(
         filename,
@@ -699,10 +699,10 @@ def run_viz_gmm(
     min_pairs: int = 2,
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
-    insert_size_lookup: Optional[Dict[str, int]] = None,
+    insert_size_lookup: dict[str, int] | None = None,
     stem: str = "1kgp",
     plot: bool = True,
-    plot_file: Optional[str] = None,
+    plot_file: str | None = None,
 ):
     """Runs the GMM pipeline and visualizes the results."""
     if insert_size_lookup is None:

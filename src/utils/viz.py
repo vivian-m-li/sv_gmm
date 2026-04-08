@@ -1,34 +1,35 @@
-import os
 import ast
-import random
+from collections import Counter, defaultdict
 import colorsys
 import gzip
 import math
+import os
+import random
 import re
-import numpy as np
-import pandas as pd
-from scipy.stats import norm, sem
-from scipy.special import logit
+
 from Bio import SeqIO, Seq
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
+from brokenaxes import brokenaxes
 import matplotlib.cm as cm
 from matplotlib.colors import ListedColormap
-from brokenaxes import brokenaxes
-from matplotlib.ticker import FixedLocator, StrMethodFormatter
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
-from collections import Counter, defaultdict
-from typing import List, Optional, Dict
-from em import run_em
-from em_1d import run_em as run_em1d, get_scatter_data
-from helper import (
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FixedLocator, StrMethodFormatter
+import numpy as np
+import pandas as pd
+from scipy.special import logit
+from scipy.stats import norm, sem
+
+from src.model.em import run_em
+from src.model.em_1d import run_em as run_em1d, get_scatter_data
+from src.utils.helper import (
     get_sample_sequencing_centers,
     get_sv_stats_df,
     get_sv_stats_collapsed_df,
     get_svlen,
     calc_af,
 )
-from gmm_types import (
+from src.utils.types import (
     Evidence,
     SVStat,
     ANCESTRY_COLORS,
@@ -51,13 +52,13 @@ def add_noise(value, scale=0.07):
     return value + np.random.normal(scale=scale)
 
 
-def get_mean_std(label: str, values: List[float]):
+def get_mean_std(label: str, values: list[float]):
     return (
         f"{label}={math.floor(np.mean(values))} +/- {round(np.std(values), 2)}"
     )
 
 
-def print_sv_stats(sv_stats: List[List[SVStat]]):
+def print_sv_stats(sv_stats: list[list[SVStat]]):
     stats = []
     for i, lst in enumerate(sv_stats):
         lengths = [sv.length for sv in lst]
@@ -84,7 +85,7 @@ def add_color_noise(hex_color: str):
 def plot_evidence_by_mode(
     fig,
     gs,
-    evidence_by_mode: List[List[Evidence]],
+    evidence_by_mode: list[list[Evidence]],
 ):
     num_modes = len(evidence_by_mode)
     mode_indices = list(range(num_modes))
@@ -284,7 +285,7 @@ def plot_evidence_by_mode(
 
 
 def plot_sequence(
-    evidence_by_mode: List[List[Evidence]], ref_sequence: Seq.Seq
+    evidence_by_mode: list[list[Evidence]], ref_sequence: Seq.Seq
 ):
     sv_stats = get_svlen(evidence_by_mode)
     mode_indices = list(range(len(evidence_by_mode)))
@@ -354,7 +355,7 @@ def plot_sequence(
     plt.show()
 
 
-def plot_sv_lengths(evidence_by_mode: List[List[Evidence]]):
+def plot_sv_lengths(evidence_by_mode: list[list[Evidence]]):
     plt.figure(figsize=(15, 8))
     for i, mode in enumerate(evidence_by_mode):
         all_lengths = []
@@ -383,7 +384,7 @@ def plot_sv_lengths(evidence_by_mode: List[List[Evidence]]):
     plt.show()
 
 
-def plot_sv_coords(evidence_by_mode: List[List[Evidence]]):
+def plot_sv_coords(evidence_by_mode: list[list[Evidence]]):
     plt.figure(figsize=(15, 8))
     for i, mode in enumerate(evidence_by_mode):
         coords = [evidence.mean_l for evidence in mode]
@@ -407,7 +408,7 @@ def plot_sv_coords(evidence_by_mode: List[List[Evidence]]):
 
 def plot_2d_coords(
     ax_main,
-    evidence_by_mode: List[List[Evidence]],
+    evidence_by_mode: list[list[Evidence]],
     *,
     L: int,
     R: int,
@@ -420,8 +421,8 @@ def plot_2d_coords(
     size_by: str = "num_evidence",
     show_mode_stats: bool = True,
     show_1d_distributions: bool = True,
-    insert_size_lookup: Optional[Dict] = None,
-    insert_size_file: Optional[str] = None,
+    insert_size_lookup: dict | None = None,
+    insert_size_file: str | None = None,
     d_threshold: int = 100,
     r_threshold: float = 0.8,
     max_penalty: int = 200,
@@ -608,7 +609,7 @@ def plot_2d_coords_fig(evidence_by_mode, plot_file, **kwargs):
 
 
 def plot_single_sv(
-    evidence_by_mode: List[List[Evidence]],
+    evidence_by_mode: list[list[Evidence]],
     *,
     sv_id: str,
     L: int,
@@ -873,7 +874,7 @@ def plot_sample_size_per_mode(filter_intersecting_genes: bool = False):
     plt.show()
 
 
-def plot_removed_evidence(sv_evidence: List[Evidence], L: int, R: int):
+def plot_removed_evidence(sv_evidence: list[Evidence], L: int, R: int):
     """
     For an SV, plots the evidence that has been removed due to not enough evidence or deviation from the y=x+b line
     """

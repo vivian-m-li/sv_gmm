@@ -1,23 +1,23 @@
-import sys
+import multiprocessing
 import os
 import shutil
-import multiprocessing
-from process_data import run_viz_gmm
-from write_sv_output import (
+import sys
+
+from src.model.process_data import run_viz_gmm
+from src.utils.helper import get_deletions_df
+from src.utils.write_sv_output import (
     get_raw_data,
     init_sv_stat_row,
     write_sv_stats,
     concat_multi_processed_sv_files,
 )
-from helper import get_deletions_df
-from typing import Optional, Dict, List, Tuple
 
 FILE_DIR = "processed_svs"
 SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
 OUTPUT_FILE_NAME = "sv_stats.csv"
 
 
-def run_all_sv_wrapper(row: Dict, population_size: int, iteration: int = 0):
+def run_all_sv_wrapper(row: dict, population_size: int, iteration: int = 0):
     reads, num_samples = get_raw_data(row)
     sv_stat = init_sv_stat_row(
         row,
@@ -51,8 +51,8 @@ def run_all_sv(
     rerun_all_svs: bool = False,
     run_ambiguous_svs: bool = False,
     num_iterations: int = 1,
-    query_chr: Optional[str] = None,
-    subset: Optional[List[Tuple[str, int, int]]] = None,
+    query_chr: str | None = None,
+    subset: list[tuple[str, int, int]] | None = None,
 ):
     deletions_df = get_deletions_df()
 

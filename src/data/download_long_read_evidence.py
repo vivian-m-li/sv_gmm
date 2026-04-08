@@ -1,21 +1,22 @@
-import sys
-import time
+import csv
+import multiprocessing as mp
 import os
 import shutil
 import subprocess
-import csv
+import sys
+import time
+
 import pandas as pd
-import multiprocessing as mp
-from parse_long_reads import (
+
+from src.data_processing.parse_long_reads import (
     get_sv_region,
     get_bam_file,
     read_cigars_from_file,
     remove_bam_file,
 )
 from query_sv import giggle_format
-from helper import stix_output_to_df
-from timeout import break_after
-from typing import List
+from src.utils.helper import stix_output_to_df
+from src.utils.timeout import break_after
 
 SCRATCH_DIR = "/scratch/Shares/layer/1kg_lr_crams"
 STIX_DATA_DIR = "/Users/vili4418/sv/sv_gmm/data_dump/lr_stix_output/"
@@ -236,7 +237,7 @@ def process_sample_evidence_inner(
 def process_sample_evidence(
     sample_id: str,
     cram_file: str,
-    sv_ids: List[str],
+    sv_ids: list[str],
     with_mp: bool = False,
 ):
     """Parallelizes the processing function for each sv in sv_ids after the cram file has been downloaded for a sample."""
@@ -262,7 +263,7 @@ def remove_cram_file(file):
 
 def download_sample_evidence(
     sample_row: pd.Series,
-    sv_ids: List[str],
+    sv_ids: list[str],
 ):
     """Download the cram file for a sample, process it for each sv, and then remove the cram file."""
     start = time.time()
@@ -321,7 +322,7 @@ def download_sample_evidence(
 
 def download_sample_evidence_http(
     sample_row: pd.Series,
-    sv_ids: List[str],
+    sv_ids: list[str],
 ):
     """Uses samtools to intersect the bam file from the https link. Takes much longer than downloading the cram file for each sample since fewer processes can run in parallel."""
     start = time.time()

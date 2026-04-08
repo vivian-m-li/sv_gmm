@@ -1,11 +1,12 @@
-import os
-import pysam
-import subprocess
 import ast
+import os
 import re
+import subprocess
+
 import pandas as pd
-from helper import reciprocal_overlap
-from typing import Set
+import pysam
+
+from src.utils.helper import reciprocal_overlap
 
 """
 This script takes the original SR SVs and the LR SVs, builds an overlap set using bedtools intersect, and then uses the results to build a lookup file that maps the original SR SV IDs to the new split SV IDs, along with the coordinates and non-ref sample IDs for each split SV. This lookup file can then be used to assign genotypes to the split SVs based on the genotypes of the original SR SVs.
@@ -76,7 +77,7 @@ def vcf_to_csv_filtered(in_file: str, out_file: str):
     vcf_to_csv(in_file, out_file, sv_ids=svs_run, sample_ids=lr_samples)
 
 
-def vcf_to_bed(in_file: str, out_file: str, sample_ids: Set[int]) -> None:
+def vcf_to_bed(in_file: str, out_file: str, sample_ids: set[int]) -> None:
     """Converts a vcf to a bed file to be used with bedtools intersect. Writes out columns chr, start, end, id"""
 
     print(f"Converting {in_file} to bed...", flush=True)

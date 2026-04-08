@@ -1,16 +1,18 @@
-import re
+import multiprocessing
 import os
+import re
+
 import pandas as pd
 import pysam
-import multiprocessing
+
 from query_sv import (
     get_query_region,
     query_stix_bash,
     load_vcf,
     process_input_files,
 )
-from helper import get_sample_ids
-from timeout import break_after
+from src.utils.helper import get_sample_ids
+from src.utils.timeout import break_after
 
 INPUT_DIR = "1kgp"
 

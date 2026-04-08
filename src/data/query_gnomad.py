@@ -1,16 +1,17 @@
-import os
-import time
-import datetime
 import csv
-import requests
+import datetime
 import multiprocessing
-import pandas as pd
+import os
+import requests
+import time
+
 import matplotlib.pyplot as plt
-from gmm_types import CHR_LENGTHS
+import pandas as pd
+
 from query_sv import giggle_format, query_stix, FILE_DIR
-from helper import stix_output_to_df
-from process_data import process_data
-from typing import Dict
+from src.model.process_data import process_data
+from src.utils.types import CHR_LENGTHS
+from src.utils.helper import stix_output_to_df
 
 # for human genome assembly GRCh37, https://www.ncbi.nlm.nih.gov/grc/human/data?asm=GRCh37
 URL = "https://gnomad.broadinstitute.org/api/"
@@ -84,7 +85,7 @@ def query_gnomad_stix():
         )
 
 
-def get_num_samples(row_index: int, row, chr: str, lookup: Dict[int, int]):
+def get_num_samples(row_index: int, row, chr: str, lookup: dict[int, int]):
     start = giggle_format(chr, row.pos)
     end = giggle_format(chr, row.end)
     reads = stix_output_to_df(f"{FILE_DIR}/{start}-{end}.txt")
