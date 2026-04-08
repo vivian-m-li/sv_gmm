@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-from src.model.process_data import run_viz_gmm
+from src.model.gmm_trial import gmm_trial
 from src.utils.helper import stix_output_to_df
 
 
@@ -367,7 +367,7 @@ def generate_synthetic_sv_data(
     n_samples: int | None = None,
     p: list[float] | None = None,
     gmm_model: str = "2d",
-    run_gmm: bool = True,
+    gmm: bool = True,
     plot: bool = False,
     plot_reads: bool = False,
     vcf_filename: str = False,  # writes the data to the file
@@ -439,8 +439,8 @@ def generate_synthetic_sv_data(
     if vcf_filename:
         data_to_vcf(evidence, insert_size_lookup, vcf_filename)
 
-    if run_gmm:
-        gmm, evidence_by_mode = run_viz_gmm(
+    if gmm:
+        gmm, evidence_by_mode = gmm_trial(
             reads,
             chr=str(chr),
             L=L,

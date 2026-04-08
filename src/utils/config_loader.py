@@ -60,31 +60,4 @@ def load_config(path: str | None = None) -> dict:
             "intermediate_output_dir"
         ]
 
-    _validate(cfg, config_path)
     return cfg
-
-
-def _validate(cfg: dict, config_path: str) -> None:
-    """Raise informative errors for obviously missing required fields."""
-    required = {
-        "paths": [
-            "input_dir",
-            "intermediate_output_dir",
-        ],
-        "input_files": [
-            "sv_lookup_file",
-            "insert_size_file",
-            "default_insert_size",
-        ],
-        "stix": ["bin", "index", "database"],
-    }
-    for section, keys in required.items():
-        if section not in cfg:
-            raise ValueError(
-                f"Config file '{config_path}' is missing the [{section}] section."
-            )
-        for key in keys:
-            if key not in cfg[section]:
-                raise ValueError(
-                    f"Config file '{config_path}' is missing '{key}' under [{section}]."
-                )

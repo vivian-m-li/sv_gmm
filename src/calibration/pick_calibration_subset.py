@@ -4,8 +4,8 @@ import subprocess
 
 import pandas as pd
 
-from query_sv import load_vcf, giggle_format
 from src.utils.helper import stix_output_to_df
+from src.utils.model_helper import load_vcf, giggle_format
 
 """
 The purpose of this script is to pick a subset of structural variants (SVs) from a larger VCF file to be used for the calibration test.
@@ -113,7 +113,7 @@ def run_bedtools_intersect(
     # convert csv to bed file
     bed_file = os.path.join(input_dir, "deletions.bed")
     with open(bed_file, "w") as bed_f:
-        for _, row in df.iterrows():
+        for s, row in df.iterrows():
             bed_f.write(
                 f"{row['chr']}\t{row['start']}\t{row['stop']}\t{row['id']}\n"
             )

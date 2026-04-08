@@ -1,3 +1,7 @@
+"""
+This script takes the original SR SVs and the LR SVs, builds an overlap set using bedtools intersect, and then uses the results to build a lookup file that maps the original SR SV IDs to the new split SV IDs, along with the coordinates and non-ref sample IDs for each split SV. This lookup file can then be used to assign genotypes to the split SVs based on the genotypes of the original SR SVs.
+"""
+
 import ast
 import os
 import re
@@ -6,11 +10,7 @@ import subprocess
 import pandas as pd
 import pysam
 
-from src.utils.helper import reciprocal_overlap
-
-"""
-This script takes the original SR SVs and the LR SVs, builds an overlap set using bedtools intersect, and then uses the results to build a lookup file that maps the original SR SV IDs to the new split SV IDs, along with the coordinates and non-ref sample IDs for each split SV. This lookup file can then be used to assign genotypes to the split SVs based on the genotypes of the original SR SVs.
-"""
+from src.utils.model_helper import reciprocal_overlap
 
 FILE_DIR = "sv_genotyping"
 GTs = [(0, 1), (1, 0), (1, 1)]

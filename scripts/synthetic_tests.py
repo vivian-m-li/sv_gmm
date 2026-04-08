@@ -31,7 +31,7 @@ def write_reciprocal_overlap():
         df.to_csv(f"synthetic_data/{file}")
 
 
-def run_gmm(case, r, svs, weights, n_samples, results):
+def gmm(case, r, svs, weights, n_samples, results):
     """Generates synthetic data and runs the GMM on it. Appends the results to the multiprocessing-managed list to be written to a CSV later."""
     gmm, evidence_by_mode = generate_synthetic_sv_data(
         1,
@@ -235,7 +235,7 @@ def d_accuracy_test(
             for _ in range(100):
                 args.append((case, d, svs, weights, n_samples, results))
 
-        p.starmap(run_gmm, args)
+        p.starmap(gmm, args)
         p.close()
         p.join()
 
@@ -351,7 +351,7 @@ def r_accuracy_test(
                 for _ in range(20):
                     args.append((case, r, svs, weight, n_samples, results))
 
-        p.starmap(run_gmm, args)
+        p.starmap(gmm, args)
         p.close()
         p.join()
 

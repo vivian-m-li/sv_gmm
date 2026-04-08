@@ -23,6 +23,9 @@ output_dir = "results"
 # Sub-directory where raw STIX query output files are cached between runs.
 stix_output_dir = "stix_output"
 
+# enable this when running query_stix_all.py
+# stix_output_dir = "/scratch/Users/vili4418/stix_output"
+
 # Intermediate directory used during processing.
 # On HPC clusters, point this to a fast local scratch filesystem.
 # On a local machine, a subdirectory of output_dir is fine.

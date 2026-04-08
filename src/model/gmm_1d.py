@@ -687,7 +687,7 @@ def assign_values_to_modes(
     return x_by_mode2, num_pruned
 
 
-def run_gmm(
+def gmm(
     x: list[int] | np.ndarray,
     *,
     L: int,
@@ -771,8 +771,3 @@ def run_gmm(
         num_pruned=num_pruned,
         num_iterations=num_iterations_final,
     )
-
-
-if __name__ == "__main__":
-    data = generate_data(n=100, num_modes=2)
-    gmm = run_gmm(data.x, plot=False)

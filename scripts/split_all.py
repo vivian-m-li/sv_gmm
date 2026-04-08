@@ -7,6 +7,7 @@ import time
 from src.model.dirichlet import run_dirichlet
 from src.utils.config_loader import load_config
 from src.utils.helper import get_deletions_df, get_sample_ids
+from src.utils.model_helper import process_input_files
 from src.utils.timeout import break_after
 from src.utils.write_sv_output import (
     get_raw_data,
@@ -121,6 +122,15 @@ def run_svs(config_path: str = "config.toml"):
     sample_id_file = cfg["input_files"]["sample_id_file"]
     sample_ids = get_sample_ids(sample_id_file)
 
+    # write input files that will be used later on during querying
+    insert_size_lookup = process_input_files(
+        input_dir,
+        cfg["input_files"]["sv_lookup_file"],
+        sample_id_file,
+        cfg["input_files"].get("insert_size_file"),
+        cfg["input_files"].get("default_insert_size"),
+    )
+
     # load model parameters from the config file
     raw_model = cfg.get("model", {})
     model_params = {
@@ -132,6 +142,7 @@ def run_svs(config_path: str = "config.toml"):
         }.items()
         if v is not None
     }
+    model_params["insert_size_lookup"] = insert_size_lookup
 
     os.makedirs(intermediate_output_dir, exist_ok=True)
     os.makedirs(local_intermediate_output_dir, exist_ok=True)

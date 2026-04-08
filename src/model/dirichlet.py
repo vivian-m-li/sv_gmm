@@ -3,19 +3,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import dirichlet
 
-from src.model.process_data import run_viz_gmm
+from src.model.gmm_trial import gmm_trial
 from src.utils.constants import COLORS
-from src.utils.helper import calculate_posteriors, calculate_ci
+from src.utils.model_helper import calculate_posteriors, calculate_ci
 from src.utils.types import GMM, Evidence
 from src.utils.viz import plot_2d_coords
 
-MAX_N = 100
+MAX_N = 100  # maximum number of iterations for the Dirichlet process
+
 
 # ----------------------------------------
 # Visualizations of the Dirichlet process
 # ----------------------------------------
-
-
 def animate_dirichlet(posterior_distributions):
     """Animates the evolution of the Dirichlet probabilities over trials."""
     fig, ax = plt.subplots()
@@ -138,10 +137,13 @@ def animate_dirichlet_history(df):
     animate_dirichlet_heatmap(alphas)
 
 
+# ----------------------------------------
+# Dirichlet process implementation
+# ----------------------------------------
 def run_trial(reads, **kwargs) -> tuple[GMM, list[list[Evidence]]]:
     """Runs a single trial of Gaussian Mixture Model."""
     kwargs["plot"] = False
-    gmm, evidence_by_mode = run_viz_gmm(reads, **kwargs)
+    gmm, evidence_by_mode = gmm_trial(reads, **kwargs)
     return gmm, evidence_by_mode
 
 

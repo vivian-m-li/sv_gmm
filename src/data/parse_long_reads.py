@@ -10,11 +10,8 @@ from collections import defaultdict
 import pandas as pd
 import pysam
 
-from src.utils.helper import (
-    get_sv_lookup,
-    get_sv_stats_collapsed_df,
-    reciprocal_overlap,
-)
+from src.utils.helper import get_sv_lookup, get_sv_stats_collapsed_df
+from src.utils.model_helper import reciprocal_overlap
 
 SCRATCH_DIR = "/scratch/Users/vili4418/"
 

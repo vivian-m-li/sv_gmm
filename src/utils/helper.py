@@ -1,5 +1,4 @@
 import ast
-from collections import Counter
 import os
 import subprocess
 
@@ -8,23 +7,14 @@ import pandas as pd
 
 from src.utils.types import Evidence, SVStat
 
-PROCESSED_SVS_DIR = "processed_svs"
 
 # ----------------------------
 # Get commonly used dataframes
 # ----------------------------
-
-
 def get_deletions_df(stem: str = "1kgp"):
     """Returns a dataframe of all SVs and genotypes for each sample."""
     file = os.path.join(stem, "deletions.csv")
     return pd.read_csv(file, low_memory=False)
-
-
-def get_sv_stats_df(stem: str = "1kgp"):
-    """DEPRECATED: use get_sv_stats_collapsed_df instead. Used for pre-dirichlet analysis."""
-    file = os.path.join(stem, "sv_stats.csv")
-    return pd.read_csv(file)
 
 
 def get_all_split_trials_df(stem: str = "1kgp"):
@@ -103,11 +93,6 @@ def remove_gatk_rows():
         df.to_csv(f"synthetic_data/{file}", index=False)
 
 
-def calc_af(n_homozygous, n_heterozygous, population_size):
-    """Calculate allele frequency from number of homozygous and heterozygous individuals."""
-    return ((n_homozygous * 2) + n_heterozygous) / (population_size * 2)
-
-
 def stix_output_to_df(
     filename: str, *, write_empty_file: bool = False
 ) -> pd.DataFrame:
@@ -165,19 +150,6 @@ def find_missing_sample_ids():
     return missing
 
 
-def find_missing_processed_svs():
-    """
-    DEPRECATED: new processed_svs_dir is processed_svs_converge
-    Gets SVs that are in the original deletions VCF that have not yet been run through the pipeline.
-    """
-    processed_sv_ids = set(
-        [file.strip(".csv") for file in os.listdir(PROCESSED_SVS_DIR)]
-    )
-    deletions_df = get_deletions_df()
-    missing = set(deletions_df["id"]) - processed_sv_ids
-    return missing
-
-
 def get_num_intersecting_genes():
     """Gets number of genes that intersect with at least 1 SV, and number of SVs that each gene intersects with."""
     df = pd.read_csv(
@@ -194,7 +166,7 @@ def get_num_intersecting_genes():
 
 def get_num_new_svs():
     """Gets number of new SVs created by splitting multi-modal SVs into multiple single-modal SVs."""
-    df = get_sv_stats_df()
+    df = get_sv_stats_collapsed_df()
     df = df[df["num_samples"] > 0]
     mode_data = [df[df["num_modes"] == i + 1] for i in range(3)]
     num_two_modes = len(mode_data[1])
@@ -254,7 +226,7 @@ def get_insert_sizes(get_files: bool = False):
 
 def get_mean_coverage():
     """Get mean coverage for all samples in 1kgp."""
-    df = get_sv_stats_df()
+    df = get_sv_stats_collapsed_df()
     df = df[df["num_modes"] > 1]
     coverage_df = pd.DataFrame(columns=["sv_id", "num_samples", "coverage"])
     for _, sv in df.iterrows():
@@ -300,90 +272,3 @@ def get_insert_size_diff():
     mean_diff = df["diff"].mean()
     print(mean_diff)
     df.to_csv("1kgp/insert_size_compare.csv", index=False)
-
-
-# ------------------
-# Dirichlet helpers
-# ------------------
-
-
-def calculate_posteriors(alpha):
-    """Calculate the posterior probabilities and variances for each mode given alpha parameters."""
-    p = alpha / np.sum(alpha)
-    sum_alpha_post = np.sum(alpha)
-    var = (alpha * (sum_alpha_post - alpha)) / (
-        sum_alpha_post**2 * (sum_alpha_post + 1)
-    )
-    return p, var
-
-
-def calculate_ci(p, var, n):
-    """Calculate the 95% confidence interval for the difference in means between the two most probable modes."""
-    # Calculate the difference in means between the two most probable modes
-    posterior_mu_sorted_indices = np.argsort(p)
-    posterior_mu_sorted = p[posterior_mu_sorted_indices]
-    diff_in_means = posterior_mu_sorted[-1] - posterior_mu_sorted[-2]
-
-    # Calculate the confidence interval for our difference in means
-    diff_var = (var[posterior_mu_sorted_indices[-1]]) / n + (
-        var[[posterior_mu_sorted_indices[-2]]]
-    ) / n
-    confidence = 1.96 * np.sqrt(diff_var)
-    ci = [diff_in_means - confidence, diff_in_means + confidence]
-
-    return ci
-
-
-def calculate_posteriors_from_trials(outcomes):
-    """Calculate the posterior probabilities and variances for each mode given a list of outcomes."""
-    counts = Counter(outcomes)
-    alpha = np.array([1, 1, 1]) + np.array([counts[1], counts[2], counts[3]])
-    return calculate_posteriors(alpha)
-
-
-def reciprocal_overlap(sv1: tuple[int, int], sv2: tuple[int, int]) -> float:
-    """
-    Calculates the reciprocal overlap between two structural variants.
-    r = min(% overlap sv 1, % overlap sv 2)
-    """
-    start1, end1 = sv1
-    start2, end2 = sv2
-    overlap_start = max(start1, start2)
-    overlap_end = min(end1, end2)
-    if overlap_start >= overlap_end:
-        return 0.0
-    overlap_length = overlap_end - overlap_start
-    sv1_length = end1 - start1
-    sv2_length = end2 - start2
-    return min(overlap_length / sv1_length, overlap_length / sv2_length)
-
-
-def calc_pr_auc(tp: float, fp: float, fn: float) -> float:
-    """
-    Compute a scalar PR-AUC proxy from confusion matrix fractions.
-    Approximate PR-AUC using the F1 score.
-    """
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    if precision + recall == 0:
-        return 0.0
-    return 2 * precision * recall / (precision + recall)  # F1
-
-
-def copy_stix_output_from_fiji(sv_id: str):
-    lookup = get_sv_lookup()
-    sv_row = lookup[lookup["id"] == sv_id]
-    chr = str(sv_row["chr"].values[0])
-    start = str(int(sv_row["start"].values[0]))
-    stop = str(int(sv_row["stop"].values[0]))
-    subprocess.run(
-        [
-            "scp",
-            f"vili4418@fiji.colorado.edu:/Users/vili4418/sv/sv_gmm/stix_output/{chr}:{start}_{chr}:{stop}.txt",
-            "assets/stix_output/",
-        ]
-    )
-
-
-if __name__ == "__main__":
-    copy_stix_output_from_fiji("HGSV_81050")

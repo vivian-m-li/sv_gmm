@@ -7,7 +7,7 @@ import uuid
 import pandas as pd
 import pysam
 
-from synthetic_tests import generate_data_r
+from scripts.synthetic_tests import generate_data_r
 from src.synthetic.generate_data import (
     generate_synthetic_sv_data,
     generate_synthetic_sv_vcf,
@@ -147,7 +147,7 @@ def gatk_cluster_reads(case, r, svs, weights, n_samples, gatk_alg, results):
         svs,
         n_samples=n_samples,
         p=weights,
-        run_gmm=False,
+        gmm=False,
         vcf_filename=filename,
     )
 

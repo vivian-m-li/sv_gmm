@@ -5,8 +5,8 @@ import matplotlib.cm as cm
 from bokeh.plotting import figure, output_file, save
 from bokeh.models import HoverTool, ColumnDataSource, NumeralTickFormatter
 
-from src.model.em import run_gmm
-from src.utils.helper import reciprocal_overlap
+from src.model.gmm import gmm
+from src.utils.model_helper import reciprocal_overlap
 from src.utils.types import Evidence, Sample, EstimatedGMM
 from src.utils.viz import plot_2d_coords_fig
 
@@ -675,39 +675,24 @@ def process_data(
     return np.array(points), sv_evidence
 
 
-def get_insert_size_lookup(filename) -> dict[str, int]:
-    """Returns a dictionary mapping sample IDs to their mean insert sizes from sequencing high-coverage short-reads."""
-    insert_size_df = pd.read_csv(
-        filename,
-        dtype={"sample_id": str, "mean_insert_size": float},
-    )
-    return {
-        sample_id: int(mean_insert_size)
-        for sample_id, mean_insert_size in insert_size_df.values
-    }
-
-
-def run_viz_gmm(
+def gmm_trial(
     reads: pd.DataFrame,
     *,
     chr: str,
     L: int,  # sv start
     R: int,  # sv stop
+    insert_size_lookup: dict[str, int],
     d_threshold: int = 100,
     r_threshold: float = 0.8,
     max_penalty: int = 200,
     min_pairs: int = 2,
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
-    insert_size_lookup: dict[str, int] | None = None,
     stem: str = "1kgp",
     plot: bool = True,
     plot_file: str | None = None,
 ):
     """Runs the GMM pipeline and visualizes the results."""
-    if insert_size_lookup is None:
-        insert_size_lookup = get_insert_size_lookup(f"{stem}/insert_sizes.csv")
-
     # transforms data to cluster
     points, sv_evidence = process_data(
         reads,
@@ -721,7 +706,7 @@ def run_viz_gmm(
         # warnings.warn("No structural variants found in this region.")
         return None, []
 
-    gmm = run_gmm(
+    gmm_result = gmm(
         points,
         L=L,
         R=R,
@@ -741,7 +726,7 @@ def run_viz_gmm(
             stem=stem,
         )  # mutates sv_evidence with ancestry data and homo/heterozygous for each sample
     evidence_by_mode = get_evidence_by_mode(
-        gmm, sv_evidence, L, R, gmm_model=gmm_model
+        gmm_result, sv_evidence, L, R, gmm_model=gmm_model
     )
     if plot:
         plot_2d_coords_fig(
@@ -770,4 +755,4 @@ def run_viz_gmm(
         #     color_by="mode",
         # )
 
-    return gmm, evidence_by_mode
+    return gmm_result, evidence_by_mode

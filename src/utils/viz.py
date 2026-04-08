@@ -20,18 +20,9 @@ import pandas as pd
 from scipy.special import logit
 from scipy.stats import norm, sem
 
-from src.model.em import run_em
-from src.model.em_1d import run_em as run_em1d, get_scatter_data
-from src.utils.helper import (
-    get_sample_sequencing_centers,
-    get_sv_stats_df,
-    get_sv_stats_collapsed_df,
-    get_svlen,
-    calc_af,
-)
-from src.utils.types import (
-    Evidence,
-    SVStat,
+from src.model.gmm import run_em
+from src.model.gmm_1d import run_em as run_em1d, get_scatter_data
+from src.utils.constants import (
     ANCESTRY_COLORS,
     COLORS,
     GMM_AXES,
@@ -39,6 +30,13 @@ from src.utils.types import (
     MODEL_NAMES,
     SYNTHETIC_DATA_CENTROIDS,
 )
+from src.utils.helper import (
+    get_sample_sequencing_centers,
+    get_sv_stats_collapsed_df,
+    get_svlen,
+)
+from src.utils.model_helper import calc_af
+from src.utils.types import Evidence, SVStat
 
 REFERENCE_FILE = "hs37d5.fa.gz"
 SAMPLES_DIR = "samples"
@@ -1726,7 +1724,7 @@ def synthetic_data_n_length_heatmap():
 
 
 def plot_seq_center_distribution():
-    df = get_sv_stats_df()
+    df = get_sv_stats_collapsed_df()
     df = df[df["num_modes"] == 2]
     seq_center_df = get_sample_sequencing_centers()
     seq_centers_by_mode = defaultdict(lambda: Counter())
@@ -1788,7 +1786,7 @@ def plot_seq_center_distribution():
 
 
 def plot_insert_size_distribution(insert_sizes):
-    df = get_sv_stats_df()
+    df = get_sv_stats_collapsed_df()
     df = df[df["num_modes"] == 2]
     insert_sizes_df = pd.read_csv("1kgp/insert_sizes.csv")
     insert_sizes = defaultdict(list)

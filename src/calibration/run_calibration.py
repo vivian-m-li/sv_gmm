@@ -15,13 +15,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from src.data.query_stix import query_stix
 from src.model.dirichlet import run_dirichlet
-from query_sv import (
-    giggle_format,
-    query_stix_bash,
-    get_query_region,
-)
-from src.utils.helper import calc_pr_auc
+from src.utils.model_helper import giggle_format, get_query_region, calc_pr_auc
 from src.utils.write_sv_output import (
     get_raw_data,
     init_sv_stat_row,
@@ -663,7 +659,7 @@ def download_stix_data_inner(
     if os.path.isfile(file):
         return
 
-    stix_file = query_stix_bash(
+    stix_file = query_stix(
         query_region,
         output_dir,
         # hard-coded stix parameters for 1kg high coverage data on Vivian's fiji

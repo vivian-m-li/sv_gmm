@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial.distance import braycurtis
 
-from query_sv import query_stix, giggle_format
+from src.data.query_stix import query_stix
 from src.utils.constants import SUPERPOPULATIONS, CHR_LENGTHS
 from src.utils.helper import (
     get_deletions_df,
@@ -21,12 +21,16 @@ from src.utils.helper import (
     get_sv_chr,
     get_sample_ids,
     get_svlen,
+    df_to_bed,
+)
+from src.utils.model_helper import (
     calc_af,
     calculate_posteriors_from_trials,
     calculate_ci,
     reciprocal_overlap,
-    df_to_bed,
+    giggle_format,
 )
+
 from src.utils.types import (
     SVInfoGMM,
     GMM,
@@ -134,7 +138,7 @@ def get_raw_data(
         input_dir=input_dir,
         output_dir="",  # project home directory
         stix_file_dir=stix_file_dir,
-        run_gmm=False,
+        gmm=False,
         filter_reference=False,
         stix_bin="/Users/vili4418/sv/stix/bin/stix",
         stix_index="/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",

@@ -2,14 +2,14 @@ import numpy as np
 from scipy.stats import multivariate_normal
 from sklearn.cluster import KMeans
 
-from src.utils.helper import reciprocal_overlap
+from src.utils.model_helper import reciprocal_overlap
 from src.utils.types import GMM2D, EstimatedGMM2D
 
 RESPONSIBILITY_THRESHOLD = 1e-10
 
-"""
-GMM/EM helper functions
-"""
+# ------------------------------
+# GMM/EM helper functions
+# ------------------------------
 
 
 def hinge_loss_distance(
@@ -278,7 +278,7 @@ def run_em(
     i = 0
     while i < max_iterations:
         prev_gmm = all_params[-1]
-        gmm = em(
+        gmm_result = em(
             x,
             num_modes,
             n,
@@ -291,8 +291,8 @@ def run_em(
             r_threshold,
             max_penalty,
         )
-        logL.append(gmm.logL)
-        all_params.append(gmm)
+        logL.append(gmm_result.logL)
+        all_params.append(gmm_result)
 
         # Convergence check
         if abs(logL[-1] - logL[-2]) < 0.05:
@@ -321,7 +321,7 @@ def assign_values_to_modes(
     return x_by_mode
 
 
-def run_gmm(
+def gmm(
     x: np.ndarray[tuple[float, int]],
     *,
     L,
