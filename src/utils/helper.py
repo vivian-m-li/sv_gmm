@@ -44,9 +44,9 @@ def get_sv_lookup(stem: str = "1kgp"):
     return pd.read_csv(file)
 
 
-def get_sv_chr(sv_id: str):
+def get_sv_chr(sv_id: str, stem: str = "1kgp"):
     """Get the chromosome, start, and stop for a given sv_id."""
-    df = get_sv_lookup()
+    df = get_sv_lookup(stem)
     row = df[df["id"] == sv_id]
     chr, start, stop = (
         row["chr"].values[0],

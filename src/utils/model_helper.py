@@ -199,7 +199,7 @@ def process_input_files(
     if sample_id_file is None:
         if df is None:
             df = pd.read_csv(os.path.join(dir, sv_lookup_file))
-        sample_ids = write_sample_ids_file(dir, df)
+        sample_ids = write_sample_ids_file(dir, "sample_ids.txt", df)
     else:
         sample_ids = get_sample_ids(os.path.join(dir, sample_id_file))
 

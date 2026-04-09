@@ -34,7 +34,7 @@ def query_stix(
         f"{query_region.chr}:{query_region.left_start}-{query_region.left_stop}"
     )
     r_query = f"{query_region.chr}:{query_region.right_start}-{query_region.right_stop}"
-    result = subprocess.run(
+    subprocess.run(
         ["bash", "query_stix.sh"]
         + [  # noqa503
             l_query,
@@ -49,7 +49,6 @@ def query_stix(
         capture_output=True,
         text=True,
     )
-    print(result.stdout, result.stderr)
 
     # the query output from each shard was written to a different file, and we want to write them to the same file
     if num_shards > 1:

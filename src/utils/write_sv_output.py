@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial.distance import braycurtis
 
-from src.data.query_stix import query_stix
+from src.model.split import split_sv
 from src.utils.constants import SUPERPOPULATIONS, CHR_LENGTHS
 from src.utils.helper import (
     get_deletions_df,
@@ -119,7 +119,7 @@ def init_sv_stat_row(
 
 def get_raw_data(
     row: pd.Series,
-    input_dir: str = "1kgp",
+    input_dir: str,
     *,
     stix_file_dir: str | None = None,
     filter_reference_samples: bool = True,
@@ -132,13 +132,13 @@ def get_raw_data(
     """
     start = giggle_format(str(row["chr"]), row["start"])
     end = giggle_format(str(row["chr"]), row["stop"])
-    reads = query_stix(
+    reads = split_sv(
         l=start,
         r=end,
         input_dir=input_dir,
         output_dir="",  # project home directory
         stix_file_dir=stix_file_dir,
-        gmm=False,
+        run_split=False,
         filter_reference=False,
         stix_bin="/Users/vili4418/sv/stix/bin/stix",
         stix_index="/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
@@ -160,7 +160,7 @@ def get_raw_data(
 
 def write_sv_stats(
     sv_stat: SVInfoGMM,
-    gmm: GMM | None,
+    gmm_result: GMM | None,
     evidence_by_mode: list[list[Evidence]],
     population_size: int,
     file_dir: str,
@@ -171,13 +171,13 @@ def write_sv_stats(
 
     Output: SV info (id/chr/start/stop/svlen/ref/alt/qual/af), # samples total/pruned/reference, final svlen, # modes as determined by the GMM, total # iterations run in the EM algorithm, if the mode coordinates overlap, and the start/stop/length/samples/af for each mode.
     """
-    if gmm is None:
+    if gmm_result is None:
         write_sv_file(sv_stat, file_dir, iteration)
         return
 
-    sv_stat.num_pruned = sum(gmm.num_pruned) + len(gmm.outliers)
-    sv_stat.num_modes = gmm.num_modes
-    sv_stat.num_iterations = gmm.num_iterations
+    sv_stat.num_pruned = sum(gmm_result.num_pruned) + len(gmm_result.outliers)
+    sv_stat.num_modes = gmm_result.num_modes
+    sv_stat.num_iterations = gmm_result.num_iterations
 
     all_svlen = get_svlen(evidence_by_mode)
     sv_stat.svlen_post = int(
@@ -232,13 +232,13 @@ def write_sv_stats(
             num_heterozygous=num_heterozygous,
             num_homozygous=num_homozygous,
             sample_ids=sample_ids,
-            num_pruned=gmm.num_pruned[i],
+            num_pruned=gmm_result.num_pruned[i],
             af=af,
         )
         sv_stat.modes.append(mode_stat)
     sv_stat.num_samples_run = num_samples_run
 
-    if gmm.num_modes > 1:
+    if gmm_result.num_modes > 1:
         for i in range(len(evidence_by_mode) - 1):
             if mode_coords[i][1] > mode_coords[i + 1][0]:
                 sv_stat.overlap_between_modes = True

@@ -143,8 +143,8 @@ def animate_dirichlet_history(df):
 def run_trial(reads, **kwargs) -> tuple[GMM, list[list[Evidence]]]:
     """Runs a single trial of Gaussian Mixture Model."""
     kwargs["plot"] = False
-    gmm, evidence_by_mode = gmm_trial(reads, **kwargs)
-    return gmm, evidence_by_mode
+    gmm_result, evidence_by_mode = gmm_trial(reads, **kwargs)
+    return gmm_result, evidence_by_mode
 
 
 def run_dirichlet(
@@ -168,20 +168,20 @@ def run_dirichlet(
     counts = np.array([0, 0, 0])  # count of num_modes
     alphas = [alpha]  # alphas over time
     posterior_distributions = []  # distributions over time
-    gmms = []  # keep track of output gmms
+    gmm_results = []  # keep track of output gmms
     n = 0
     while n < MAX_N:
         n += 1  # number of trials
 
         # Run the model to get the next outcome
-        gmm, evidence_by_mode = run_trial(reads, **kwargs)
-        if gmm is None:  # all samples are filtered out
-            gmms.append((None, []))
-            print(f"{chr}:{L}-{R} - stopping due to gmm = None")
+        gmm_result, evidence_by_mode = run_trial(reads, **kwargs)
+        if gmm_result is None:  # all samples are filtered out
+            gmm_results.append((None, []))
+            print(f"{chr}:{L}-{R} - stopping due to gmm_result = None")
             break
 
-        gmms.append((gmm, evidence_by_mode))
-        num_modes = gmm.num_modes
+        gmm_results.append((gmm_result, evidence_by_mode))
+        num_modes = gmm_result.num_modes
         counts[num_modes - 1] += 1
 
         # Update the alpha values (used as a conjugate prior for Bayes)
@@ -214,7 +214,7 @@ def run_dirichlet(
         fig, ax = plt.subplots(figsize=(6, 4))
         plot_2d_coords(
             ax,
-            gmms[-1][1],
+            gmm_results[-1][1],
             L=L,
             R=R,
             axis1="L",
@@ -234,4 +234,4 @@ def run_dirichlet(
         # animate_dirichlet_heatmap(alphas)
         # animate_dirichlet(posterior_distributions)
 
-    return gmms, alphas, posterior_distributions
+    return gmm_results, alphas, posterior_distributions

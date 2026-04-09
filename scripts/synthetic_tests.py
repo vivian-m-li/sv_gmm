@@ -8,17 +8,20 @@ import sys
 import numpy as np
 import pandas as pd
 
-from src.synthetic.generate_data import generate_synthetic_sv_data
-from src.utils.helper import reciprocal_overlap
+from src.synthetic.generate_data import (
+    generate_sv_coordinates,
+    generate_and_split_sample_reads,
+)
+from src.utils.model_helper import reciprocal_overlap
 from src.utils.timeout import break_after
 from src.utils.types import Evidence
 
 
-def write_reciprocal_overlap():
+def write_reciprocal_overlap(dir: str):
     """Calculates and writes the reciprocal overlap for synthetic data files that have already been written."""
-    files = os.listdir("synthetic_data")
+    files = os.listdir(dir)
     for file in files:
-        df = pd.read_csv(f"synthetic_data/{file}")
+        df = pd.read_csv(os.path.join(dir, file))
         df = df[df["expected_num_modes"] == 2]
         df["reciprocal_overlap"] = 0.0
         for _, row in df.iterrows():
@@ -28,19 +31,28 @@ def write_reciprocal_overlap():
             df.at[_, "reciprocal_overlap"] = reciprocal_overlap(
                 [Ls[0], Rs[0]], [Ls[1], Rs[1]]
             )
-        df.to_csv(f"synthetic_data/{file}")
+        df.to_csv(os.path.join(dir, file), index=False)
 
 
-def gmm(case, r, svs, weights, n_samples, results):
+def run_split(case, r, svs, weights, n_samples, results):
     """Generates synthetic data and runs the GMM on it. Appends the results to the multiprocessing-managed list to be written to a CSV later."""
-    gmm, evidence_by_mode = generate_synthetic_sv_data(
+    gmm_result, evidence_by_mode = generate_and_split_sample_reads(
         1,
         svs,
         n_samples=n_samples,
         p=weights,
     )
     results.append(
-        [case, r, "2d-opt", svs, n_samples, weights, gmm, evidence_by_mode]
+        [
+            case,
+            r,
+            "split",
+            svs,
+            n_samples,
+            weights,
+            gmm_result,
+            evidence_by_mode,
+        ]
     )
 
 
@@ -111,10 +123,10 @@ def write_csv(
             svs,
             n_samples,
             weights,
-            gmm,
+            gmm_result,
             evidence_by_mode,
         ) in all_results:
-            if gmm is None:
+            if gmm_result is None:
                 continue
 
             lengths, Ls = get_len_L(evidence_by_mode)
@@ -132,7 +144,7 @@ def write_csv(
                     "expected_num_modes": len(svs),
                     "expected_lengths": [sv[1] - sv[0] for sv in svs],
                     "expected_Ls": [sv[0] for sv in svs],
-                    "num_modes": gmm.num_modes,
+                    "num_modes": gmm_result.num_modes,
                     "lengths": lengths,
                     "Ls": Ls,
                     "num_samples": n_samples,
@@ -156,160 +168,8 @@ def get_coordinates(sv1, sv2, d):
     return (x3, y3)
 
 
-def generate_data(case: str) -> list[tuple[int, int]]:
-    """
-    DEPRECATED: Use generate_data_r instead.
-    Generates synthetic data with increasing d (distance between cluster centroids) and runs the GMM on it to test accuracy.
-    """
-    SVLEN = 2553  # median SV length
-    SV1_L = 100000
-    SV1_R = SV1_L + SVLEN
-    SV1 = (SV1_L, SV1_R)
-
-    # for case D and E
-    SV2_L = 101000
-    SV2_LEN = 2003
-    SV2 = (SV2_L, SV2_L + SV2_LEN)
-
-    SV3_L = 100782
-    SV3_LEN = 3383
-    SV3 = (SV3_L, SV3_L + SV3_LEN)
-
-    MIDPOINT = (100500, 100500 + 2278)
-
-    data = []
-    match case:
-        case "A":
-            for d in range(0, 505, 5):
-                # sv1 is larger, sv2 is smaller within sv1
-                data.append([case, d, [SV1, (int(SV1_L + d), int(SV1_R - d))]])
-        case "B":
-            for d in range(0, 505, 5):
-                # sv 1 and 2 are the same length. sv1 starts first and sv2 starts at the start of sv1 + d
-                sv2_start = SV1_L + d
-                data.append([case, d, [SV1, (sv2_start, sv2_start + SVLEN)]])
-        case "C":
-            for d in range(0, 505, 5):
-                # sv 1 and 2 are the same length. sv1 starts first and sv2 starts at the end of sv1 + d
-                sv2_start = SV1_R + d
-                data.append([case, d, [SV1, (sv2_start, sv2_start + SVLEN)]])
-        case "D":
-            for d in range(0, 1110, 10):
-                sv3 = get_coordinates(SV1, SV3, d)
-                data.append([case, d, [SV1, SV2, sv3]])
-        case "E":
-            for d in range(0, 1110, 10):
-                sv3 = get_coordinates(MIDPOINT, SV3, d)
-                data.append([case, d, [SV1, SV2, sv3]])
-        case _:
-            raise Exception("Invalid case")
-
-    return data
-
-
-# DEPRECATED: Use `r_accuracy_test` instead
-@break_after(hours=17, minutes=55)
-def d_accuracy_test(
-    n_samples: int, test_case: str | None = None, vary_weights: bool = False
-):
-    """
-    DEPRECATED: Use `r_accuracy_test` instead.
-    Parallelized synthetic data tests with varying d.
-    """
-    # generate synthetic data
-    if test_case is None:
-        data = []
-        for case in ["A", "B", "C", "D", "E"]:
-            data.extend(generate_data(case))
-    else:
-        data = generate_data(test_case)
-
-    with multiprocessing.Manager() as manager:
-        cpu_count = multiprocessing.cpu_count()
-        p = multiprocessing.Pool(cpu_count)
-        results = manager.list()
-        args = []
-        for case, d, svs in data:
-            # run each case 100 times and average at the end
-            weights = [1.0 / len(svs) for _ in range(len(svs))]
-            for _ in range(100):
-                args.append((case, d, svs, weights, n_samples, results))
-
-        p.starmap(gmm, args)
-        p.close()
-        p.join()
-
-        # results: [(case, d, gmm_model, svs, n_samples, gmm, evidence_by_mode), ...]
-        write_csv(
-            results, write_new_file=test_case is None, fixed_n_samples=n_samples
-        )
-
-
-def generate_data_r(case: str, svlen: int):
-    """Generates synthetic data with increasing r (reciprocal overlap) and runs the GMM on it to test accuracy."""
-    # SVLEN = 802  # median SV length for high coverage data
-    SV1_L = 100000
-    SV1_R = SV1_L + svlen
-    SV1 = (SV1_L, SV1_R)
-
-    data = []
-    match case:
-        case "A":
-            data.append([case, 0, [[SV1_L, SV1_L + svlen]]])
-        case "B":
-            # two nested SVs
-            for r in np.arange(0.05, 1.05, 0.05):
-                midpoint = SV1_L + (0.5 * svlen)
-                sv2_len = int(svlen / r)
-                data.append(
-                    [
-                        case,
-                        r,
-                        [
-                            SV1,
-                            (
-                                midpoint - 0.5 * sv2_len,
-                                midpoint + 0.5 * sv2_len,
-                            ),
-                        ],
-                    ]
-                )
-        case "C":
-            # two overlapping SVs
-            for r in np.arange(0, 1.05, 0.05):
-                overlap = int(r * svlen)
-                sv2_start = SV1_R - overlap
-                data.append([case, r, [SV1, (sv2_start, sv2_start + svlen)]])
-        case "D":
-            # three overlapping SVs
-            for r1 in np.arange(0, 1.05, 0.05):  # overlap between sv1 and sv2
-                overlap12 = int(r1 * svlen)
-                sv2_start = SV1_R - overlap12
-                sv2_end = sv2_start + svlen
-                for r2 in np.arange(
-                    0, 1.05, 0.05
-                ):  # overlap between sv2 and sv3
-                    overlap23 = int(r2 * svlen)
-                    sv3_start = sv2_end - overlap23
-                    sv3_end = sv3_start + svlen
-                    data.append(
-                        [
-                            case,
-                            (round(r1, 2), round(r2, 2)),
-                            [SV1, (sv2_start, sv2_end), (sv3_start, sv3_end)],
-                        ]
-                    )
-        case _:
-            raise Exception("Invalid case")
-    data_cleaned = []
-    for case, r, svs in data:
-        svs_int = [(int(sv[0]), int(sv[1])) for sv in svs]
-        data_cleaned.append([case, r, svs_int])
-    return data_cleaned
-
-
 @break_after(hours=15, minutes=55)
-def r_accuracy_test(
+def split_synthetic_svs(
     n_samples: int,
     svlen: int,
     test_case: str | None = None,
@@ -320,9 +180,9 @@ def r_accuracy_test(
     if test_case is None:
         data = []
         for case in ["A", "B", "C", "D"]:
-            data.extend(generate_data_r(case, svlen))
+            data.extend(generate_sv_coordinates(case, svlen))
     else:
-        data = generate_data_r(test_case, svlen)
+        data = generate_sv_coordinates(test_case, svlen)
 
     with multiprocessing.Manager() as manager:
         cpu_count = multiprocessing.cpu_count()
@@ -347,11 +207,11 @@ def r_accuracy_test(
             else:
                 weights = [[1.0 / len(svs) for _ in range(len(svs))]]
             for weight in weights:
-                # run each case 20 times and average at the end
-                for _ in range(20):
+                # run each case 10 times and average at the end
+                for _ in range(10):
                     args.append((case, r, svs, weight, n_samples, results))
 
-        p.starmap(gmm, args)
+        p.starmap(run_split, args)
         p.close()
         p.join()
 
@@ -367,4 +227,4 @@ def r_accuracy_test(
 if __name__ == "__main__":
     n_samples = int(sys.argv[1])
     svlen = int(sys.argv[2]) if len(sys.argv) > 2 else 802
-    r_accuracy_test(n_samples=n_samples, svlen=svlen)
+    split_synthetic_svs(n_samples=n_samples, svlen=svlen)

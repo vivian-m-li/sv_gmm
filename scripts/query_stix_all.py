@@ -56,9 +56,10 @@ def write_cipos():
 
 
 def prune_genes_bed():
-    with open(f"{INPUT_DIR}/grch38.genes.bed", "r") as infile, open(
-        f"{INPUT_DIR}/genes.bed", "w"
-    ) as outfile:
+    with (
+        open(f"{INPUT_DIR}/grch38.genes.bed", "r") as infile,
+        open(f"{INPUT_DIR}/genes.bed", "w") as outfile,
+    ):
         for line in infile:
             fields = line.strip().split("\t")
             chrom, start, stop, annotations = (
@@ -89,7 +90,8 @@ def query_stix_sv(cfg: dict, row: pd.Series):
     )
 
 
-@break_after(hours=166, minutes=0)  # break before the job is cancelled
+@break_after(hours=46, minutes=0)  # break before the job is cancelled
+# it takes under a day to query 20k SVs
 def query_stix_all(cfg: dict, sv_lookup_file: str):
     """Query all SVs in deletions.csv using STIX and update num_samples column."""
     input_dir = cfg["input_dir"]

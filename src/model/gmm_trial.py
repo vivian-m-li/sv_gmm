@@ -443,7 +443,7 @@ def populate_sample_info(
 
 
 def get_evidence_by_mode(
-    gmm: EstimatedGMM,
+    gmm_result: EstimatedGMM,
     sv_evidence: list[Evidence],
     L: int,
     R: int,
@@ -452,7 +452,7 @@ def get_evidence_by_mode(
 ) -> list[list[Evidence]]:
     sv_evidence = np.array(sv_evidence)
     data = []
-    for mode in gmm.x_by_mode:
+    for mode in gmm_result.x_by_mode:
         data_by_mode = []
         for x in mode:
             if gmm_model == "1d_len":

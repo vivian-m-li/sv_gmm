@@ -13,8 +13,6 @@ from src.utils.helper import stix_output_to_df
 # -----------------------------------------
 # Generate data for GATK SVCluster pipeline
 # -----------------------------------------
-
-
 def data_to_vcf(
     evidence, insert_size_lookup: dict[str, int], vcf_filename: str
 ):
@@ -205,11 +203,9 @@ def generate_reference_files(out_file: str, contigs, line_width: int = 60):
     write_contig_list(contig_list, records)
 
 
-"""
-Data generation functions
-"""
-
-
+# -----------------------------------------
+# Generate synthetic data for testing SPLIT
+# -----------------------------------------
 def generate_weights(num_svs: int):
     """Generates random weights (0.5 <= p <= 0.95) for each SV mode."""
     if num_svs == 1:
@@ -360,14 +356,14 @@ def generate_mapped_pairs_for_sv(
     return pairs
 
 
-def generate_synthetic_sv_data(
+def generate_and_split_sample_reads(
     chr: int,  # chromosome number (does not support X/Y), as a str
     svs: list[tuple[int, int]],  # list of (start, stop) for each SV
     *,
     n_samples: int | None = None,
     p: list[float] | None = None,
     gmm_model: str = "2d",
-    gmm: bool = True,
+    run_split: bool = True,
     plot: bool = False,
     plot_reads: bool = False,
     vcf_filename: str = False,  # writes the data to the file
@@ -439,8 +435,8 @@ def generate_synthetic_sv_data(
     if vcf_filename:
         data_to_vcf(evidence, insert_size_lookup, vcf_filename)
 
-    if gmm:
-        gmm, evidence_by_mode = gmm_trial(
+    if run_split:
+        gmm_result, evidence_by_mode = gmm_trial(
             reads,
             chr=str(chr),
             L=L,
@@ -450,21 +446,69 @@ def generate_synthetic_sv_data(
             gmm_model=gmm_model,
             insert_size_lookup=insert_size_lookup,
         )
-        return gmm, evidence_by_mode
+        return gmm_result, evidence_by_mode
 
     return None, []
 
 
-if __name__ == "__main__":
-    # generate_reference_files("synthetic_data/reference", ["1:200000"])
-    generate_synthetic_sv_data(
-        1,
-        [(100000, 100100), (100050, 100150)],  # 100 bp sv, r = 0.5
-        # [(100000, 100200), (100100, 100300)],  # 200 bp sv
-        # [(100000, 100400), (100200, 100600)],  # 400 bp sv
-        # [(100000, 101000), (100500, 101500)],  # 1000 bp sv
-        n_samples=20,
-        p=[0.5, 0.5],
-        plot=True,
-        # plot_reads=True,
-    )
+def generate_sv_coordinates(case: str, svlen: int):
+    """Generates synthetic data with increasing r (reciprocal overlap) and runs the GMM on it to test accuracy."""
+    # SVLEN = 802  # median SV length for high coverage data
+    SV1_L = 100000
+    SV1_R = SV1_L + svlen
+    SV1 = (SV1_L, SV1_R)
+
+    data = []
+    match case:
+        case "A":
+            data.append([case, 0, [[SV1_L, SV1_L + svlen]]])
+        case "B":
+            # two nested SVs
+            for r in np.arange(0.05, 1.05, 0.05):
+                midpoint = SV1_L + (0.5 * svlen)
+                sv2_len = int(svlen / r)
+                data.append(
+                    [
+                        case,
+                        r,
+                        [
+                            SV1,
+                            (
+                                midpoint - 0.5 * sv2_len,
+                                midpoint + 0.5 * sv2_len,
+                            ),
+                        ],
+                    ]
+                )
+        case "C":
+            # two overlapping SVs
+            for r in np.arange(0, 1.05, 0.05):
+                overlap = int(r * svlen)
+                sv2_start = SV1_R - overlap
+                data.append([case, r, [SV1, (sv2_start, sv2_start + svlen)]])
+        case "D":
+            # three overlapping SVs
+            for r1 in np.arange(0, 1.05, 0.05):  # overlap between sv1 and sv2
+                overlap12 = int(r1 * svlen)
+                sv2_start = SV1_R - overlap12
+                sv2_end = sv2_start + svlen
+                for r2 in np.arange(
+                    0, 1.05, 0.05
+                ):  # overlap between sv2 and sv3
+                    overlap23 = int(r2 * svlen)
+                    sv3_start = sv2_end - overlap23
+                    sv3_end = sv3_start + svlen
+                    data.append(
+                        [
+                            case,
+                            (round(r1, 2), round(r2, 2)),
+                            [SV1, (sv2_start, sv2_end), (sv3_start, sv3_end)],
+                        ]
+                    )
+        case _:
+            raise Exception("Invalid case")
+    data_cleaned = []
+    for case, r, svs in data:
+        svs_int = [(int(sv[0]), int(sv[1])) for sv in svs]
+        data_cleaned.append([case, r, svs_int])
+    return data_cleaned

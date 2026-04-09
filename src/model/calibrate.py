@@ -1,7 +1,5 @@
-import argparse
 import multiprocessing
 import os
-import re
 import shutil
 
 from ax.adapter.registry import Generators
@@ -11,13 +9,17 @@ from ax.generation_strategy.generation_strategy import GenerationStrategy
 from ax.generation_strategy.generation_node import GenerationNode
 from ax.generation_strategy.generator_spec import GeneratorSpec
 from ax.service.ax_client import AxClient, ObjectiveProperties
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 from src.data.query_stix import query_stix
 from src.model.dirichlet import run_dirichlet
-from src.utils.model_helper import giggle_format, get_query_region, calc_pr_auc
+from src.utils.model_helper import (
+    giggle_format,
+    get_query_region,
+    calc_pr_auc,
+    get_insert_size_lookup,
+)
 from src.utils.write_sv_output import (
     get_raw_data,
     init_sv_stat_row,
@@ -26,156 +28,8 @@ from src.utils.write_sv_output import (
     concat_multi_processed_sv_files,
     write_post_processed_files,
 )
-from collections import defaultdict, Counter
-from typing import set, dict
 
 SLURM_CPUS = int(os.environ.get("SLURM_CPUS_ON_NODE", 1))
-FILE_DIR = "calibration_outputs"
-SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
-OUTPUT_FILE_NAME = "sv_stats_converge.csv"
-
-
-def all_consensus_svs(*, plot: bool = False):
-    """Gets the distribution of mode predictions for each SV across all calibration runs."""
-    if not os.path.exists("calibration/results/sv_results.csv"):
-        sv_mode_counts = defaultdict(Counter)
-        for run_dir in os.listdir("calibration/results"):
-            if not os.path.isdir(os.path.join("calibration/results", run_dir)):
-                continue
-            svs_n_modes = pd.read_csv(
-                os.path.join("calibration/results", run_dir, "svs_n_modes.csv")
-            )
-            svs_n_modes = svs_n_modes[
-                svs_n_modes["confidence"] != "inconclusive"
-            ]
-            for i, row in svs_n_modes.iterrows():
-                sv_mode_counts[row["sv_id"]][row["num_modes"]] += 1
-
-        df = pd.DataFrame(
-            columns=[
-                "sv_id",
-                "n_modes_1",
-                "n_modes_2",
-                "n_modes_3",
-                "majority_outcome",
-                "majority_percent",
-                "n_models_run",
-            ]
-        )
-        for sv_id, counts in sv_mode_counts.items():
-            n_modes_1 = counts.get(1, 0)
-            n_modes_2 = counts.get(2, 0)
-            n_modes_3 = counts.get(3, 0)
-            total = n_modes_1 + n_modes_2 + n_modes_3
-            majority_outcome = np.argmax([n_modes_1, n_modes_2, n_modes_3]) + 1
-            majority_count = max(n_modes_1, n_modes_2, n_modes_3)
-            df.loc[len(df)] = [
-                sv_id,
-                n_modes_1,
-                n_modes_2,
-                n_modes_3,
-                int(majority_outcome),
-                majority_count / total,
-                total,
-            ]
-        df.to_csv("calibration/results/sv_results.csv", index=False)
-    else:
-        df = pd.read_csv("calibration/results/sv_results.csv")
-
-    if plot:
-        # plot distribution of mode predictions
-        plt.figure(figsize=(8, 6))
-        plt.hist(df["majority_percent"].values, bins=20, range=(0, 1))
-        plt.xlabel("% of Runs Agreeing on Majority Mode")
-        plt.ylabel("Number of SVs")
-        plt.show()
-
-
-def assign_model_score(*, plot: bool = False):
-    # assign scores based on how often models agreed with the consensus
-    sv_results = pd.read_csv("calibration/results/sv_results.csv")
-    df = pd.read_csv("calibration/results/results.csv")
-    for i, row in df.iterrows():
-        dir = f"d{int(row['d'])}_r{row['r']:.2f}_q{row['q']:.2f}"
-        svs_n_modes = pd.read_csv(
-            os.path.join("calibration/results", dir, "svs_n_modes.csv")
-        )
-        merged = svs_n_modes.merge(sv_results, on="sv_id", how="left")
-        merged["correct"] = merged.apply(
-            lambda row: int(row["num_modes"] == row["majority_outcome"]), axis=1
-        )
-        n_correct = sum(merged["correct"].values)
-        n_run = svs_n_modes[svs_n_modes["confidence"] != "inconclusive"].shape[
-            0
-        ]
-        df.loc[i, "n_run"] = n_run
-        df.loc[i, "n_correct"] = n_correct
-        df.loc[i, "model_score"] = n_correct / n_run
-    df.to_csv("calibration/results/results.csv", index=False)
-
-    if plot:
-        fig, axs = plt.subplots(1, 3, figsize=(18, 6))
-        for i, (param, xlabel) in enumerate(
-            zip(
-                ["d", "r", "q"],
-                [
-                    "Distance at which penalty = 0",
-                    "Reciprocal overlap at which penalty = 0",
-                    "Required evidence overlap with original SV region",
-                ],
-            )
-        ):
-            df.boxplot(column="model_score", by=param, ax=axs[i])
-            axs[i].set_xlabel(xlabel)
-            axs[i].set_ylabel("Model Score")
-            axs[i].set_title("")
-            axs[i].set_ylim(0, 1)
-            axs[i].grid(False)
-        plt.suptitle("")
-        plt.show()
-
-
-def find_pareto_front():
-    # construct tp/fp curve from results.csv files in calibration output directories
-    results = pd.read_csv("calibration/results/results.csv")
-    plt.figure(figsize=(8, 6))
-
-    results = results.sort_values(by=["FP", "TP"], ascending=[True, False])
-    plt.scatter(results["FP"], results["TP"])
-    for i, row in results.iterrows():
-        plt.text(
-            row["FP"],
-            row["TP"] - 0.01,
-            f"d={int(row['d'])},r={row['r']:.2f},q={row['q']:.2f},p={row['p']:.2f}",
-            fontsize=8,
-            ha="center",
-        )
-
-    pareto_front = pd.DataFrame(columns=["FP", "TP", "d", "r", "q", "p"])
-    max_tp = -1
-    for i, row in results.iterrows():
-        if row["TP"] > max_tp:
-            pareto_front.loc[len(pareto_front)] = row
-            max_tp = row["TP"]
-    plt.plot(
-        pareto_front["FP"],
-        pareto_front["TP"],
-        color="red",
-        linewidth=2,
-    )
-
-    # find the pareto optimal point closest to (0, 1)
-    pareto_front["dist"] = np.sqrt(
-        pareto_front["FP"] ** 2 + (1 - pareto_front["TP"]) ** 2
-    )
-    best_point = pareto_front.loc[pareto_front["dist"].idxmin()]
-    print(
-        f"Best point on Pareto front: d={int(best_point['d'])}, r={best_point['r']:.2f}, q={best_point['q']:.2f}, p={int(best_point['p'])}, FPR={best_point['FP']:.4f}, TPR={best_point['TP']:.4f}"
-    )
-
-    plt.xlabel("FPR")
-    plt.ylabel("TPR")
-    plt.show()
 
 
 def get_confusion_matrix(
@@ -225,55 +79,13 @@ def get_confusion_matrix(
     return values
 
 
-def rewrite_calibration_results():
-    """
-    Rewrites the results.csv file with the confusion matrix from each run.
-    Standalone function
-    """
-    sv_subset = pd.read_csv("calibration/sv_subset.csv")
-    sv_subset["id"] = sv_subset.apply(
-        lambda row: f"{giggle_format(str(row['chr']), row['start'])}_{giggle_format(str(row['chr']), row['stop'])}",
-        axis=1,
-    )
-
-    runs = os.listdir("calibration/results")
-    runs.remove("results.csv")
-    results_df = pd.DataFrame(
-        columns=["d", "r", "q", "p", "TP", "FP", "FN", "TN"]
-    )
-    for dirname in runs:
-        pattern = r"d([\d]+)_r([0,1].[\d]+)_q([0,1].[\d]+)_p([\d]+)"
-        match = re.match(pattern, dirname)
-        d, r, q, p = (
-            int(match.group(1)),
-            float(match.group(2)),
-            float(match.group(3)),
-            int(match.group(4)),
-        )
-        svs_n_modes = pd.read_csv(
-            os.path.join("calibration/results", dirname, "svs_n_modes.csv")
-        )
-        confusion_mat = get_confusion_matrix(sv_subset, svs_n_modes)
-        results_df.loc[len(results_df)] = [
-            d,
-            r,
-            q,
-            p,
-            confusion_mat["TP"],
-            confusion_mat["FP"],
-            confusion_mat["FN"],
-            confusion_mat["TN"],
-        ]
-    results_df.sort_values(by=["q", "d", "r", "p"], inplace=True)
-    results_df = results_df.astype({"d": int, "p": int})
-    results_df.to_csv("calibration/results_new.csv", index=False)
-
-
 def run_dirichlet_inner(
     row: dict,
-    sample_ids: set[str],
     input_dir: str,
     output_dir: str,
+    stix_output_dir: str,
+    sample_ids: set[str],
+    insert_size_lookup: dict[str, int],
     q: float,
     d: int,
     r: float,
@@ -283,7 +95,7 @@ def run_dirichlet_inner(
     reads, num_samples = get_raw_data(
         row,
         input_dir,
-        stix_file_dir=os.path.join(input_dir, f"stix_output_{q}"),
+        stix_file_dir=os.path.join(input_dir, f"{stix_output_dir}_{q}"),
         filter_reference_samples=True,
         samples_to_keep=list(
             sample_ids
@@ -293,9 +105,9 @@ def run_dirichlet_inner(
 
     if reads.empty:
         # if no samples have any data supporting the SV then not included
-        gmms, alphas, posterior_distributions = [(None, [])], [], []
+        gmm_results, alphas, posterior_distributions = [(None, [])], [], []
     else:
-        gmms, alphas, posterior_distributions = run_dirichlet(
+        gmm_results, alphas, posterior_distributions = run_dirichlet(
             reads,
             **{
                 "chr": row["chr"],
@@ -307,11 +119,12 @@ def run_dirichlet_inner(
                 "synthetic_data": True,
                 "plot": False,
                 "stem": input_dir,
+                "insert_size_lookup": insert_size_lookup,
             },
         )
 
     population_size = len(sample_ids)
-    for i, (gmm, evidence_by_mode) in enumerate(gmms):
+    for i, (gmm_result, evidence_by_mode) in enumerate(gmm_results):
         sv_stat = init_sv_stat_row(
             row,
             num_samples=num_samples,
@@ -319,10 +132,15 @@ def run_dirichlet_inner(
         )
         # TODO: in this function, a mode is getting added as a separate row. could just be a one-time issue
         write_sv_stats(
-            sv_stat, gmm, evidence_by_mode, population_size, output_dir, i
+            sv_stat,
+            gmm_result,
+            evidence_by_mode,
+            population_size,
+            output_dir,
+            i,
         )
 
-    if gmms[0][0] is not None:
+    if gmm_results[0][0] is not None:
         write_posterior_distributions(
             row["id"], alphas, posterior_distributions, output_dir
         )
@@ -337,7 +155,10 @@ def run_calibration_test(
     pen: int,
     input_dir: str,
     output_dir: str,
+    intermediate_output_dir: str,
+    stix_output_dir: str,
     sample_ids: set[str],
+    insert_size_lookup: dict[str, int],
 ):
     """
     Run a single calibration test for given distance and reciprocal overlap thresholds.
@@ -345,7 +166,7 @@ def run_calibration_test(
     """
     print(f"Running calibration for d={d}, r={r}, q={q}, p={pen}")
     processed_file_dir = os.path.join(
-        SCRATCH_FILE_DIR, "d{}_r{:.2f}_p{}".format(d, r, pen)
+        intermediate_output_dir, "d{}_r{:.2f}_p{}".format(d, r, pen)
     )
     if not os.path.exists(processed_file_dir):
         os.makedirs(processed_file_dir)
@@ -357,9 +178,11 @@ def run_calibration_test(
             args.append(
                 (
                     row,
-                    sample_ids,
                     input_dir,
                     processed_file_dir,
+                    stix_output_dir,
+                    sample_ids,
+                    insert_size_lookup,
                     q,
                     d,
                     r,
@@ -377,7 +200,7 @@ def run_calibration_test(
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
     concat_multi_processed_sv_files(
-        processed_file_dir, OUTPUT_FILE_NAME, results_dir
+        processed_file_dir, "all_split_trials.csv", results_dir
     )
     write_post_processed_files(
         input_dir, results_dir, sample_ids, sv_df[["id"]], True
@@ -421,9 +244,12 @@ def snap_to_grid(value: float, min_val: float, step: float) -> float:
 def run_calibration_bayesian_opt(
     sv_df: pd.DataFrame,
     sample_ids: set[str],
+    insert_size_lookup: dict[str, int],
     *,
     input_dir: str,
     output_dir: str,
+    stix_output_dir: str,
+    intermediate_output_dir: str,
     n_trials: int = 30,
     batch_size: int = 1,
     d_min: int,
@@ -567,7 +393,10 @@ def run_calibration_bayesian_opt(
                 pen=p,
                 input_dir=input_dir,
                 output_dir=output_dir,
+                stix_output_dir=stix_output_dir,
+                intermediate_output_dir=intermediate_output_dir,
                 sample_ids=sample_ids,
+                insert_size_lookup=insert_size_lookup,
             )
 
         for t_index, params in parameterizations.items():
@@ -609,9 +438,12 @@ def run_calibration_bayesian_opt(
 def run_calibration_grid_search(
     sv_df: pd.DataFrame,
     sample_ids: set[str],
+    insert_size_lookup: dict[str, int],
     *,
     input_dir: str,
     output_dir: str,
+    stix_output_dir: str,
+    intermediate_output_dir: str,
     d_min: int,
     d_max: int,
     d_step: int,
@@ -639,19 +471,26 @@ def run_calibration_grid_search(
                         pen=pen,
                         input_dir=input_dir,
                         output_dir=output_dir,
+                        intermediate_output_dir=intermediate_output_dir,
+                        stix_output_dir=stix_output_dir,
                         sample_ids=sample_ids,
+                        insert_size_lookup=insert_size_lookup,
                     )
 
 
 def download_stix_data_inner(
     row: pd.Series,
-    output_dir: str,
     q: float,
+    output_dir: str,
+    stix_bin: str,
+    index_path: str,
+    database_path: str,
+    num_shards: int,
 ):
     # check if the data for this region already exists
     query_region = get_query_region(
-        f"{row.chr}:{row.start}",
-        f"{row.chr}:{row.stop}",
+        giggle_format(row.chr, row.start),
+        giggle_format(row.chr, row.stop),
         q,
     )
     filename = f"{query_region.file_name}.txt"
@@ -662,11 +501,10 @@ def download_stix_data_inner(
     stix_file = query_stix(
         query_region,
         output_dir,
-        # hard-coded stix parameters for 1kg high coverage data on Vivian's fiji
-        "/Users/vili4418/sv/stix/bin/stix",
-        "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
-        "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
-        8,
+        stix_bin,
+        index_path,
+        database_path,
+        num_shards,
         True,
     )
     print(f"Downloaded STIX data {stix_file}", flush=True)
@@ -674,23 +512,36 @@ def download_stix_data_inner(
 
 def download_stix_data(
     sv_subset: pd.DataFrame,
-    input_dir: str,
     q: float,
+    input_dir: str,
+    stix_output_dir: str,
+    stix_bin: str,
+    index_path: str,
+    database_path: str,
+    num_shards: int,
 ):
     """Download stix data for all regions in the subset before running calibration tests."""
-    output_dir = os.path.join(input_dir, f"stix_output_{q}")
+    output_dir = os.path.join(input_dir, f"{stix_output_dir}_{q}")
 
     # set up the correct file paths in case we need to query more SVs
     partial_outputs_dir = os.path.join(output_dir, "partial_outputs")
-    if not os.path.exists(partial_outputs_dir):
-        os.makedirs(partial_outputs_dir)
+    os.makedirs(partial_outputs_dir, exist_ok=True)
 
     with multiprocessing.Manager():
         p = multiprocessing.Pool(SLURM_CPUS)
         args = []
-
         for _, row in sv_subset.iterrows():
-            args.append((row, output_dir, q))
+            args.append(
+                (
+                    row,
+                    q,
+                    output_dir,
+                    stix_bin,
+                    index_path,
+                    database_path,
+                    num_shards,
+                )
+            )
 
         p.starmap(download_stix_data_inner, args)
         p.close()
@@ -699,177 +550,66 @@ def download_stix_data(
     os.rmdir(partial_outputs_dir)
 
 
-def run_calibration(
-    sv_lookup_file: str,
-    sample_ids_file: str,
-    sv_regions_file: str,
-    search_func: str,
-    **kwargs,
-):
-    input_dir = kwargs["input_dir"]
+def calibrate(cfg: dict):
+    input_dir = cfg["paths"]["input_dir"]
 
-    sv_subset = pd.read_csv(os.path.join(input_dir, sv_regions_file))
+    sv_subset = pd.read_csv(
+        os.path.join(input_dir, cfg["calibrate"]["truth_set"])
+    )
     sv_subset["id"] = sv_subset.apply(
         lambda row: f"{giggle_format(str(row['chr']), row['start'])}_{giggle_format(str(row['chr']), row['stop'])}",
         axis=1,
     )
-    sv_df = pd.read_csv(os.path.join(input_dir, sv_lookup_file))
+    sv_df = pd.read_csv(
+        os.path.join(input_dir, cfg["input_files"]["sv_lookup_file"])
+    )
     sv_df.rename(columns={"id": "og_sv_id"}, inplace=True)
     merged_df = sv_subset.merge(sv_df, on=["chr", "start", "stop"], how="left")
     sample_ids = set()
-    with open(os.path.join(input_dir, sample_ids_file), "r") as f:
+    with open(
+        os.path.join(input_dir, cfg["input_files"]["sample_id_file"]), "r"
+    ) as f:
         for line in f:
             sample_ids.add(line.strip())
 
+    insert_size_lookup = get_insert_size_lookup(
+        input_dir,
+        cfg["input_files"]["insert_size_file"],
+        cfg["input_files"]["default_insert_size"],
+        sample_ids,
+    )
+
     for q in np.arange(
-        kwargs["q_min"], kwargs["q_max"] + 0.01, kwargs["q_step"]
+        cfg["calibrate"]["q_min"],
+        cfg["calibrate"]["q_max"] + 0.01,
+        cfg["calibrate"]["q_step"],
     ):
-        # check that all stix data has been downloaded for regions in sv_subset before running calibration tests
-        download_stix_data(sv_subset, input_dir, round(q, 2))
+        # check that all stix data has been queried and saved for regions in sv_subset before running calibration tests
+        download_stix_data(
+            sv_subset,
+            round(q, 2),
+            input_dir,
+            cfg["paths"]["stix_output_dir"],
+            cfg["stix"]["bin"],
+            cfg["stix"]["index"],
+            cfg["stix"]["database"],
+            cfg["stix"]["num_shards"],
+        )
 
-    if search_func == "bayesian_optimization":
-        run_calibration_bayesian_opt(merged_df, sample_ids, **kwargs)
+    search_func = cfg["calibrate"]["search_func"]
+    if search_func == "bo":
+        calibration_function = run_calibration_bayesian_opt
+    elif search_func == "grid":
+        calibration_function = run_calibration_grid_search
     else:
-        run_calibration_grid_search(merged_df, sample_ids, **kwargs)
+        raise ValueError(
+            f"Invalid search function: {search_func}. Supported options are 'bo' and 'grid'."
+        )
 
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Run calibration test on a subset of structural variants"
+    calibration_function(
+        merged_df,
+        sample_ids,
+        insert_size_lookup,
+        **cfg["paths"],
+        **cfg["calibrate"],
     )
-    parser.add_argument(
-        "--input_dir",
-        type=str,
-        help="Input directory for incoming data",
-        default="calibration",
-    )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        help="Output directory for results",
-        default="calibration/results",
-    )
-    parser.add_argument(
-        "--regions",
-        type=str,
-        help="CSV file defining regions to consider",
-        default="sv_subset.csv",
-    )
-    parser.add_argument(
-        "--sv_lookup",
-        type=str,
-        help="CSV file with structural variants",
-        default="deletions.csv",
-    )
-    parser.add_argument(
-        "--sample_ids",
-        type=str,
-        help="Txt file containing sample IDs with long read data available",
-        default="sample_ids.txt",
-    )
-    parser.add_argument(
-        "--search_func",
-        type=str,
-        help="Search function to use for calibration (grid_search or bayesian_optimization)",
-        default="grid_search",
-    )
-    parser.add_argument(
-        "--d_min",
-        type=int,
-        help="Minimum distance threshold to consider",
-        default=50,
-    )
-    parser.add_argument(
-        "--d_max",
-        type=int,
-        help="Maximum distance threshold to consider",
-        default=550,
-    )
-    parser.add_argument(
-        "--d_step",
-        type=int,
-        help="Step size for distance values",
-        default=50,
-    )
-    parser.add_argument(
-        "--r_min",
-        type=float,
-        help="Minimum reciprocal overlap threshold to consider",
-        default=0.4,
-    )
-    parser.add_argument(
-        "--r_max",
-        type=float,
-        help="Maximum reciprocal overlap threshold to consider",
-        default=0.9,
-    )
-    parser.add_argument(
-        "--r_step",
-        type=float,
-        help="Step size for reciprocal overlap values",
-        default=0.05,
-    )
-    parser.add_argument(
-        "--q_min",
-        type=float,
-        help="Minimum query overlap to consider",
-        default=0.5,
-    )
-    parser.add_argument(
-        "--q_max",
-        type=float,
-        help="Maximum query overlap to consider",
-        default=1.0,
-    )
-    parser.add_argument(
-        "--q_step",
-        type=float,
-        help="Step size for reciprocal overlap values",
-        default=0.1,
-    )
-    parser.add_argument(
-        "--p_min",
-        type=int,
-        help="Minimum penalty size to consider",
-        default=100,
-    )
-    parser.add_argument(
-        "--p_max",
-        type=int,
-        help="Maximum penalty size to consider",
-        default=600,
-    )
-    parser.add_argument(
-        "--p_step",
-        type=int,
-        help="Step size for penalty values",
-        default=100,
-    )
-
-    args = parser.parse_args()
-    print("Using the following arguments:", args, "\n")
-
-    run_calibration(
-        args.sv_lookup,
-        args.sample_ids,
-        args.regions,
-        args.search_func,
-        input_dir=args.input_dir,
-        output_dir=args.output_dir,
-        d_min=args.d_min,
-        d_max=args.d_max,
-        d_step=args.d_step,
-        r_min=args.r_min,
-        r_max=args.r_max,
-        r_step=args.r_step,
-        q_min=args.q_min,
-        q_max=args.q_max,
-        q_step=args.q_step,
-        p_min=args.p_min,
-        p_max=args.p_max,
-        p_step=args.p_step,
-    )
-
-
-if __name__ == "__main__":
-    main()

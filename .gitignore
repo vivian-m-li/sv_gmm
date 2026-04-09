@@ -1,7 +1,10 @@
-/__pycache__
+__pycache__
 .venv
 venv
 profile/
+*.egg-info
+dist/
+build/
 
 # data files
 data/

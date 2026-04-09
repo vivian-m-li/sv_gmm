@@ -19,33 +19,40 @@ from src.utils.write_sv_output import (
 )
 
 
-def run_dirichlet_inner(
+def run_split_trial(
     row: dict,
     population_size: int,
-    stem: str,
+    input_dir: str,
     intermediate_output_dir: str,
+    stix_output_dir: str,
     model_params: dict,
 ):
     sv_id = row["id"]
-    reads, num_samples = get_raw_data(row, stem)
+    reads, num_samples = get_raw_data(
+        row,
+        input_dir,
+        stix_file_dir=stix_output_dir,
+        filter_reference_samples=True,
+        print_messages=False,
+    )
 
     if reads.empty:
         # if no samples have any data supporting the SV then not included
-        gmms, alphas, posterior_distributions = [(None, [])], [], []
+        gmm_results, alphas, posterior_distributions = [(None, [])], [], []
     else:
-        gmms, alphas, posterior_distributions = run_dirichlet(
+        gmm_results, alphas, posterior_distributions = run_dirichlet(
             reads,
             **{
                 "chr": row["chr"],
                 "L": row["start"],
                 "R": row["stop"],
                 "plot": False,
-                "stem": stem,
+                "stem": input_dir,
                 **model_params,  # d_threshold, r_threshold, max_penalty
             },
         )
 
-    for i, (gmm, evidence_by_mode) in enumerate(gmms):
+    for i, (gmm_result, evidence_by_mode) in enumerate(gmm_results):
         sv_stat = init_sv_stat_row(
             row,
             num_samples=num_samples,
@@ -53,42 +60,49 @@ def run_dirichlet_inner(
         )
         write_sv_stats(
             sv_stat,
-            gmm,
+            gmm_result,
             evidence_by_mode,
             population_size,
             intermediate_output_dir,
             i,
         )
 
-    if gmms[0][0] is not None:
+    if gmm_results[0][0] is not None:
         write_posterior_distributions(
             sv_id, alphas, posterior_distributions, intermediate_output_dir
         )
 
 
-def run_dirichlet_wrapper(
+def run_split_wrapper(
     row: dict,
     population_size: int,
-    stem: str,
+    input_dir: str,
     intermediate_output_dir: str,
+    stix_output_dir: str,
     model_params: dict,
 ):
     try:
-        run_dirichlet_inner(
-            row, population_size, stem, intermediate_output_dir, model_params
+        run_split_trial(
+            row,
+            population_size,
+            input_dir,
+            intermediate_output_dir,
+            stix_output_dir,
+            model_params,
         )
     except Exception as e:
         print(f"Error processing SV {row['id']}: {e}")
 
 
 @break_after(hours=30, minutes=00)
-def run_svs_until_convergence(
-    stem: str,
+def split_all(
+    input_dir: str,
     intermediate_output_dir: str,
+    stix_output_dir: str,
     sample_ids: set[str],
     model_params: dict,
 ):
-    deletions_df = get_deletions_df(stem)
+    deletions_df = get_deletions_df(input_dir)
     population_size = len(sample_ids)
 
     with multiprocessing.Manager():
@@ -98,29 +112,31 @@ def run_svs_until_convergence(
             (
                 row.to_dict(),
                 population_size,
-                stem,
+                input_dir,
                 intermediate_output_dir,
+                stix_output_dir,
                 model_params,
             )
             for _, row in deletions_df.iterrows()
         ]
-        p.starmap(run_dirichlet_wrapper, args)
+        p.starmap(run_split_wrapper, args)
         p.close()
         p.join()
 
 
-def run_svs(config_path: str = "config.toml"):
+def main(config_path: str = "config.toml"):
     cfg = load_config(config_path)
 
     input_dir = cfg["paths"]["input_dir"]
     output_dir = cfg["paths"]["output_dir"]
+    stix_output_dir = cfg["paths"]["stix_output_dir"]
     intermediate_output_dir = cfg["paths"]["intermediate_output_dir"]
     local_intermediate_output_dir = cfg["paths"][
         "local_intermediate_output_dir"
     ]
 
     sample_id_file = cfg["input_files"]["sample_id_file"]
-    sample_ids = get_sample_ids(sample_id_file)
+    sample_ids = get_sample_ids(os.path.join(input_dir, sample_id_file))
 
     # write input files that will be used later on during querying
     insert_size_lookup = process_input_files(
@@ -149,7 +165,15 @@ def run_svs(config_path: str = "config.toml"):
     os.makedirs(output_dir, exist_ok=True)
 
     start = time.time()
-    run_svs_until_convergence(input_dir, intermediate_output_dir, model_params)
+
+    # this is the main function that splits each SV
+    split_all(
+        input_dir,
+        intermediate_output_dir,
+        stix_output_dir,
+        sample_ids,
+        model_params,
+    )
 
     # move files from scratch to home dir (even after timeout)
     if intermediate_output_dir != local_intermediate_output_dir:
@@ -184,4 +208,4 @@ if __name__ == "__main__":
         help="Path to the TOML configuration file (default: config.toml)",
     )
     args = parser.parse_args()
-    run_svs(config_path=args.config)
+    main(config_path=args.config)

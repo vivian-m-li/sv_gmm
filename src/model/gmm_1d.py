@@ -89,21 +89,25 @@ def plot_distributions(
 def calc_y_vals(
     ux: np.ndarray,
     n: int,
-    gmm: GMM1D,
+    gmm_result: GMM1D,
     i: int,
 ) -> list[float]:
     """Calculates the density for each x value in the GMM."""
-    return 2 * (n * gmm.p[i]) * norm.pdf(ux, gmm.mu[i], np.sqrt(gmm.vr[i]))
+    return (
+        2
+        * (n * gmm_result.p[i])
+        * norm.pdf(ux, gmm_result.mu[i], np.sqrt(gmm_result.vr[i]))
+    )
 
 
 class UpdateDist:
     """Determines the plots to be drawn at each frame of the animation."""
 
-    def __init__(self, ax, x, gmms):
+    def __init__(self, ax, x, gmm_results):
         self.ax = ax
         self.x = x
-        self.gmms = gmms
-        self.num_modes = len(gmms[0].mu)
+        self.gmm_results = gmm_results
+        self.num_modes = len(gmm_results[0].mu)
         self.n = len(x)
 
         self.ux, self.hx = get_scatter_data(x)
@@ -128,7 +132,7 @@ class UpdateDist:
         for i in range(self.num_modes):
             (line,) = self.ax.plot(
                 self.ux,
-                calc_y_vals(self.ux, self.n, self.gmms[0], i),
+                calc_y_vals(self.ux, self.n, self.gmm_results[0], i),
                 linestyle="-",
                 color=COLORS[i],
             )
@@ -139,23 +143,25 @@ class UpdateDist:
     def __call__(self, frame):
         """Updates each frame of the animation."""
         for i, line in enumerate(self.lines):
-            line.set_ydata(calc_y_vals(self.ux, self.n, self.gmms[frame], i))
+            line.set_ydata(
+                calc_y_vals(self.ux, self.n, self.gmm_results[frame], i)
+            )
         self.scatter.set_offsets(np.column_stack((self.ux, self.hx)))
         return (self.scatter,) + self.lines
 
 
-def animate_distribution(x: np.ndarray[int], gmms: list[GMM1D]) -> None:
+def animate_distribution(x: np.ndarray[int], gmm_results: list[GMM1D]) -> None:
     """
     Animates the change in the GMM over each iteration of the EM algorithm.
     Note: This function does not produce an animation in Jupyter Notebook.
     """
     fig, ax = plt.subplots()
-    ud = UpdateDist(ax, x, gmms)
+    ud = UpdateDist(ax, x, gmm_results)
     _ = FuncAnimation(
         fig=fig,
         func=ud,
         init_func=ud.start,
-        frames=len(gmms),
+        frames=len(gmm_results),
         interval=300,
         blit=True,
     )
@@ -185,10 +191,10 @@ def plot_param_vs_aic(
     x_vals = []
     y_vals = []
     colors = []
-    for sig, gmm in gmm_lookup.items():
+    for sig, gmm_result in gmm_lookup.items():
         x_vals.append(sig)
-        y_vals.append(gmm.logL if logL else gmm.aic)
-        colors.append(cmap[gmm.num_modes])
+        y_vals.append(gmm_result.logL if logL else gmm_result.aic)
+        colors.append(cmap[gmm_result.num_modes])
 
     plt.figure()
     plt.scatter(x_vals, y_vals, c=colors)
@@ -613,10 +619,10 @@ def run_em(
     i = 0
     while i < max_iterations:
         # update likelihood
-        gmm = em(x, num_modes, n, mu, vr, p)
-        logL.append(gmm.logL)
-        all_params.append(gmm)
-        mu, vr, p = gmm.mu, gmm.vr, gmm.p
+        gmm_result = em(x, num_modes, n, mu, vr, p)
+        logL.append(gmm_result.logL)
+        all_params.append(gmm_result)
+        mu, vr, p = gmm_result.mu, gmm_result.vr, gmm_result.p
 
         # Convergence check
         if abs(logL[-1] - logL[-2]) < 0.05:
@@ -679,9 +685,9 @@ def assign_values_to_modes(
 ) -> tuple[list[np.ndarray[int]], list[int]]:
     x_by_mode, pruned = assign_values_to_modes_inner(x, num_modes, mu, vr, p)
     filtered_x = np.concatenate(x_by_mode)
-    gmm = em(filtered_x, num_modes, len(filtered_x), mu, vr, p)
+    gmm_result = em(filtered_x, num_modes, len(filtered_x), mu, vr, p)
     x_by_mode2, pruned2 = assign_values_to_modes_inner(
-        filtered_x, num_modes, gmm.mu, gmm.vr, gmm.p
+        filtered_x, num_modes, gmm_result.mu, gmm_result.vr, gmm_result.p
     )
     num_pruned = [len(x + y) for x, y in zip(pruned, pruned2)]
     return x_by_mode2, num_pruned

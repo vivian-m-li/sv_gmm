@@ -366,13 +366,13 @@ def plot_sv_lengths(evidence_by_mode: list[list[Evidence]]):
             all_lengths.append(np.mean(lengths))
 
         gmm_iters, _ = run_em1d(all_lengths, 1)
-        gmm = gmm_iters[-1]
+        gmm_result = gmm_iters[-1]
         ux, hx = get_scatter_data(all_lengths)
         plt.plot(
             ux,
             4
-            * (len(all_lengths) * gmm.p[0])
-            * norm.pdf(ux, gmm.mu[0], np.sqrt(gmm.vr[0])),
+            * (len(all_lengths) * gmm_result.p[0])
+            * norm.pdf(ux, gmm_result.mu[0], np.sqrt(gmm_result.vr[0])),
             linestyle="-",
             color=COLORS[i],
         )
@@ -387,13 +387,13 @@ def plot_sv_coords(evidence_by_mode: list[list[Evidence]]):
     for i, mode in enumerate(evidence_by_mode):
         coords = [evidence.mean_l for evidence in mode]
         gmm_iters, _ = run_em1d(coords, 1)
-        gmm = gmm_iters[-1]
+        gmm_result = gmm_iters[-1]
         ux, hx = get_scatter_data(coords)
         plt.plot(
             ux,
             4
-            * (len(coords) * gmm.p[0])
-            * norm.pdf(ux, gmm.mu[0], np.sqrt(gmm.vr[0])),
+            * (len(coords) * gmm_result.p[0])
+            * norm.pdf(ux, gmm_result.mu[0], np.sqrt(gmm_result.vr[0])),
             linestyle="-",
             color=COLORS[i],
         )
@@ -479,7 +479,7 @@ def plot_2d_coords(
         num_evidence = np.array(num_evidence)
 
         gmm_iters, _ = run_em(x, 1, L, R, d_threshold, r_threshold, max_penalty)
-        gmm = gmm_iters[-1]
+        gmm_result = gmm_iters[-1]
 
         # plot 2D data
         ax_main.scatter(
@@ -505,8 +505,8 @@ def plot_2d_coords(
         # manually adjust x/y for each figure
         if show_mode_stats:
             ax_main.text(
-                gmm.mu[0][0],
-                gmm.mu[0][1],
+                gmm_result.mu[0][0],
+                gmm_result.mu[0][1],
                 f"n={len(mode)}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}",
                 # f"n={len(mode)}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}\nAvg. num reads/sample: {np.mean(num_evidence):.1f}\nMean insert size: {int(np.mean(mean_insert_sizes))}",
                 fontsize=10,
@@ -517,11 +517,11 @@ def plot_2d_coords(
             )
 
         # plot the 2D gaussian distributions for each cluster
-        eigenvalues, eigenvectors = np.linalg.eigh(gmm.cov[0])
+        eigenvalues, eigenvectors = np.linalg.eigh(gmm_result.cov[0])
         angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
         width, height = 2 * np.sqrt(eigenvalues)
         ellipse = patches.Ellipse(
-            xy=gmm.mu[0],
+            xy=gmm_result.mu[0],
             width=width,
             height=height,
             angle=angle,
@@ -662,7 +662,7 @@ def get_num_samples_gmm(df):
     df["num_samples_gmm"] = df.apply(
         lambda row: [mode["num_samples"] for mode in eval(row["modes"])], axis=1
     )
-    # TODO: subtract num outliers in the gmm
+    # TODO: subtract num outliers in the gmm_result
     return df
 
 
