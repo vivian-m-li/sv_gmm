@@ -74,9 +74,8 @@ def get_confusion_matrix(
 
 def run_dirichlet_inner(
     row: dict,
-    input_dir: str,
+    cfg: dict,
     output_dir: str,
-    stix_output_dir: str,
     sample_ids: set[str],
     insert_size_lookup: dict[str, int],
     q: float,
@@ -84,11 +83,15 @@ def run_dirichlet_inner(
     r: float,
     pen: int,
 ):
+    stix_output_dir = f"{cfg['paths']['stix_output_dir']}_{q}"
+    cfg_copy = cfg.copy()
+    cfg_copy["paths"]["stix_output_dir"] = stix_output_dir
+
     # get reads from stix file and filter reference samples
     reads, num_samples = get_raw_data(
         row,
-        input_dir,
-        stix_file_dir=os.path.join(input_dir, f"{stix_output_dir}_{q}"),
+        cfg_copy,
+        read_overlap=q,
         filter_reference_samples=True,
         samples_to_keep=list(
             sample_ids
@@ -111,7 +114,7 @@ def run_dirichlet_inner(
                 "max_penalty": pen,
                 "synthetic_data": True,
                 "plot": False,
-                "stem": input_dir,
+                "stem": cfg["paths"]["input_dir"],
                 "insert_size_lookup": insert_size_lookup,
             },
         )
@@ -141,15 +144,12 @@ def run_dirichlet_inner(
 
 def run_calibration_test(
     sv_df: pd.DataFrame,
+    cfg: dict,
     *,
     d: int,
     r: float,
     q: float,
     pen: int,
-    input_dir: str,
-    output_dir: str,
-    intermediate_output_dir: str,
-    stix_output_dir: str,
     sample_ids: set[str],
     insert_size_lookup: dict[str, int],
 ):
@@ -159,7 +159,8 @@ def run_calibration_test(
     """
     print(f"Running calibration for d={d}, r={r}, q={q}, p={pen}")
     processed_file_dir = os.path.join(
-        intermediate_output_dir, "d{}_r{:.2f}_p{}".format(d, r, pen)
+        cfg["paths"]["intermediate_output_dir"],
+        "d{}_r{:.2f}_p{}".format(d, r, pen),
     )
     if not os.path.exists(processed_file_dir):
         os.makedirs(processed_file_dir)
@@ -171,9 +172,8 @@ def run_calibration_test(
             args.append(
                 (
                     row,
-                    input_dir,
+                    cfg,
                     processed_file_dir,
-                    stix_output_dir,
                     sample_ids,
                     insert_size_lookup,
                     q,
@@ -187,6 +187,7 @@ def run_calibration_test(
         p.close()
         p.join()
 
+    output_dir = cfg["paths"]["output_dir"]
     results_dir = os.path.join(
         output_dir, "d{}_r{:.2f}_q{:.2f}_p{}".format(d, r, q, pen)
     )
@@ -236,11 +237,8 @@ def run_calibration_bayesian_opt(
     sv_df: pd.DataFrame,
     sample_ids: set[str],
     insert_size_lookup: dict[str, int],
+    cfg: dict,
     *,
-    input_dir: str,
-    output_dir: str,
-    stix_output_dir: str,
-    intermediate_output_dir: str,
     n_trials: int = 30,
     batch_size: int = 1,
     d_min: int,
@@ -264,6 +262,7 @@ def run_calibration_bayesian_opt(
     the BO model as prior observations before any new runs are launched.
     """
 
+    output_dir = cfg["paths"]["output_dir"]
     results_file = os.path.join(output_dir, "results.csv")
     has_prev_results = os.path.exists(results_file)
 
@@ -276,15 +275,12 @@ def run_calibration_bayesian_opt(
     sobol_node = GenerationNode(
         name="Sobol",
         generator_specs=[
-            GeneratorSpec(
-                generator_enum=Generators.SOBOL,
-                generator_kwargs={"seed": 42},
-            ),
+            GeneratorSpec(generator_enum=Generators.SOBOL),
         ],
         transition_criteria=[
             # transition to BoTorch node once there are 15 trials on the experiment.
             MinTrials(
-                threshold=15,
+                threshold=1,
                 transition_to=botorch_node.name,
                 use_all_trials_in_exp=True,
             )
@@ -378,14 +374,11 @@ def run_calibration_bayesian_opt(
             # this function is parallelized for each SV but runs one calibration test for the given parameters
             results = run_calibration_test(
                 sv_df,
+                cfg,
                 d=d,
                 r=r,
                 q=q,
                 pen=p,
-                input_dir=input_dir,
-                output_dir=output_dir,
-                stix_output_dir=stix_output_dir,
-                intermediate_output_dir=intermediate_output_dir,
                 sample_ids=sample_ids,
                 insert_size_lookup=insert_size_lookup,
             )
@@ -430,11 +423,8 @@ def run_calibration_grid_search(
     sv_df: pd.DataFrame,
     sample_ids: set[str],
     insert_size_lookup: dict[str, int],
+    cfg: dict,
     *,
-    input_dir: str,
-    output_dir: str,
-    stix_output_dir: str,
-    intermediate_output_dir: str,
     d_min: int,
     d_max: int,
     d_step: int,
@@ -456,14 +446,11 @@ def run_calibration_grid_search(
                 for pen in range(p_min, p_max + 1, p_step):
                     run_calibration_test(
                         sv_df,
+                        cfg,
                         d=d,
                         r=round(r, 2),
                         q=round(q, 2),
                         pen=pen,
-                        input_dir=input_dir,
-                        output_dir=output_dir,
-                        intermediate_output_dir=intermediate_output_dir,
-                        stix_output_dir=stix_output_dir,
                         sample_ids=sample_ids,
                         insert_size_lookup=insert_size_lookup,
                     )
@@ -504,7 +491,6 @@ def download_stix_data_inner(
 def download_stix_data(
     sv_subset: pd.DataFrame,
     q: float,
-    input_dir: str,
     stix_output_dir: str,
     stix_bin: str,
     index_path: str,
@@ -512,7 +498,7 @@ def download_stix_data(
     num_shards: int,
 ):
     """Download stix data for all regions in the subset before running calibration tests."""
-    output_dir = os.path.join(input_dir, f"{stix_output_dir}_{q}")
+    output_dir = f"{stix_output_dir}_{q}"
 
     # set up the correct file paths in case we need to query more SVs
     partial_outputs_dir = os.path.join(output_dir, "partial_outputs")
@@ -579,13 +565,16 @@ def calibrate(cfg: dict):
         download_stix_data(
             sv_subset,
             round(q, 2),
-            input_dir,
             cfg["paths"]["stix_output_dir"],
             cfg["stix"]["bin"],
             cfg["stix"]["index"],
             cfg["stix"]["database"],
             cfg["stix"]["num_shards"],
         )
+
+    # make sure output directories exist
+    for dir in ["output_dir", "stix_output_dir", "intermediate_output_dir"]:
+        os.makedirs(cfg["paths"][dir], exist_ok=True)
 
     search_func = cfg["calibrate"]["search_func"]
     if search_func == "bo":
@@ -597,10 +586,14 @@ def calibrate(cfg: dict):
             f"Invalid search function: {search_func}. Supported options are 'bo' and 'grid'."
         )
 
+    calibrate_args = cfg["calibrate"].copy()
+    del calibrate_args["truth_set"]
+    del calibrate_args["search_func"]
+
     calibration_function(
         merged_df,
         sample_ids,
         insert_size_lookup,
-        **cfg["paths"],
-        **cfg["calibrate"],
+        cfg,
+        **calibrate_args,
     )

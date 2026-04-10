@@ -125,6 +125,7 @@ def get_raw_data(
     row: pd.Series,
     cfg: dict,
     *,
+    read_overlap: float | None = None,
     filter_reference_samples: bool = True,
     samples_to_keep: list[str] | None = None,
     print_messages: bool = True,
@@ -135,6 +136,11 @@ def get_raw_data(
     """
     start = giggle_format(str(row["chr"]), row["start"])
     end = giggle_format(str(row["chr"]), row["stop"])
+    read_overlap = (
+        read_overlap
+        if read_overlap is not None
+        else cfg["query"]["read_overlap"]
+    )
     reads = split_sv(
         l=start,
         r=end,
@@ -145,7 +151,7 @@ def get_raw_data(
         default_insert_size=cfg["model"]["default_insert_size"],
         sample_id_file=cfg["input_files"]["sample_id_file"],
         stix_file_dir=cfg["paths"]["stix_output_dir"],
-        read_overlap=cfg["query"]["read_overlap"],
+        read_overlap=read_overlap,
         stix_bin=cfg["stix"]["bin"],
         stix_index=cfg["stix"]["index"],
         stix_database=cfg["stix"]["database"],

@@ -15,19 +15,19 @@
 
 # Directory containing your input data (VCF/CSV callset, sample IDs, insert
 # sizes, etc.)
-input_dir = "data/1kg"
+# input_dir = "data/1kg"
 
 # Directory where results will be written.
-output_dir = "output/results"
+# output_dir = "output/results"
 
 # Sub-directory where raw STIX query output files are cached between runs.
-stix_output_dir = "output/stix_output"
+# stix_output_dir = "output/stix_output"
 
 # Intermediate directory used during processing.
 # On HPC clusters, point this to a fast local scratch filesystem.
 # On a local machine, a subdirectory of output_dir is fine.
 # intermediate_output_dir = "/scratch/Users/vili4418/processed_svs"
-intermediate_output_dir = "output/results/processed_svs"
+# intermediate_output_dir = "output/results/processed_svs"
 
 # Local directory to store intermediate output files.
 # Files are first written to scratch_dir, then moved to intermediate_file_dir if
@@ -38,10 +38,10 @@ local_intermediate_output_dir = "output/results/processed_svs"
 # stix_output_dir = "/scratch/Users/vili4418/stix_output"
 
 # enable this when running calibrate_model.py
-# input_dir = "data/calibration"
-# output_dir = "output/calibration/results"
-# stix_output_dir = "output/calibration"
-# intermediate_output_dir = "/scratch/Users/vili4418/calibration_outputs"
+input_dir = "data/calibration"
+output_dir = "output/calibration_mini/results"
+stix_output_dir = "output/calibration/stix_output"
+intermediate_output_dir = "output/calibration_mini/calibration_outputs"
 
 # ------------------------------------------------------------------------------
 # [input_files] — Files expected inside input_dir
@@ -50,11 +50,11 @@ local_intermediate_output_dir = "output/results/processed_svs"
 
 # VCF or CSV file listing structural variants.
 # Supported formats: .vcf, .vcf.gz, .csv
-sv_lookup_file = "deletions_subset.csv"
+sv_lookup_file = "deletions.csv"
 # sv_lookup_file = "1kg.subset.vcf.gz"
 
 # txt file with one row for each sample ID
-sample_id_file = "sample_ids.txt"
+sample_id_file = "lr_sample_ids.txt"
 
 # Per-sample mean insert size file (two columns: sample_id, mean_insert_size).
 # If this file is absent a uniform default of default_insert_size bp is written
@@ -124,7 +124,8 @@ max_penalty = 100
 
 # Truth set to calibrate against (in input_dir).
 # Required columns: chr, start, stop, n_svs_actual
-truth_set = "sv_subset.csv"
+# truth_set = "sv_subset.csv"
+truth_set = "mini_subset.csv"
 
 # Search function to use for calibration.
 # Supported algorithms: bo (bayesian optimization) or grid (grid search)
@@ -148,7 +149,7 @@ r_step = 0.05
 
 # Fraction of the SV length that a flanking read is allowed to overlap the SV
 # region and still be included.
-q_min = 0.6
+q_min = 0.9
 q_max = 1.0
 q_step = 0.1
 

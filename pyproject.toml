@@ -6,10 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "split"
 version = "0.1.0"
 description = "A package for generating synthetic ecological networks."
-authors = [
-    {name = "Vivian Li", email = "vivian.li@colorado.edu"}
-]
-license = {text = "MIT"}
+authors = [{ name = "Vivian Li", email = "vivian.li@colorado.edu" }]
+license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -18,8 +16,8 @@ dependencies = [
     "brokenaxes>=0.6.1",
     "matplotlib>=3.8.3",
     "matplotlib-inline>=0.1.6",
-    "numpy>=1.26.4",
-    "pandas>=2.2.1",
+    "numpy>=2.4.2",
+    "pandas>=2.2.3",
     "psutil>=7.0.0",
     "pysam>=0.23.3",
     "pytest>=8.3.5",
@@ -30,10 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "matplotlib>=3.10.8",
-    "ipykernel>=7.2.0",
-]
+dev = ["matplotlib>=3.10.8", "ipykernel>=7.2.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

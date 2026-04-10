@@ -12,19 +12,21 @@ from src.utils.config_loader import load_config
 from src.utils.model_helper import giggle_format
 
 
-def rewrite_calibration_results():
+def rewrite_calibration_results(
+    truth_set: str, results_dir: str, results_file: str
+):
     """
     Rewrites the results.csv file with the confusion matrix from each run.
     Standalone function
     """
-    sv_subset = pd.read_csv("calibration/sv_subset.csv")
+    sv_subset = pd.read_csv(truth_set)
     sv_subset["id"] = sv_subset.apply(
         lambda row: f"{giggle_format(str(row['chr']), row['start'])}_{giggle_format(str(row['chr']), row['stop'])}",
         axis=1,
     )
 
-    runs = os.listdir("calibration/results")
-    runs.remove("results.csv")
+    runs = os.listdir(results_dir)
+    runs.remove(os.path.basename(results_file))
     results_df = pd.DataFrame(
         columns=["d", "r", "q", "p", "TP", "FP", "FN", "TN"]
     )
@@ -38,7 +40,7 @@ def rewrite_calibration_results():
             int(match.group(4)),
         )
         svs_n_modes = pd.read_csv(
-            os.path.join("calibration/results", dirname, "svs_n_modes.csv")
+            os.path.join(results_dir, dirname, "svs_n_modes.csv")
         )
         confusion_mat = get_confusion_matrix(sv_subset, svs_n_modes)
         results_df.loc[len(results_df)] = [
@@ -53,18 +55,24 @@ def rewrite_calibration_results():
         ]
     results_df.sort_values(by=["q", "d", "r", "p"], inplace=True)
     results_df = results_df.astype({"d": int, "p": int})
-    results_df.to_csv("calibration/results_new.csv", index=False)
+    results_df.to_csv(
+        os.path.join(results_dir, "new_" + os.path.basename(results_file)),
+        index=False,
+    )
 
 
-def all_consensus_svs(*, plot: bool = False):
+def all_consensus_svs(
+    results_dir: str, results_per_sv_file: str, *, plot: bool = False
+):
     """Gets the distribution of mode predictions for each SV across all calibration runs."""
-    if not os.path.exists("calibration/results/sv_results.csv"):
+    out_filename = os.path.join(results_dir, results_per_sv_file)
+    if not os.path.exists(out_filename):
         sv_mode_counts = defaultdict(Counter)
-        for run_dir in os.listdir("calibration/results"):
-            if not os.path.isdir(os.path.join("calibration/results", run_dir)):
+        for run_dir in os.listdir(results_dir):
+            if not os.path.isdir(os.path.join(results_dir, run_dir)):
                 continue
             svs_n_modes = pd.read_csv(
-                os.path.join("calibration/results", run_dir, "svs_n_modes.csv")
+                os.path.join(results_dir, run_dir, "svs_n_modes.csv")
             )
             svs_n_modes = svs_n_modes[
                 svs_n_modes["confidence"] != "inconclusive"
@@ -99,9 +107,9 @@ def all_consensus_svs(*, plot: bool = False):
                 majority_count / total,
                 total,
             ]
-        df.to_csv("calibration/results/sv_results.csv", index=False)
+        df.to_csv(out_filename, index=False)
     else:
-        df = pd.read_csv("calibration/results/sv_results.csv")
+        df = pd.read_csv(out_filename)
 
     if plot:
         # plot distribution of mode predictions
@@ -112,14 +120,20 @@ def all_consensus_svs(*, plot: bool = False):
         plt.show()
 
 
-def assign_model_score(*, plot: bool = False):
+def assign_model_score(
+    results_dir: str,
+    results_file: str,
+    results_per_sv_file: str,
+    *,
+    plot: bool = False,
+):
     # assign scores based on how often models agreed with the consensus
-    sv_results = pd.read_csv("calibration/results/sv_results.csv")
-    df = pd.read_csv("calibration/results/results.csv")
+    sv_results = pd.read_csv(os.path.join(results_dir, results_per_sv_file))
+    df = pd.read_csv(os.path.join(results_dir, results_file))
     for i, row in df.iterrows():
         dir = f"d{int(row['d'])}_r{row['r']:.2f}_q{row['q']:.2f}"
         svs_n_modes = pd.read_csv(
-            os.path.join("calibration/results", dir, "svs_n_modes.csv")
+            os.path.join(results_dir, dir, "svs_n_modes.csv")
         )
         merged = svs_n_modes.merge(sv_results, on="sv_id", how="left")
         merged["correct"] = merged.apply(
@@ -132,7 +146,7 @@ def assign_model_score(*, plot: bool = False):
         df.loc[i, "n_run"] = n_run
         df.loc[i, "n_correct"] = n_correct
         df.loc[i, "model_score"] = n_correct / n_run
-    df.to_csv("calibration/results/results.csv", index=False)
+    df.to_csv(os.path.join(results_dir, results_file), index=False)
 
     if plot:
         fig, axs = plt.subplots(1, 3, figsize=(18, 6))
@@ -156,9 +170,9 @@ def assign_model_score(*, plot: bool = False):
         plt.show()
 
 
-def find_pareto_front():
+def find_pareto_front(results_dir: str, results_file: str):
     # construct tp/fp curve from results.csv files in calibration output directories
-    results = pd.read_csv("calibration/results/results.csv")
+    results = pd.read_csv(os.path.join(results_dir, results_file))
     plt.figure(figsize=(8, 6))
 
     results = results.sort_values(by=["FP", "TP"], ascending=[True, False])
@@ -193,7 +207,6 @@ def find_pareto_front():
     print(
         f"Best point on Pareto front: d={int(best_point['d'])}, r={best_point['r']:.2f}, q={best_point['q']:.2f}, p={int(best_point['p'])}, FPR={best_point['FP']:.4f}, TPR={best_point['TP']:.4f}"
     )
-
     plt.xlabel("FPR")
     plt.ylabel("TPR")
     plt.show()
