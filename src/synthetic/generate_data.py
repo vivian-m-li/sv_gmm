@@ -360,6 +360,7 @@ def generate_and_split_sample_reads(
     chr: int,  # chromosome number (does not support X/Y), as a str
     svs: list[tuple[int, int]],  # list of (start, stop) for each SV
     *,
+    insert_size_file: str,
     model_params: dict,
     n_samples: int | None = None,
     p: list[float] | None = None,
@@ -367,7 +368,7 @@ def generate_and_split_sample_reads(
     run_split: bool = True,
     plot: bool = False,
     plot_reads: bool = False,
-    vcf_filename: str = False,  # writes the data to the file
+    vcf_filename: str | None = None,  # writes the data to the file
 ):
     """Generates synthetic short-read data for testing purposes and runs the data through the SV analysis pipeline."""
     num_svs = len(svs)
@@ -381,7 +382,7 @@ def generate_and_split_sample_reads(
     modes = assign_modes(weights, samples)
 
     insert_size_df = pd.read_csv(
-        "1kg/insert_sizes.csv", dtype={"mean_insert_size": int}
+        insert_size_file, dtype={"mean_insert_size": int}
     )
 
     # For each sample, generate random evidence

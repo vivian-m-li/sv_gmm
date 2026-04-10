@@ -15,19 +15,18 @@
 
 # Directory containing your input data (VCF/CSV callset, sample IDs, insert
 # sizes, etc.)
-# input_dir = "data/1kg"
+input_dir = "data/1kg"
 
 # Directory where results will be written.
-# output_dir = "output/results"
+output_dir = "output/results"
 
 # Sub-directory where raw STIX query output files are cached between runs.
-# stix_output_dir = "output/stix_output"
+stix_output_dir = "output/stix_output"
 
 # Intermediate directory used during processing.
 # On HPC clusters, point this to a fast local scratch filesystem.
 # On a local machine, a subdirectory of output_dir is fine.
-# intermediate_output_dir = "/scratch/Users/vili4418/processed_svs"
-# intermediate_output_dir = "output/results/processed_svs"
+intermediate_output_dir = "/scratch/Users/vili4418/processed_svs"
 
 # Local directory to store intermediate output files.
 # Files are first written to scratch_dir, then moved to intermediate_file_dir if
@@ -37,11 +36,14 @@ local_intermediate_output_dir = "output/results/processed_svs"
 # enable this when running query_stix_all.py
 # stix_output_dir = "/scratch/Users/vili4418/stix_output"
 
-# enable this when running calibrate_model.py
-input_dir = "data/calibration"
-output_dir = "output/calibration_mini/results"
-stix_output_dir = "output/calibration/stix_output"
-intermediate_output_dir = "output/calibration_mini/calibration_outputs"
+# use these paths when running calibrate_model.py
+# input_dir = "data/calibration"
+# output_dir = "output/calibration/results"
+# stix_output_dir = "output/calibration/stix_output"
+# intermediate_output_dir = "output/calibration/calibration_outputs"
+
+# use these paths when running synthetic_tests.py
+# output_dir = "output/synthetic_tests"
 
 # ------------------------------------------------------------------------------
 # [input_files] — Files expected inside input_dir

@@ -37,11 +37,14 @@ def write_reciprocal_overlap(dir: str):
         df.to_csv(os.path.join(dir, file), index=False)
 
 
-def run_split(case, r, svs, weights, n_samples, model_params, results):
+def run_split(case, r, svs, weights, n_samples, cfg, model_params, results):
     """Generates synthetic data and runs the GMM on it. Appends the results to the multiprocessing-managed list to be written to a CSV later."""
     gmm_result, evidence_by_mode = generate_and_split_sample_reads(
         1,
         svs,
+        insert_size_file=os.path.join(
+            cfg["paths"]["input_dir"], cfg["input_files"]["insert_size_file"]
+        ),
         model_params=model_params,
         n_samples=n_samples,
         p=weights,
@@ -87,13 +90,17 @@ def get_len_L(evidence_by_mode: list[list[Evidence]]):
 
 def write_csv(
     all_results,
+    output_dir: str,
     *,
     write_new_file: bool = False,
     fixed_n_samples: int | None = None,
     fixed_svlen: int | None = None,
 ):
     """Writes the results of the synthetic data tests to a CSV file."""
-    file = f"synthetic_data/results{'' if fixed_n_samples is None else 'n=' + str(fixed_n_samples)}.csv"
+    file = os.path.join(
+        output_dir,
+        f"results{'' if fixed_n_samples is None else 'n=' + str(fixed_n_samples)}.csv",
+    )
     if not os.path.exists(file):
         write_new_file = True
     with open(
@@ -174,6 +181,7 @@ def get_coordinates(sv1, sv2, d):
 
 @break_after(hours=15, minutes=55)
 def split_synthetic_svs(
+    cfg: dict,
     *,
     n_samples: int,
     svlen: int,
@@ -213,18 +221,31 @@ def split_synthetic_svs(
                 weights = [[1.0 / len(svs) for _ in range(len(svs))]]
             for weight in weights:
                 # run each case 10 times and average at the end
-                for _ in range(10):
+                for _ in range(1):
                     args.append(
-                        (case, r, svs, weight, n_samples, model_params, results)
+                        (
+                            case,
+                            r,
+                            svs,
+                            weight,
+                            n_samples,
+                            cfg,
+                            model_params,
+                            results,
+                        )
                     )
 
         p.starmap(run_split, args)
         p.close()
         p.join()
 
+        output_dir = cfg["paths"]["output_dir"]
+        os.makedirs(output_dir, exist_ok=True)
+
         # results: [(case, r, gmm_model, svs, n_samples, weights, gmm, evidence_by_mode), ...]
         write_csv(
             results,
+            output_dir=output_dir,
             write_new_file=False,
             fixed_n_samples=n_samples,
             fixed_svlen=svlen,
@@ -242,7 +263,7 @@ if __name__ == "__main__":
         help="Path to the TOML configuration file (default: config.toml)",
     )
     parser.add_argument(
-        "--n_samples",
+        "-n",
         type=int,
         help="Number of samples to generate for each synthetic data test case",
     )
@@ -251,9 +272,19 @@ if __name__ == "__main__":
         type=int,
         help="Length of the synthetic SVs to generate for each test case",
     )
+    parser.add_argument(
+        "--case",
+        type=str,
+        default=None,
+        help="Test case to run (A, B, C, D). If not specified, all cases will be run.",
+    )
 
     args = parser.parse_args()
     cfg = load_config(args.config)
     split_synthetic_svs(
-        n_samples=args.n_samples, svlen=args.svlen, model_params=cfg["model"]
+        cfg,
+        n_samples=args.n,
+        svlen=args.svlen,
+        test_case=args.case,
+        model_params=cfg["model"],
     )
