@@ -10,7 +10,7 @@ from collections import defaultdict
 import pandas as pd
 import pysam
 
-from src.utils.helper import get_sv_lookup, get_sv_stats_collapsed_df
+from src.utils.helper import get_sv_lookup, get_most_common_split_df
 from src.utils.model_helper import reciprocal_overlap
 
 SCRATCH_DIR = "/scratch/Users/vili4418/"
@@ -21,7 +21,7 @@ SCRATCH_DIR = "/scratch/Users/vili4418/"
 
 
 def parse_long_read_samples():
-    """Parse available 1kGP long read samples from the online data. Saves the available sample IDs and the link to their cram files."""
+    """Parse available 1kg long read samples from the online data. Saves the available sample IDs and the link to their cram files."""
     file = "long_reads/raw_1kg_ont_vienna_hg38.txt"
     root = "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1KG_ONT_VIENNA/hg38"
     df = pd.DataFrame(columns=["sample_id", "cram_file", "indexed_cram_file"])
@@ -108,7 +108,7 @@ def get_bam_file(
         indexed_output_file
     ):
         subprocess.run(
-            ["bash", "get_cigar.sh"] + [cram_file, region, output_file],
+            ["bash", "bash/get_cigar.sh"] + [cram_file, region, output_file],
             capture_output=True,
             text=True,
         )
@@ -381,12 +381,12 @@ def get_all_long_reads():
     """Writes long read evidence for each SV."""
 
     # get SVs that were clustered into 1, 2 or 3 modes with low/medium/high confidence
-    svs = pd.read_csv("1kgp/svs_n_modes.csv")
+    svs = pd.read_csv("1kg/svs_n_modes.csv")
     svs = svs[svs["confidence"] != "inconclusive"]
     sv_ids = svs["sv_id"].unique()
 
     # get only svs that were clustered using short reads
-    df = get_sv_stats_collapsed_df()
+    df = get_most_common_split_df()
     df = df[df["id"].isin(sv_ids)]
 
     # get samples with long read data

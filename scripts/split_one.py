@@ -92,6 +92,12 @@ def main():
         help="Output directory for processed data",
     )
     parser.add_argument(
+        "--stix_file_dir",
+        type=str,
+        default=None,
+        help="Output directory for STIX queries",
+    )
+    parser.add_argument(
         "--sv_lookup",
         type=str,
         default=None,
@@ -179,6 +185,9 @@ def main():
 
     input_dir = _get(args.input_dir, "paths", "input_dir", "assets")
     output_dir = _get(args.output_dir, "paths", "output_dir", None)
+    stix_file_dir = _get(
+        args.stix_file_dir, "paths", "stix_output_dir", "stix_output"
+    )
     sv_lookup_file = _get(
         args.sv_lookup, "input_files", "sv_lookup_file", "deletions.csv"
     )
@@ -210,6 +219,7 @@ def main():
         sv_id=sv_id,
         input_dir=input_dir,
         output_dir=output_dir,
+        stix_file_dir=stix_file_dir,
         sv_lookup_file=sv_lookup_file,
         sample_id_file=sample_id_file,
         insert_size_file=insert_size_file,

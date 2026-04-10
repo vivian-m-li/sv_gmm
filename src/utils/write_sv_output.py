@@ -16,7 +16,7 @@ from src.utils.constants import SUPERPOPULATIONS, CHR_LENGTHS
 from src.utils.helper import (
     get_deletions_df,
     get_all_split_trials_df,
-    get_sv_stats_collapsed_df,
+    get_most_common_split_df,
     get_sv_lookup,
     get_sv_chr,
     get_sample_ids,
@@ -40,7 +40,7 @@ from src.utils.types import (
 
 
 def concat_processed_sv_files(
-    file_dir: str, output_file_name: str, *, stem: str = "1kgp"
+    file_dir: str, output_file_name: str, *, stem: str = "1kg"
 ):
     """Concatenates individual files in file_dir into one file."""
     with open(f"{stem}/{output_file_name}", mode="w", newline="") as out:
@@ -54,17 +54,21 @@ def concat_processed_sv_files(
 
 
 def concat_multi_processed_sv_files(
-    file_dir: str, output_file_name: str, stem: str = "1kgp"
+    output_dir: str,
+    intermediate_file_dir: str,
+    output_file_name: str,
 ):
-    """Concatenates individual files output from the dirichlet process (where the GMM is run for x iterations) in file_dir into one file. Used at the end of both short read and long read clustering processes."""
-    with open(f"{stem}/{output_file_name}", mode="w", newline="") as out:
+    """Concatenates individual files output from the dirichlet process in intermediate_file_dir into one file and writes it to output_dir."""
+    with open(
+        os.path.join(output_dir, output_file_name), mode="w", newline=""
+    ) as out:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
         csv_writer.writeheader()
-        for file in os.listdir(file_dir):
+        for file in os.listdir(intermediate_file_dir):
             if "iteration" not in file:
                 continue
-            with open(f"{file_dir}/{file}") as f:
+            with open(os.path.join(intermediate_file_dir, file)) as f:
                 for line in f:
                     out.write(line)
 
@@ -119,9 +123,8 @@ def init_sv_stat_row(
 
 def get_raw_data(
     row: pd.Series,
-    input_dir: str,
+    cfg: dict,
     *,
-    stix_file_dir: str | None = None,
     filter_reference_samples: bool = True,
     samples_to_keep: list[str] | None = None,
     print_messages: bool = True,
@@ -135,15 +138,20 @@ def get_raw_data(
     reads = split_sv(
         l=start,
         r=end,
-        input_dir=input_dir,
-        output_dir="",  # project home directory
-        stix_file_dir=stix_file_dir,
+        input_dir=cfg["paths"]["input_dir"],
+        output_dir=cfg["paths"]["output_dir"],
+        sv_lookup_file=cfg["input_files"]["sv_lookup_file"],
+        insert_size_file=cfg["input_files"]["insert_size_file"],
+        default_insert_size=cfg["model"]["default_insert_size"],
+        sample_id_file=cfg["input_files"]["sample_id_file"],
+        stix_file_dir=cfg["paths"]["stix_output_dir"],
+        read_overlap=cfg["query"]["read_overlap"],
+        stix_bin=cfg["stix"]["bin"],
+        stix_index=cfg["stix"]["index"],
+        stix_database=cfg["stix"]["database"],
+        num_stix_shards=cfg["stix"]["num_shards"],
         run_split=False,
         filter_reference=False,
-        stix_bin="/Users/vili4418/sv/stix/bin/stix",
-        stix_index="/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
-        stix_database="/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
-        num_stix_shards=8,
         print_messages=print_messages,
     )
     num_samples = reads["sample_id"].nunique()
@@ -287,10 +295,10 @@ Analyze SVs that have been run
 """
 
 
-def write_sv_stats_collapsed(output_dir: str):
-    """Collapse all_split_trials.csv to sv_stats_collapsed.csv by picking the most common result for each SV."""
+def write_most_common_split(output_dir: str):
+    """Collapse all_split_trials.csv to most_common_split.csv by picking the most common result for each SV."""
     df = get_all_split_trials_df(output_dir)
-    svs_n_modes = pd.read_csv(f"{output_dir}/svs_n_modes.csv")
+    svs_n_modes = pd.read_csv(os.path.join(output_dir, "svs_n_modes.csv"))
     svs_n_modes.rename(
         columns={"num_modes": "consensus_num_modes"}, inplace=True
     )
@@ -300,7 +308,7 @@ def write_sv_stats_collapsed(output_dir: str):
     )
     sv_ids = df["id"].unique()
     with open(
-        f"{output_dir}/sv_stats_collapsed.csv", mode="w", newline=""
+        os.path.join(output_dir, "most_common_split.csv"), mode="w", newline=""
     ) as out:
         fieldnames = [field.name for field in fields(SVInfoGMM)]
         fieldnames.append("num_gmm_runs")
@@ -345,8 +353,8 @@ def write_sv_stats_collapsed(output_dir: str):
 
 
 def write_consensus_vcf(output_dir: str, sample_ids: set[str]):
-    """Converts sv_stats_collapsed.csv into a vcf where each mode is represented as a separate SV."""
-    df = get_sv_stats_collapsed_df(output_dir)
+    """Converts most_common_split.csv into a vcf where each mode is represented as a separate SV."""
+    df = get_most_common_split_df(output_dir)
     vcf_records = []
     for _, row in df.iterrows():
         modes = ast.literal_eval(row["modes"])
@@ -392,10 +400,10 @@ def write_consensus_vcf(output_dir: str, sample_ids: set[str]):
         vcf_df.to_csv(f, sep="\t", index=False, header=False)
 
 
-def write_ancestry_dissimilarity(output_dir: str):
+def write_ancestry_dissimilarity(output_dir: str, ancestry_file: str):
     """Calculate the dissimilarity in ancestry between modes for each SV."""
-    df = get_sv_stats_collapsed_df(output_dir)
-    confidence = pd.read_csv(f"{output_dir}/svs_n_modes.csv")
+    df = get_most_common_split_df(output_dir)
+    confidence = pd.read_csv(os.path.join(output_dir, "svs_n_modes.csv"))
     confidence.rename(
         columns={"num_modes": "consensus_num_modes"}, inplace=True
     )
@@ -405,10 +413,12 @@ def write_ancestry_dissimilarity(output_dir: str):
         right_on="sv_id",
     )
     df = df[(df["confidence"] != "low") & (df["consensus_num_modes"] > 1)]
-    ancestry_df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
+    ancestry_df = pd.read_csv(
+        ancestry_file, delimiter="\t" if ancestry_file.endswith(".tsv") else ","
+    )
 
     results_df = pd.DataFrame(
-        columns=["chr", "start", "stop", "num_samples", "dissimilarity"]
+        columns=["id", "chr", "start", "stop", "num_samples", "dissimilarity"]
     )
     for i, row in df.iterrows():
         ancestry = []
@@ -451,13 +461,14 @@ def write_ancestry_dissimilarity(output_dir: str):
     results_df["num_samples"] = results_df["num_samples"].astype(int)
 
     results_df = results_df.sort_values(by="dissimilarity", ascending=False)
-    results_df.to_csv(f"{output_dir}/ancestry_dissimilarity.csv", index=False)
+    results_df.to_csv(
+        os.path.join(output_dir, "ancestry_dissimilarity.csv"), index=False
+    )
 
 
 def get_n_modes(
-    input_dir: str,
     output_dir: str,
-    deletions_df: pd.DataFrame | None = None,
+    sv_lookup: pd.DataFrame,
 ):
     """Get the number of modes and confidence for each SV."""
     sv_df = pd.DataFrame(
@@ -471,10 +482,7 @@ def get_n_modes(
         ]
     )
 
-    if deletions_df is None:
-        deletions_df = get_deletions_df(input_dir)
-        deletions_df = deletions_df[deletions_df["num_samples"] > 0]
-    svs = deletions_df["id"].unique()
+    svs = sv_lookup["id"].unique()
     df = get_all_split_trials_df(output_dir)
     for sv_id in svs:
         rows = df[df["id"] == sv_id]
@@ -509,7 +517,7 @@ def get_n_modes(
         new_row.extend([ci[0][0], ci[1][0], num_modes_2])
 
         sv_df.loc[len(sv_df)] = new_row
-    sv_df.to_csv(f"{output_dir}/svs_n_modes.csv", index=False)
+    sv_df.to_csv(os.path.join(output_dir, "svs_n_modes.csv"), index=False)
 
 
 def get_sv_outliers(sv_rows, threshold: float):
@@ -534,10 +542,10 @@ def get_sv_outliers(sv_rows, threshold: float):
 
 def get_outliers(output_dir: str, threshold: float = 0.9):
     """Get outlier samples for each SV and write to a file."""
-    n_modes_df = pd.read_csv(f"{output_dir}/svs_n_modes.csv")
+    n_modes_df = pd.read_csv(os.path.join(output_dir, "svs_n_modes.csv"))
     n_modes_df = n_modes_df[n_modes_df["num_modes"] > 1]
     df = get_all_split_trials_df(output_dir)
-    with open(f"{output_dir}/outliers.csv", "w") as f:
+    with open(os.path.join(output_dir, "outliers.csv"), "w") as f:
         csv_writer = csv.writer(f)
         csv_writer.writerow(["sv_id", "sample_ids"])
         for _, row in n_modes_df.iterrows():
@@ -550,7 +558,7 @@ def get_outliers(output_dir: str, threshold: float = 0.9):
 def get_consensus_svs(output_dir: str):
     """Get consensus SVs by averaging the start/stop/length of each mode across all runs of the SV."""
     df = get_all_split_trials_df(output_dir)
-    svs_n_modes = pd.read_csv(f"{output_dir}/svs_n_modes.csv")
+    svs_n_modes = pd.read_csv(os.path.join(output_dir, "svs_n_modes.csv"))
     sv_ids = svs_n_modes["sv_id"].unique()
     consensus_df = pd.DataFrame(
         columns=[
@@ -595,27 +603,27 @@ def get_consensus_svs(output_dir: str):
                 row.append(int(np.mean(values)))
                 row.append(np.std(values))
             consensus_df.loc[len(consensus_df)] = row
-    consensus_df.to_csv(f"{output_dir}/consensus_svs.csv", index=False)
+    consensus_df.to_csv(
+        os.path.join(output_dir, "consensus_svs.csv"), index=False
+    )
 
 
 def get_new_gene_intersections():
     """Get new gene intersections created by splitting multi-modal SVs into multiple single-modal SVs."""
     og_intersections = set()  # (sv_id, gene_id)
-    with open("1kgp/original_gene_intersections.bed", "r") as f:
+    with open("1kg/original_gene_intersections.bed", "r") as f:
         for line in f:
             row = line.strip().split("\t")
             sv_id, gene_id = row[3], row[7]
             og_intersections.add((sv_id, gene_id))
 
-    df_to_bed(
-        in_file="1kgp/consensus_svs.csv", out_file="1kgp/consensus_svs.bed"
-    )
+    df_to_bed(in_file="1kg/consensus_svs.csv", out_file="1kg/consensus_svs.bed")
     subprocess.run(
-        ["bash", "bed_intersect.sh"]
+        ["bash", "bash/bed_intersect.sh"]
         + [  # noqa503
-            "1kgp/consensus_svs.bed",
-            "1kgp/genes.bed",
-            "1kgp/consensus_gene_intersections.bed",
+            "1kg/consensus_svs.bed",
+            "1kg/genes.bed",
+            "1kg/consensus_gene_intersections.bed",
         ],
         capture_output=True,
         text=True,
@@ -623,7 +631,7 @@ def get_new_gene_intersections():
 
     split_intersections = set()
     sv_split_lookup = {}
-    with open("1kgp/consensus_gene_intersections.bed", "r") as f:
+    with open("1kg/consensus_gene_intersections.bed", "r") as f:
         for line in f:
             row = line.strip().split("\t")
             sv_id, sv_split_id, gene_id = row[3], row[4], row[8]
@@ -631,7 +639,7 @@ def get_new_gene_intersections():
             sv_split_lookup[(sv_id, gene_id)] = sv_split_id
 
     new_intersections = split_intersections - og_intersections
-    with open("1kgp/new_gene_intersections.bed", "w") as f:
+    with open("1kg/new_gene_intersections.bed", "w") as f:
         for sv_id, gene_id in new_intersections:
             sv_split_id = sv_split_lookup[(sv_id, gene_id)]
             f.write(f"{sv_split_id}\t{gene_id}\n")
@@ -640,14 +648,14 @@ def get_new_gene_intersections():
 def outlier_gene_intersections():
     """Get SVs that are both outliers and have new gene intersections."""
     svs_with_new_genes = set()
-    with open("1kgp/new_gene_intersections.bed", "r") as f:
+    with open("1kg/new_gene_intersections.bed", "r") as f:
         for line in f:
             sv_id = line.strip().split()[0]
             sv_id = "_".join(sv_id.split("_")[0:2])
             svs_with_new_genes.add(sv_id)
 
     svs_with_outliers = set()
-    with open("1kgp/outliers.txt", "r") as f:
+    with open("1kg/outliers.txt", "r") as f:
         for line in f:
             sv_id = line.strip().split()[0]
             svs_with_outliers.add(sv_id)
@@ -658,13 +666,13 @@ def outlier_gene_intersections():
 def high_confidence_gene_intersections():
     """Get SVs that are both high confidence and have new gene intersections."""
     svs_with_new_genes = set()
-    with open("1kgp/new_gene_intersections.bed", "r") as f:
+    with open("1kg/new_gene_intersections.bed", "r") as f:
         for line in f:
             sv_id = line.strip().split()[0]
             sv_id = "_".join(sv_id.split("_")[0:2])
             svs_with_new_genes.add(sv_id)
 
-    df = pd.read_csv("1kgp/svs_n_modes.csv")
+    df = pd.read_csv("1kg/svs_n_modes.csv")
     high_confidence_svs = set(
         df[(df["confidence"] == "high") & (df["num_modes"] >= 1)]["sv_id"]
     )
@@ -676,9 +684,9 @@ def high_confidence_gene_intersections():
 
 
 def recalculate_afs():
-    """Recalculate allele frequencies based on genotypes in deletions_df and compare to allele frequencies in sv_stats_collapsed_df."""
+    """Recalculate allele frequencies based on genotypes in deletions_df and compare to allele frequencies in most_common_split_df."""
     df = get_deletions_df().head(1000)
-    results_df = get_sv_stats_collapsed_df()
+    results_df = get_most_common_split_df()
     sample_ids = get_sample_ids()
     for _, row in df.iterrows():
         gt_samples = set()
@@ -709,7 +717,7 @@ def recalculate_afs():
 
 def compare_short_long_reads():
     """Compare the number of modes and confidence between short read and long read analyses."""
-    sr_df = pd.read_csv("1kgp/svs_n_modes.csv")
+    sr_df = pd.read_csv("1kg/svs_n_modes.csv")
     sr_df = sr_df[sr_df["confidence"] != "inconclusive"]
     sr_df = sr_df.rename(
         columns={
@@ -739,7 +747,7 @@ def compare_short_long_reads():
         axis=1,
     )
     # consensus_df = merged[~merged["consensus"].isna()] # get all rows where the consensus is not NaN
-    merged.to_csv("1kgp/sr_lr_merged.csv", index=False)
+    merged.to_csv("1kg/sr_lr_merged.csv", index=False)
 
 
 def bed_to_df(bed_file: str, remove_dupes: bool = False) -> pd.DataFrame:
@@ -775,19 +783,19 @@ def bed_to_df(bed_file: str, remove_dupes: bool = False) -> pd.DataFrame:
 def get_overlapping_clustered_svs():
     """Checks for overlaps between clustered SVs and the original SV breakpoints."""
     overlap_threshold = 0.7
-    if not os.path.exists("1kgp/sv_lookup_intersect.csv"):
+    if not os.path.exists("1kg/sv_lookup_intersect.csv"):
         lookup = get_sv_lookup()
         lookup["sv_id"] = lookup["id"].astype(str)
         lookup.rename(columns={"stop": "end"}, inplace=True)
-        bed_file = "1kgp/sv_lookup.bed"
+        bed_file = "1kg/sv_lookup.bed"
         df_to_bed(in_df=lookup, out_file=bed_file)
 
-        output_bed_file = "1kgp/sv_lookup_intersect.bed"
+        output_bed_file = "1kg/sv_lookup_intersect.bed"
         subprocess.run(
-            ["bash", "bed_intersect.sh"]
+            ["bash", "bash/bed_intersect.sh"]
             + [
                 bed_file,
-                "1kgp/consensus_svs.bed",
+                "1kg/consensus_svs.bed",
                 output_bed_file,
             ],
             capture_output=True,
@@ -795,9 +803,9 @@ def get_overlapping_clustered_svs():
         )
 
         df = bed_to_df(output_bed_file)
-        df.to_csv("1kgp/sv_lookup_intersect.csv", index=False)
+        df.to_csv("1kg/sv_lookup_intersect.csv", index=False)
     else:
-        df = pd.read_csv("1kgp/sv_lookup_intersect.csv")
+        df = pd.read_csv("1kg/sv_lookup_intersect.csv")
 
     overlaps = df[
         (df["r"] >= overlap_threshold) & (df["sv1_id"] != df["sv2_id"])
@@ -808,7 +816,7 @@ def get_overlapping_clustered_svs():
     #     overlaps[["sv1_id", "sv1_l", "sv1_r", "sv2_id", "sv2_l", "sv2_r", "r"]]
     # )
 
-    og_overlaps = pd.read_csv("1kgp/og_svs_intersect.csv")
+    og_overlaps = pd.read_csv("1kg/og_svs_intersect.csv")
     og_overlaps = og_overlaps[og_overlaps["r"] >= overlap_threshold]
     # only need sv ids to check for overlaps
     og_overlaps = og_overlaps[["sv1_id", "sv2_id"]]
@@ -834,28 +842,29 @@ def write_samplot_files():
     for sv_id in sv_ids:
         chr, start, stop = get_sv_chr(sv_id)
         subprocess.run(
-            ["bash", "samplot_viz.sh"] + [sv_id, chr, str(start), str(stop)],
+            ["bash", "bash/samplot_viz.sh"]
+            + [sv_id, chr, str(start), str(stop)],
             capture_output=True,
             text=True,
         )
 
 
 def write_post_processed_files(
-    input_dir: str,
     output_dir: str,
     sample_ids: set[str],
-    sv_df: pd.DataFrame | None = None,
-    synthetic_data: bool = False,
+    sv_lookup: pd.DataFrame,
+    *,
+    ancestry_file: str | None = None,
 ):
-    """Write all post-processed files after running SPLIT2."""
-    get_n_modes(input_dir, output_dir, sv_df)
+    """Write all post-processed files after running SPLIT."""
+    get_n_modes(output_dir, sv_lookup)
     print("wrote svs_n_modes.csv")
 
     get_consensus_svs(output_dir)
     print("wrote consensus_svs.csv")
 
-    write_sv_stats_collapsed(output_dir)
-    print("wrote sv_stats_collapsed.csv")
+    write_most_common_split(output_dir)
+    print("wrote most_common_split.csv")
 
     write_consensus_vcf(output_dir, sample_ids)
     print("wrote split_consensus.vcf")
@@ -863,7 +872,7 @@ def write_post_processed_files(
     get_outliers(output_dir)
     print("wrote outliers.csv")
 
-    if not synthetic_data:
-        write_ancestry_dissimilarity(output_dir)
+    if ancestry_file is not None:
+        write_ancestry_dissimilarity(output_dir, ancestry_file)
         print("wrote ancestry_dissimilarity.csv")
     # get_new_gene_intersections() # need bedtools to run this

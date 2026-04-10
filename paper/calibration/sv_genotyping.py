@@ -221,10 +221,10 @@ def convert_results_to_vcf(out_file: str):
     """Takes the results from SPLIT and converts them to a VCF file with the same format as the original SVs, but with the new SV IDs and coordinates. The non-ref sample IDs should reflect the mode that the sample was assigned to. Also builds a lookup file that maps the original SV IDs to the new split SV IDs."""
 
     print("Writing SV expanded VCF...", flush=True)
-    collapsed = pd.read_csv("results/sv_stats_collapsed.csv")
+    collapsed = pd.read_csv("results/most_common_split.csv")
 
     # initialize a new vcf and copy headers from the original vcf, keeping ID, CHROM, POS, END, and sample columns
-    template_vcf = pysam.VariantFile("1kgp/1kg.subset.vcf.gz")
+    template_vcf = pysam.VariantFile("1kg/1kg.subset.vcf.gz")
     expanded_vcf = pysam.VariantFile(out_file, "w", header=template_vcf.header)
 
     lookup_df = pd.DataFrame(
@@ -276,7 +276,7 @@ def convert_results_to_vcf(out_file: str):
 
 def main():
     # build_sr_lr_overlap_set once for the original SR SVs, then for the LR SVs
-    lr_vcf = "long_reads/all.sniffles.hg38.1kGP.ont.7Aug2023.vcf.gz"
+    lr_vcf = "long_reads/all.sniffles.hg38.1kg.ont.7Aug2023.vcf.gz"
     expanded_sr_vcf = "results/1kg_expanded.vcf"
     if not os.path.exists(expanded_sr_vcf):
         try:
@@ -285,7 +285,7 @@ def main():
             os.remove(expanded_sr_vcf)
             raise Exception(f"Failed to write {expanded_sr_vcf}. Exiting now.")
     for sr_vcf, output_file_root in zip(
-        ["1kgp/1kg.subset.vcf.gz", expanded_sr_vcf],
+        ["1kg/1kg.subset.vcf.gz", expanded_sr_vcf],
         ["original_sr", "expanded_sr"],
     ):
         output_file = f"{output_file_root}_lr_overlaps.csv"
@@ -302,5 +302,5 @@ def main():
 if __name__ == "__main__":
     # main()
     vcf_to_csv_filtered(
-        "1kgp/1kg.subset.vcf.gz", "sv_genotyping/1kg.subset.split_svs_only.csv"
+        "1kg/1kg.subset.vcf.gz", "sv_genotyping/1kg.subset.split_svs_only.csv"
     )

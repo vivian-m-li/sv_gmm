@@ -17,12 +17,12 @@ from src.utils.model_helper import (
 )
 from src.utils.timeout import break_after
 
-INPUT_DIR = "1kgp"
 
-
-def vcf_to_bed():
-    vcf_in = pysam.VariantFile(f"{INPUT_DIR}/1kg.subset.vcf.gz")
-    with open(f"{INPUT_DIR}/deletions.bed", "w") as f:
+def vcf_to_bed(in_file: str, out_file: str):
+    # in_file: .vcf or .vcf.gz
+    # out_file: .bed
+    vcf_in = pysam.VariantFile(in_file)
+    with open(out_file, "w") as f:
         for record in vcf_in.fetch():
             info = dict(record.info)
             if info["SVTYPE"] != "DEL":
@@ -32,8 +32,10 @@ def vcf_to_bed():
             )
 
 
-def write_cipos():
-    vcf_in = pysam.VariantFile(f"{INPUT_DIR}/1kg.subset.vcf.gz")
+def write_cipos(in_file: str, out_file: str):
+    # in_file: .vcf or .vcf.gz
+    # out_file: .csv
+    vcf_in = pysam.VariantFile(in_file)
     df = pd.DataFrame(columns=["id", "cipos", "ciend"])
     # a record will have all 4 fields cipos, cipos95, ciend, and ciend95 or none of the above
     n_missing = 0
@@ -52,14 +54,17 @@ def write_cipos():
             n_missing += 1
 
     print(f"Number of records without CIPOS: {n_missing}")  # 74886 records
-    df.to_csv(f"{INPUT_DIR}/cipos.csv", index=False)  # 11522 rows
+    df.to_csv(out_file, index=False)  # 11522 rows
 
 
-def prune_genes_bed():
-    with (
-        open(f"{INPUT_DIR}/grch38.genes.bed", "r") as infile,
-        open(f"{INPUT_DIR}/genes.bed", "w") as outfile,
-    ):
+def prune_genes_bed(in_file: str, out_file: str):
+    """
+    Prunes the genes.bed file to only include the gene name in the annotations column and writes it to a new file.
+
+    in_file: .bed
+    out_file: .bed
+    """
+    with open(in_file, "r") as infile, open(out_file, "w") as outfile:
         for line in infile:
             fields = line.strip().split("\t")
             chrom, start, stop, annotations = (
@@ -102,12 +107,12 @@ def query_stix_all(cfg: dict, sv_lookup_file: str):
         sv_lookup_file,
         cfg["input_files"].get("sample_id_file"),
         cfg["input_files"].get("insert_size_file"),
-        cfg["input_files"].get("default_insert_size"),
+        cfg["model"].get("default_insert_size"),
     )
 
     df = pd.read_csv(filename, low_memory=False)
     df["num_samples"] = 0
-    sample_ids = get_sample_ids(INPUT_DIR)
+    sample_ids = get_sample_ids(input_dir)
     for index, row in df.iterrows():
         n_nonref = 0
         for sample_id in sample_ids:
@@ -119,15 +124,11 @@ def query_stix_all(cfg: dict, sv_lookup_file: str):
         p = multiprocessing.Pool(multiprocessing.cpu_count())
         args = []
         for _, row in df.iterrows():
-            if row["num_samples"] <= 10:
-                # skip rows with too few samples
-                continue
-            args.append(
-                (
-                    cfg,
-                    row.to_dict(),
-                )
-            )
+            # skip rows with too few samples
+            # this column may be unreliable so for now, we will query all SVs
+            # if row["num_samples"] <= 10:
+            #     continue
+            args.append((cfg, row.to_dict()))
 
         print(f"Querying stix for {len(args)} SVs...")
         p.starmap(query_stix_sv, args)

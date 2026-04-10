@@ -85,34 +85,20 @@ def split_sv(
     # set filepaths
     if output_dir is None:
         output_dir = input_dir
-    output_file_dir = os.path.join(output_dir, stix_file_dir)
     plot_dir = os.path.join(output_dir, "plots")
 
-    for directory in [
-        output_dir,
-        output_file_dir,
-        plot_dir,
-    ]:
-        if not os.path.exists(directory) and directory != "":
-            os.mkdir(directory)
+    for directory in [output_dir, stix_file_dir]:
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+    if plot:
+        os.makedirs(plot_dir, exist_ok=True)
 
     query_region = get_query_region(l, r, read_overlap)
     file_name = query_region.file_name
 
     # check if this SV has already been queried for in STIX
-    # check multiple locations for this file
-    output_file = None
-    for directory in [
-        input_dir,
-        output_dir,
-        os.path.join(input_dir, stix_file_dir),
-        output_file_dir,
-    ]:
-        file_path = os.path.join(directory, f"{file_name}.txt")
-        if os.path.isfile(file_path):
-            output_file = file_path
-            break
-    if output_file is None:
+    stix_file = os.path.join(stix_file_dir, f"{file_name}.txt")
+    if not os.path.isfile(stix_file):
         print(
             "This variant has not been previously queried or processed. Using STIX to do this now.\n"
         )
@@ -123,9 +109,9 @@ def split_sv(
             )
 
         # run the bash script to query stix
-        output_file = query_stix(
+        stix_file = query_stix(
             query_region,
-            output_file_dir,
+            stix_file_dir,
             stix_bin,
             stix_index,
             stix_database,
@@ -133,10 +119,10 @@ def split_sv(
         )
     else:
         if print_messages:
-            print("Using previously-queried data from", output_file, "\n")
+            print("Using previously-queried data from", stix_file, "\n")
 
     # load the data as a dataframe
-    reads = stix_output_to_df(output_file)
+    reads = stix_output_to_df(stix_file)
 
     # remove samples queried by STIX but missing in the vcf/csv
     # in 1KG, this happens because the extended high coverage dataset includes samples that did not appear in the original study

@@ -68,14 +68,7 @@ def get_confusion_matrix(
         (merged["n_svs_actual"] == 1) & (merged["n_svs_predicted"] == 1)
     ].shape[0]
 
-    values = {
-        "TP": TP,
-        "FP": FP,
-        "FN": FN,
-        "TN": TN,
-    }  # keep raw values instead of proportions
-    # n_svs = merged.shape[0]
-    # values = {k: v / n_svs for k, v in values.items()}
+    values = {"TP": TP, "FP": FP, "FN": FN, "TN": TN}
     return values
 
 
@@ -200,11 +193,9 @@ def run_calibration_test(
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
     concat_multi_processed_sv_files(
-        processed_file_dir, "all_split_trials.csv", results_dir
+        results_dir, processed_file_dir, "all_split_trials.csv"
     )
-    write_post_processed_files(
-        input_dir, results_dir, sample_ids, sv_df[["id"]], True
-    )
+    write_post_processed_files(results_dir, sample_ids, sv_df[["id"]])
     shutil.rmtree(processed_file_dir)
 
     svs_n_modes = pd.read_csv(os.path.join(results_dir, "svs_n_modes.csv"))
@@ -575,7 +566,7 @@ def calibrate(cfg: dict):
     insert_size_lookup = get_insert_size_lookup(
         input_dir,
         cfg["input_files"]["insert_size_file"],
-        cfg["input_files"]["default_insert_size"],
+        cfg["model"]["default_insert_size"],
         sample_ids,
     )
 

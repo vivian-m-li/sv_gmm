@@ -11,21 +11,21 @@ from src.utils.types import Evidence, SVStat
 # ----------------------------
 # Get commonly used dataframes
 # ----------------------------
-def get_deletions_df(stem: str = "1kgp"):
+def get_deletions_df(stem: str = "1kg"):
     """Returns a dataframe of all SVs and genotypes for each sample."""
     file = os.path.join(stem, "deletions.csv")
     return pd.read_csv(file, low_memory=False)
 
 
-def get_all_split_trials_df(stem: str = "1kgp"):
+def get_all_split_trials_df(stem: str = "1kg"):
     """Returns a dataframe of all SVs and GMM results for each run of the SV."""
     file = os.path.join(stem, "all_split_trials.csv")
     return pd.read_csv(file, low_memory=False)
 
 
-def get_sv_stats_collapsed_df(stem: str = "1kgp"):
+def get_most_common_split_df(stem: str = "1kg"):
     """Returns a dataframe of all SVs and GMM results after collapsing to consensus results."""
-    file = os.path.join(stem, "sv_stats_collapsed.csv")
+    file = os.path.join(stem, "most_common_split.csv")
     return pd.read_csv(file)
 
 
@@ -38,13 +38,13 @@ def get_sample_ids(file: str):
     return sample_ids
 
 
-def get_sv_lookup(stem: str = "1kgp"):
+def get_sv_lookup(stem: str = "1kg"):
     """Get a dataframe mapping sv_id to chr, start, stop."""
     file = os.path.join(stem, "sv_lookup.csv")
     return pd.read_csv(file)
 
 
-def get_sv_chr(sv_id: str, stem: str = "1kgp"):
+def get_sv_chr(sv_id: str, stem: str = "1kg"):
     """Get the chromosome, start, and stop for a given sv_id."""
     df = get_sv_lookup(stem)
     row = df[df["id"] == sv_id]
@@ -166,7 +166,7 @@ def get_num_intersecting_genes():
 
 def get_num_new_svs():
     """Gets number of new SVs created by splitting multi-modal SVs into multiple single-modal SVs."""
-    df = get_sv_stats_collapsed_df()
+    df = get_most_common_split_df()
     df = df[df["num_samples"] > 0]
     mode_data = [df[df["num_modes"] == i + 1] for i in range(3)]
     num_two_modes = len(mode_data[1])
@@ -178,7 +178,7 @@ def get_sample_sequencing_centers():
     """Get a dataframe mapping sample_id to sequencing center(s)."""
     # data obtained from https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/20130502.phase3.sequence.index
     df = pd.read_csv(
-        "1kgp/20130502.phase3.sequence.index", sep="\t", low_memory=False
+        "1kg/20130502.phase3.sequence.index", sep="\t", low_memory=False
     )
     df["CENTER_NAME"] = df["CENTER_NAME"].str.upper()
     df = df[["SAMPLE_NAME", "CENTER_NAME"]].drop_duplicates()
@@ -190,9 +190,9 @@ def get_sample_sequencing_centers():
 # Handle varying insert sizes
 # ----------------------------
 def get_insert_sizes(get_files: bool = False):
-    """Get mean insert sizes for all samples in 1kgp. If get_files is True, will download mapped files from BAS files."""
+    """Get mean insert sizes for all samples in 1kg. If get_files is True, will download mapped files from BAS files."""
     if get_files:
-        samples_df = pd.read_csv("1kgp/bam_bas_files.tsv", sep="\t")
+        samples_df = pd.read_csv("1kg/bam_bas_files.tsv", sep="\t")
         pattern = r"data\/.*\/alignment\/.*\.mapped\.ILLUMINA\.bwa\..+\.low_coverage\.\d+\.bam\.bas"
         bas_files_df = samples_df[samples_df["BAS FILE"].str.fullmatch(pattern)]
         bas_files_df["sample_id"] = bas_files_df["BAS FILE"].str.extract(
@@ -202,31 +202,32 @@ def get_insert_sizes(get_files: bool = False):
         for _, row in bas_files_df.iterrows():
             bas_file = row["BAS FILE"]
             sample_id = row["sample_id"]
-            if f"{sample_id}.tsv" in os.listdir("1kgp/mapped_files"):
+            if f"{sample_id}.tsv" in os.listdir("1kg/mapped_files"):
                 continue
             subprocess.run(
-                ["bash", "get_mapped_files.sh"] + [sample_id, bas_file],
+                ["bash", "../data/bash/get_mapped_files.sh"]
+                + [sample_id, bas_file],
                 capture_output=True,
                 text=True,
             )
 
     df = pd.DataFrame(columns=["sample_id", "mean_insert_size"])
-    mapped_files = os.listdir("1kgp/mapped_files")
+    mapped_files = os.listdir("1kg/mapped_files")
     for i, file in enumerate(mapped_files):
         sample_id = file.strip(".tsv")
         try:
-            file_df = pd.read_csv(f"1kgp/mapped_files/{file}", sep="\t")
+            file_df = pd.read_csv(f"1kg/mapped_files/{file}", sep="\t")
         except Exception:
             # alignment files don't exist for samples HG00361, HG00844, NA18555.tsv
             print(file)
         mean_insert_size = int(np.mean(file_df["mean_insert_size"]))
         df.loc[i] = [sample_id, mean_insert_size]
-    df.to_csv("1kgp/insert_sizes.csv", index=False)
+    df.to_csv("1kg/insert_sizes.csv", index=False)
 
 
 def get_mean_coverage():
-    """Get mean coverage for all samples in 1kgp."""
-    df = get_sv_stats_collapsed_df()
+    """Get mean coverage for all samples in 1kg."""
+    df = get_most_common_split_df()
     df = df[df["num_modes"] > 1]
     coverage_df = pd.DataFrame(columns=["sv_id", "num_samples", "coverage"])
     for _, sv in df.iterrows():
@@ -247,17 +248,17 @@ def get_mean_coverage():
                 coverage,
             ]
 
-    coverage_df.to_csv("1kgp/coverage.csv", index=False)
+    coverage_df.to_csv("1kg/coverage.csv", index=False)
 
 
 def get_insert_size_diff():
     """Get the mean difference between insert sizes obtained from mapped files and insert sizes scraped from metadata."""
     df = pd.read_csv(
-        "1kgp/insert_sizes_scraped.csv",
+        "1kg/insert_sizes_scraped.csv",
         dtype={"sample_id": str, "mean_insert_size": int},
     )
     df2 = pd.read_csv(
-        "1kgp/insert_sizes.csv",
+        "1kg/insert_sizes.csv",
         dtype={"sample_id": str, "mean_insert_size": float},
     )
 
@@ -271,4 +272,4 @@ def get_insert_size_diff():
     df["diff"] = abs(df["mean_insert_size"] - df["true_mean_insert_size"])
     mean_diff = df["diff"].mean()
     print(mean_diff)
-    df.to_csv("1kgp/insert_size_compare.csv", index=False)
+    df.to_csv("1kg/insert_size_compare.csv", index=False)

@@ -236,7 +236,7 @@ def reverse_giggle_format(l: str, r: str):  # noqa741
     return chr, start, stop
 
 
-def lookup_sv_position(sv_id: str, dir: str = "1kgp"):
+def lookup_sv_position(sv_id: str, dir: str = "1kg"):
     lookup = pd.read_csv(f"{dir}/sv_lookup.csv")
     row = lookup[lookup["id"] == sv_id]
     if row.empty:

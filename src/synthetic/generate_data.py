@@ -236,7 +236,7 @@ def assign_modes(weights, samples):
 
 
 def get_random_insert_size(df):
-    """Gets a random insert size from the 1kgp insert size distribution."""
+    """Gets a random insert size from the 1kg insert size distribution."""
     return df.sample().insert_size.values[0]
 
 
@@ -360,6 +360,7 @@ def generate_and_split_sample_reads(
     chr: int,  # chromosome number (does not support X/Y), as a str
     svs: list[tuple[int, int]],  # list of (start, stop) for each SV
     *,
+    model_params: dict,
     n_samples: int | None = None,
     p: list[float] | None = None,
     gmm_model: str = "2d",
@@ -380,7 +381,7 @@ def generate_and_split_sample_reads(
     modes = assign_modes(weights, samples)
 
     insert_size_df = pd.read_csv(
-        "1kgp/insert_sizes.csv", dtype={"mean_insert_size": int}
+        "1kg/insert_sizes.csv", dtype={"mean_insert_size": int}
     )
 
     # For each sample, generate random evidence
@@ -445,6 +446,9 @@ def generate_and_split_sample_reads(
             synthetic_data=True,
             gmm_model=gmm_model,
             insert_size_lookup=insert_size_lookup,
+            d_threshold=model_params["d_threshold"],
+            r_threshold=model_params["r_threshold"],
+            max_penalty=model_params["max_penalty"],
         )
         return gmm_result, evidence_by_mode
 

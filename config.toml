@@ -15,31 +15,33 @@
 
 # Directory containing your input data (VCF/CSV callset, sample IDs, insert
 # sizes, etc.)
-input_dir = "1kgp"
+input_dir = "data/1kg"
 
 # Directory where results will be written.
-output_dir = "results"
+output_dir = "output/results"
 
 # Sub-directory where raw STIX query output files are cached between runs.
-stix_output_dir = "stix_output"
+stix_output_dir = "output/stix_output"
 
 # Intermediate directory used during processing.
 # On HPC clusters, point this to a fast local scratch filesystem.
 # On a local machine, a subdirectory of output_dir is fine.
-intermediate_output_dir = "/scratch/Users/vili4418/processed_svs"
+# intermediate_output_dir = "/scratch/Users/vili4418/processed_svs"
+intermediate_output_dir = "output/results/processed_svs"
 
 # Local directory to store intermediate output files.
 # Files are first written to scratch_dir, then moved to intermediate_file_dir if
 # they are not the same.
-local_intermediate_output_dir = "results/processed_svs"
+local_intermediate_output_dir = "output/results/processed_svs"
 
 # enable this when running query_stix_all.py
 # stix_output_dir = "/scratch/Users/vili4418/stix_output"
 
 # enable this when running calibrate_model.py
-input_dir = "calibration"
-output_dir = "calibration/results"
-intermediate_output_dir = "/scratch/Users/vili4418/calibration_outputs"
+# input_dir = "data/calibration"
+# output_dir = "output/calibration/results"
+# stix_output_dir = "output/calibration"
+# intermediate_output_dir = "/scratch/Users/vili4418/calibration_outputs"
 
 # ------------------------------------------------------------------------------
 # [input_files] — Files expected inside input_dir
@@ -48,7 +50,8 @@ intermediate_output_dir = "/scratch/Users/vili4418/calibration_outputs"
 
 # VCF or CSV file listing structural variants.
 # Supported formats: .vcf, .vcf.gz, .csv
-sv_lookup_file = "deletions.csv"
+sv_lookup_file = "deletions_subset.csv"
+# sv_lookup_file = "1kg.subset.vcf.gz"
 
 # txt file with one row for each sample ID
 sample_id_file = "sample_ids.txt"
@@ -58,10 +61,8 @@ sample_id_file = "sample_ids.txt"
 # automatically.
 insert_size_file = "insert_sizes.csv"
 
-# Default insert size (bp) written when insert_size_file is missing. Only used
-# if the file above does not exist.
-default_insert_size = 450
-
+# Ancestry file with required columns "Sample name" and "Superpopulation code"
+ancestry_file = "ancestry.tsv"
 
 # ------------------------------------------------------------------------------
 # [stix] — Paths to the STIX executable and index
@@ -101,6 +102,9 @@ read_overlap = 0.6
 # model's built-in default.
 # ------------------------------------------------------------------------------
 [model]
+# Default insert size (bp) written when insert_size_file is missing. Only used
+# if the file above does not exist.
+default_insert_size = 450
 
 # Distance threshold for merging nearby read clusters (bp).
 d_threshold = 449

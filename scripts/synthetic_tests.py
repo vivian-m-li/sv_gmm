@@ -1,9 +1,9 @@
+import argparse
 import ast
 import csv
 import math
 import multiprocessing
 import os
-import sys
 
 import numpy as np
 import pandas as pd
@@ -12,9 +12,12 @@ from src.synthetic.generate_data import (
     generate_sv_coordinates,
     generate_and_split_sample_reads,
 )
+from src.utils.config_loader import load_config
 from src.utils.model_helper import reciprocal_overlap
 from src.utils.timeout import break_after
 from src.utils.types import Evidence
+
+SLURM_CPUS = int(os.environ.get("SLURM_CPUS_ON_NODE", 1))
 
 
 def write_reciprocal_overlap(dir: str):
@@ -34,11 +37,12 @@ def write_reciprocal_overlap(dir: str):
         df.to_csv(os.path.join(dir, file), index=False)
 
 
-def run_split(case, r, svs, weights, n_samples, results):
+def run_split(case, r, svs, weights, n_samples, model_params, results):
     """Generates synthetic data and runs the GMM on it. Appends the results to the multiprocessing-managed list to be written to a CSV later."""
     gmm_result, evidence_by_mode = generate_and_split_sample_reads(
         1,
         svs,
+        model_params=model_params,
         n_samples=n_samples,
         p=weights,
     )
@@ -170,8 +174,10 @@ def get_coordinates(sv1, sv2, d):
 
 @break_after(hours=15, minutes=55)
 def split_synthetic_svs(
+    *,
     n_samples: int,
     svlen: int,
+    model_params: dict,
     test_case: str | None = None,
     vary_weights: bool = False,
 ):
@@ -185,8 +191,7 @@ def split_synthetic_svs(
         data = generate_sv_coordinates(test_case, svlen)
 
     with multiprocessing.Manager() as manager:
-        cpu_count = multiprocessing.cpu_count()
-        p = multiprocessing.Pool(cpu_count)
+        p = multiprocessing.Pool(SLURM_CPUS)
         results = manager.list()
         args = []
         for case, r, svs in data:
@@ -209,7 +214,9 @@ def split_synthetic_svs(
             for weight in weights:
                 # run each case 10 times and average at the end
                 for _ in range(10):
-                    args.append((case, r, svs, weight, n_samples, results))
+                    args.append(
+                        (case, r, svs, weight, n_samples, model_params, results)
+                    )
 
         p.starmap(run_split, args)
         p.close()
@@ -225,6 +232,28 @@ def split_synthetic_svs(
 
 
 if __name__ == "__main__":
-    n_samples = int(sys.argv[1])
-    svlen = int(sys.argv[2]) if len(sys.argv) > 2 else 802
-    split_synthetic_svs(n_samples=n_samples, svlen=svlen)
+    parser = argparse.ArgumentParser(
+        description="Run synthetic data tests using SPLIT."
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config.toml",
+        help="Path to the TOML configuration file (default: config.toml)",
+    )
+    parser.add_argument(
+        "--n_samples",
+        type=int,
+        help="Number of samples to generate for each synthetic data test case",
+    )
+    parser.add_argument(
+        "--svlen",
+        type=int,
+        help="Length of the synthetic SVs to generate for each test case",
+    )
+
+    args = parser.parse_args()
+    cfg = load_config(args.config)
+    split_synthetic_svs(
+        n_samples=args.n_samples, svlen=args.svlen, model_params=cfg["model"]
+    )

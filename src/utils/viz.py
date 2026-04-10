@@ -32,7 +32,7 @@ from src.utils.constants import (
 )
 from src.utils.helper import (
     get_sample_sequencing_centers,
-    get_sv_stats_collapsed_df,
+    get_most_common_split_df,
     get_svlen,
 )
 from src.utils.model_helper import calc_af
@@ -668,7 +668,7 @@ def get_num_samples_gmm(df):
 
 def get_svs_intersecting_genes(df: pd.DataFrame):
     sv_gene_overlap_df = pd.read_csv(
-        "1kgp/sv_intersect.csv", header=None, delimiter="\t"
+        "1kg/sv_intersect.csv", header=None, delimiter="\t"
     )
     intersecting_svs = sv_gene_overlap_df.iloc[:, 3]
     return df[df["id"].isin(intersecting_svs)]
@@ -678,7 +678,7 @@ def plot_processed_sv_stats(filter_intersecting_genes: bool = False):
     """
     Plots the rectangle shapes showing the distribution of all SVs and how they're split
     """
-    df = get_sv_stats_collapsed_df()
+    df = get_most_common_split_df()
     df = df[df["num_samples"] > 0]
 
     if filter_intersecting_genes:
@@ -846,7 +846,7 @@ def plot_sample_size_per_mode(filter_intersecting_genes: bool = False):
     """
     For each # of modes, plots a boxplot of the sample size for each SV
     """
-    df = get_sv_stats_collapsed_df()
+    df = get_most_common_split_df()
     if filter_intersecting_genes:
         df = get_svs_intersecting_genes(df)
 
@@ -950,7 +950,7 @@ def analyze_ancestry() -> None:
     """
     Plots a bar chart of the total ancestry and superancestry counts from the 1000 Genomes samples
     """
-    df = pd.read_csv("1kgp/ancestry.tsv", delimiter="\t")
+    df = pd.read_csv("1kg/ancestry.tsv", delimiter="\t")
     population_data = Counter()
     superpopulation_data = Counter()
     population_lookup = {}
@@ -994,7 +994,7 @@ def plot_afs():
     """
     Plots the allele frequencies for the SVs before and after being split by SVeperator
     """
-    sv_df = get_sv_stats_collapsed_df()
+    sv_df = get_most_common_split_df()
     sv_df = sv_df[sv_df["num_samples"] > 0]
     # calc afs for all 3
 
@@ -1085,7 +1085,7 @@ def plot_afs_hexbin():
     """
     Plots hexbin maps of allele frequencies for 2- and 3-mode SVs.
     """
-    sv_df = get_sv_stats_collapsed_df()
+    sv_df = get_most_common_split_df()
     sv_df = sv_df[
         (sv_df["num_samples"] > 0) & (sv_df["num_modes"].isin([2, 3]))
     ]
@@ -1142,7 +1142,7 @@ def plot_afs_hexbin():
 
 
 def plot_pre_post_split_diffs():
-    sv_df = get_sv_stats_collapsed_df()
+    sv_df = get_most_common_split_df()
     sv_df = sv_df[sv_df["num_samples"] > 10]
     original_afs = sv_df[sv_df["num_modes"] == 1]["af"].values
     original_n = sv_df[sv_df["num_modes"] == 1]["num_samples"].values
@@ -1173,7 +1173,7 @@ def plot_pre_post_split_diffs():
 
 
 def plot_original_afs():
-    sv_df = get_sv_stats_collapsed_df()
+    sv_df = get_most_common_split_df()
     sv_df = sv_df[sv_df["num_samples"] > 10]
     original_afs = sv_df[sv_df["num_modes"] == 1]["af"].values
     split_afs = sv_df[sv_df["num_modes"].isin([2, 3])]["af"].values
@@ -1724,7 +1724,7 @@ def synthetic_data_n_length_heatmap():
 
 
 def plot_seq_center_distribution():
-    df = get_sv_stats_collapsed_df()
+    df = get_most_common_split_df()
     df = df[df["num_modes"] == 2]
     seq_center_df = get_sample_sequencing_centers()
     seq_centers_by_mode = defaultdict(lambda: Counter())
@@ -1786,9 +1786,9 @@ def plot_seq_center_distribution():
 
 
 def plot_insert_size_distribution(insert_sizes):
-    df = get_sv_stats_collapsed_df()
+    df = get_most_common_split_df()
     df = df[df["num_modes"] == 2]
-    insert_sizes_df = pd.read_csv("1kgp/insert_sizes.csv")
+    insert_sizes_df = pd.read_csv("1kg/insert_sizes.csv")
     insert_sizes = defaultdict(list)
     for _, row in df.iterrows():
         modes = ast.literal_eval(row.modes)
@@ -1816,7 +1816,7 @@ def plot_insert_size_distribution(insert_sizes):
 
 def plot_insert_size_by_seq_center():
     insert_size_df = pd.read_csv(
-        "1kgp/insert_sizes.csv",
+        "1kg/insert_sizes.csv",
         dtype={"sample_id": str, "mean_insert_size": int},
     )
     seq_center_df = get_sample_sequencing_centers()
@@ -1846,7 +1846,7 @@ def plot_insert_size_by_seq_center():
 def get_outlier_coverage():
     outlier_coverage = []
     nonoutlier_coverage = []
-    df = pd.read_csv("1kgp/coverage.csv")
+    df = pd.read_csv("1kg/coverage.csv")
     outlier_df = df[df["num_samples"] == 1]
     for _, row in outlier_df.iterrows():
         modes = df[df["sv_id"] == row["sv_id"]]
@@ -1871,7 +1871,7 @@ def get_outlier_coverage():
 
 
 def bootstrap_runs_histogram():
-    sv_stats_df = pd.read_csv("1kgp/sv_stats_merged.csv", low_memory=False)
+    sv_stats_df = pd.read_csv("1kg/sv_stats_merged.csv", low_memory=False)
 
     resolved_df = sv_stats_df.groupby("id").filter(lambda x: len(x) <= 7)
     ambiguous_df = sv_stats_df.groupby("id").filter(lambda x: len(x) > 7)
@@ -1983,7 +1983,7 @@ def long_read_comparison():
 
 
 def plot_cipos():
-    df = pd.read_csv("1kgp/cipos.csv")
+    df = pd.read_csv("1kg/cipos.csv")
     starts = []
     ends = []
     for _, row in df.iterrows():

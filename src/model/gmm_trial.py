@@ -688,7 +688,7 @@ def gmm_trial(
     min_pairs: int = 2,
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
-    stem: str = "1kgp",
+    stem: str = "1kg",
     plot: bool = True,
     plot_file: str | None = None,
 ):

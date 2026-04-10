@@ -4,9 +4,11 @@ import os
 import shutil
 import time
 
+import pandas as pd
+
 from src.model.dirichlet import run_dirichlet
 from src.utils.config_loader import load_config
-from src.utils.helper import get_deletions_df, get_sample_ids
+from src.utils.helper import get_sample_ids
 from src.utils.model_helper import process_input_files
 from src.utils.timeout import break_after
 from src.utils.write_sv_output import (
@@ -18,23 +20,33 @@ from src.utils.write_sv_output import (
     write_post_processed_files,
 )
 
+SLURM_CPUS = int(os.environ.get("SLURM_CPUS_ON_NODE", 1))
+
 
 def run_split_trial(
     row: dict,
+    cfg: dict,
     population_size: int,
-    input_dir: str,
-    intermediate_output_dir: str,
-    stix_output_dir: str,
-    model_params: dict,
+    insert_size_lookup: dict[str, int],
 ):
     sv_id = row["id"]
+    input_dir = cfg["paths"]["input_dir"]
     reads, num_samples = get_raw_data(
-        row,
-        input_dir,
-        stix_file_dir=stix_output_dir,
-        filter_reference_samples=True,
-        print_messages=False,
+        row, cfg, filter_reference_samples=True, print_messages=False
     )
+
+    # load model parameters from the config file
+    raw_model = cfg.get("model", {})
+    model_params = {
+        k: v
+        for k, v in {
+            "d_threshold": raw_model.get("d_threshold"),
+            "r_threshold": raw_model.get("r_threshold"),
+            "max_penalty": raw_model.get("max_penalty"),
+        }.items()
+        if v is not None
+    }
+    model_params["insert_size_lookup"] = insert_size_lookup
 
     if reads.empty:
         # if no samples have any data supporting the SV then not included
@@ -52,6 +64,7 @@ def run_split_trial(
             },
         )
 
+    intermediate_output_dir = cfg["paths"]["intermediate_output_dir"]
     for i, (gmm_result, evidence_by_mode) in enumerate(gmm_results):
         sv_stat = init_sv_stat_row(
             row,
@@ -75,49 +88,36 @@ def run_split_trial(
 
 def run_split_wrapper(
     row: dict,
+    cfg: dict,
     population_size: int,
-    input_dir: str,
-    intermediate_output_dir: str,
-    stix_output_dir: str,
-    model_params: dict,
+    insert_size_lookup: dict[str, int],
 ):
-    try:
-        run_split_trial(
-            row,
-            population_size,
-            input_dir,
-            intermediate_output_dir,
-            stix_output_dir,
-            model_params,
-        )
-    except Exception as e:
-        print(f"Error processing SV {row['id']}: {e}")
+    run_split_trial(row, cfg, population_size, insert_size_lookup)
+    # try:
+    #     run_split_trial(row, cfg, population_size, insert_size_lookup)
+    # except Exception as e:
+    #     print(f"Error processing SV {row['id']}: {e}")
 
 
 @break_after(hours=30, minutes=00)
 def split_all(
-    input_dir: str,
-    intermediate_output_dir: str,
-    stix_output_dir: str,
-    sample_ids: set[str],
-    model_params: dict,
+    cfg: dict, sample_ids: set[str], insert_size_lookup: dict[str, int]
 ):
-    deletions_df = get_deletions_df(input_dir)
+    input_dir = cfg["paths"]["input_dir"]
+    sv_lookup_file = cfg["input_files"]["sv_lookup_file"]
+    svs = pd.read_csv(os.path.join(input_dir, sv_lookup_file), low_memory=False)
     population_size = len(sample_ids)
 
+    # for _, row in svs.iterrows():
+    #     run_split_wrapper(
+    #         row.to_dict(), cfg, population_size, insert_size_lookup
+    #     )
+
     with multiprocessing.Manager():
-        cpu_count = multiprocessing.cpu_count()
-        p = multiprocessing.Pool(cpu_count)
+        p = multiprocessing.Pool(SLURM_CPUS)
         args = [
-            (
-                row.to_dict(),
-                population_size,
-                input_dir,
-                intermediate_output_dir,
-                stix_output_dir,
-                model_params,
-            )
-            for _, row in deletions_df.iterrows()
+            (row.to_dict(), cfg, population_size, insert_size_lookup)
+            for _, row in svs.iterrows()
         ]
         p.starmap(run_split_wrapper, args)
         p.close()
@@ -129,7 +129,6 @@ def main(config_path: str = "config.toml"):
 
     input_dir = cfg["paths"]["input_dir"]
     output_dir = cfg["paths"]["output_dir"]
-    stix_output_dir = cfg["paths"]["stix_output_dir"]
     intermediate_output_dir = cfg["paths"]["intermediate_output_dir"]
     local_intermediate_output_dir = cfg["paths"][
         "local_intermediate_output_dir"
@@ -144,21 +143,17 @@ def main(config_path: str = "config.toml"):
         cfg["input_files"]["sv_lookup_file"],
         sample_id_file,
         cfg["input_files"].get("insert_size_file"),
-        cfg["input_files"].get("default_insert_size"),
+        cfg["model"].get("default_insert_size"),
     )
-
-    # load model parameters from the config file
-    raw_model = cfg.get("model", {})
-    model_params = {
-        k: v
-        for k, v in {
-            "d_threshold": raw_model.get("d_threshold"),
-            "r_threshold": raw_model.get("r_threshold"),
-            "max_penalty": raw_model.get("max_penalty"),
-        }.items()
-        if v is not None
-    }
-    model_params["insert_size_lookup"] = insert_size_lookup
+    sv_lookup_file = cfg["input_files"]["sv_lookup_file"]
+    if sv_lookup_file.endswith(".vcf"):
+        cfg["input_files"]["sv_lookup_file"] = (
+            sv_lookup_file.strip(".vcf") + ".csv"
+        )
+    elif sv_lookup_file.endswith(".vcf.gz"):
+        cfg["input_files"]["sv_lookup_file"] = (
+            sv_lookup_file.strip(".vcf.gz") + ".csv"
+        )
 
     os.makedirs(intermediate_output_dir, exist_ok=True)
     os.makedirs(local_intermediate_output_dir, exist_ok=True)
@@ -167,13 +162,7 @@ def main(config_path: str = "config.toml"):
     start = time.time()
 
     # this is the main function that splits each SV
-    split_all(
-        input_dir,
-        intermediate_output_dir,
-        stix_output_dir,
-        sample_ids,
-        model_params,
-    )
+    split_all(cfg, sample_ids, insert_size_lookup)
 
     # move files from scratch to home dir (even after timeout)
     if intermediate_output_dir != local_intermediate_output_dir:
@@ -185,10 +174,21 @@ def main(config_path: str = "config.toml"):
 
     print("Concatenating multi-processed SV files...")
     concat_multi_processed_sv_files(
-        local_intermediate_output_dir, "all_split_trials.csv", output_dir
+        output_dir, local_intermediate_output_dir, "all_split_trials.csv"
     )
     print("Writing post-processed files...")
-    write_post_processed_files(input_dir, output_dir, sample_ids)
+    sv_lookup = pd.read_csv(
+        os.path.join(input_dir, cfg["input_files"]["sv_lookup_file"]),
+        low_memory=False,
+    )
+    write_post_processed_files(
+        output_dir,
+        sample_ids,
+        sv_lookup,
+        ancestry_file=os.path.join(
+            input_dir, cfg["input_files"].get("ancestry_file")
+        ),
+    )
 
     end = time.time()
     elapsed_time = end - start
