@@ -9,15 +9,15 @@ description = "A package for generating synthetic ecological networks."
 authors = [{ name = "Vivian Li", email = "vivian.li@colorado.edu" }]
 license = { text = "MIT" }
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "bio>=1.7.1",
     "bokeh>=3.3.4",
     "brokenaxes>=0.6.1",
     "matplotlib>=3.8.3",
     "matplotlib-inline>=0.1.6",
-    "numpy>=2.4.2",
-    "pandas>=2.2.3",
+    "numpy>=1.26.4",
+    "pandas>=2.2.1",
     "psutil>=7.0.0",
     "pysam>=0.23.3",
     "pytest>=8.3.5",

@@ -25,6 +25,9 @@ CHR_LENGTHS = {  # for grch38
     # "X": 156040895,
     # "Y": 57227415,
 }
+
+NONREF_GTS = [(0, 1), (1, 0), (1, 1)]
+
 COLORS = ["#459395", "#EB7C69", "#FDA638"]
 SUPERPOPULATIONS = ["AFR", "AMR", "EUR", "EAS", "SAS"]
 SUBPOPULATIONS = [  # sorted by superpopulation

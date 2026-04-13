@@ -28,6 +28,8 @@ def query_stix(
         )
     else:
         stix_output_file = os.path.join(output_dir, query_region.file_name)
+    # TODO: check if stix_output_file is a direct path or if it needs to be joined with the current directory in the bash script
+    # for now, we're treating it as a direct path
 
     stix_path = "/".join(index_path.split("/")[:-1])
     l_query = (

@@ -11,9 +11,9 @@ import pandas as pd
 import pysam
 
 from src.utils.model_helper import reciprocal_overlap
+from src.utils.constants import NONREF_GTS
 
 FILE_DIR = "sv_genotyping"
-GTs = [(0, 1), (1, 0), (1, 1)]
 
 
 def vcf_to_csv(
@@ -48,7 +48,7 @@ def vcf_to_csv(
             record_samples = [
                 s_id
                 for s_id, s_gt in record.samples.items()
-                if s_id in sample_ids and s_gt["GT"] in GTs
+                if s_id in sample_ids and s_gt["GT"] in NONREF_GTS
             ]
             df.loc[len(df)] = [
                 record.id,
@@ -102,7 +102,7 @@ def vcf_to_bed(in_file: str, out_file: str, sample_ids: set[int]) -> None:
             record_samples = [
                 s_id
                 for s_id, s_gt in record.samples.items()
-                if s_id in sample_ids and s_gt["GT"] in GTs
+                if s_id in sample_ids and s_gt["GT"] in NONREF_GTS
             ]
             sample_lookup.loc[len(sample_lookup)] = [record.id, record_samples]
     vcf_in.close()
