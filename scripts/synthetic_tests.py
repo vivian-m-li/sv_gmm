@@ -221,7 +221,7 @@ def split_synthetic_svs(
                 weights = [[1.0 / len(svs) for _ in range(len(svs))]]
             for weight in weights:
                 # run each case 10 times and average at the end
-                for _ in range(1):
+                for _ in range(10):
                     args.append(
                         (
                             case,
