@@ -11,7 +11,6 @@ python --version
 #pysam 0.23.1
 
 
-
 # IF DOING FROM a vcf and already have a STIX output
 #python query_sv.py 
 # -l left position of SV
@@ -41,8 +40,6 @@ python query_sv.py \
 --insert_size_file "insert_sizes.csv" \
 -p \
 -d
-
-
 
 #-p \ # true to plot the length and L-coordinate of each sample
 #-d \ # keep rerunning algorithm until >= 80% confident in outcome
