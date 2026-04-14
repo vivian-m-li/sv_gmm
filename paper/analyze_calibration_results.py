@@ -1,6 +1,7 @@
 import os
 import subprocess
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -9,6 +10,103 @@ from src.utils.model_helper import giggle_format
 from paper.data_processing.get_bam_files import get_bam_files
 
 FIJI_PATH = "vili4418@fiji.colorado.edu:/Users/vili4418/sv/sv_gmm"
+
+
+def sample_length_heatmap():
+    best_results = pd.read_csv(
+        "output/calibration/results/best_params.csv"
+    ).loc[0]
+    best_results_dir = "d{}_r{:.2f}_q{:.2f}_p{}".format(
+        int(best_results["d"]),
+        best_results["r"],
+        best_results["q"],
+        int(best_results["p"]),
+    )
+    merged = pd.read_csv(
+        os.path.join(
+            "output/calibration/results", best_results_dir, "merged.csv"
+        )
+    )
+
+    sample_size_ranges = [
+        (0, 20),
+        (21, 100),
+        (101, 200),
+        (201, 500),
+        (500, 1000),
+    ]
+    svlen_ranges = [
+        (50, 100),
+        (101, 200),
+        (201, 500),
+        (501, 1000),
+        (1001, 30000),
+    ]
+    fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+
+    left_ax = axs[0]
+    right_ax = axs[1]
+
+    no_split = merged[merged["n_svs_actual"] == 1]
+    to_split = merged[merged["n_svs_actual"] == 2]
+    no_split_values = np.zeros((len(sample_size_ranges), len(svlen_ranges)))
+    to_split_values = np.zeros((len(sample_size_ranges), len(svlen_ranges)))
+    for ax, df, heatmap_values, true_val, false_val in (
+        [left_ax, no_split, no_split_values, "tn", "fp"],
+        [right_ax, to_split, to_split_values, "tp", "fn"],
+    ):
+        for i, (svlen_min, svlen_max) in enumerate(svlen_ranges):
+            for j, (sample_size_min, sample_size_max) in enumerate(
+                sample_size_ranges
+            ):
+                subset = df[
+                    (df["num_samples_run"] >= sample_size_min)
+                    & (df["num_samples_run"] <= sample_size_max)
+                    & (df["svlen"] >= svlen_min)
+                    & (df["svlen"] <= svlen_max)
+                ]
+                if subset.empty:
+                    # print(
+                    #     f"No samples with num_samples_run between {sample_size_min} and {sample_size_max} and svlen between {svlen_min} and {svlen_max}"
+                    # )
+                    continue
+                n_true = subset[subset["label"] == true_val].shape[0]
+                n_false = subset[subset["label"] == false_val].shape[0]
+                heatmap_values[i, j] = (n_true - n_false) / (n_true + n_false)
+
+                # add text to cell with TP/FP or TP/FN values
+                text = f"{n_true}/{n_false}"
+                ax.text(
+                    j,
+                    i,
+                    text,
+                    ha="center",
+                    va="center",
+                    fontsize=10,
+                )
+
+    left_im = left_ax.imshow(no_split_values, cmap="RdBu", vmin=-1, vmax=1)
+    fig.colorbar(left_im, ax=left_ax)
+    left_ax.set_title("n_svs_actual = 1", fontsize=16)
+
+    right_im = right_ax.imshow(to_split_values, cmap="RdBu", vmin=-1, vmax=1)
+    fig.colorbar(right_im, ax=right_ax)
+    right_ax.set_title("n_svs_actual = 2", fontsize=16)
+
+    for ax in axs:
+        ax.set_xticks(np.arange(len(sample_size_ranges)))
+        ax.set_yticks(np.arange(len(sample_size_ranges)))
+        ax.set_xticklabels(
+            [f"{min}-{max}" for min, max in sample_size_ranges], rotation=45
+        )
+        ax.set_yticklabels(
+            [f"{min}-{max}" for min, max in svlen_ranges], rotation=45
+        )
+        ax.set_xlabel("Sample Size", fontsize=14)
+        ax.set_ylabel("SV Length", fontsize=14)
+
+    plt.tight_layout()
+    plt.show()
 
 
 def merge_dfs(dir):
@@ -407,6 +505,8 @@ if __name__ == "__main__":
     # copy_result_files()
     # add_evaluation_metrics()
     # merge_dfs_all()
-    # print_class_distribution()
     # build_viz_subset()
-    copy_viz_files()
+    # copy_viz_files()
+
+    # print_class_distribution()
+    sample_length_heatmap()
