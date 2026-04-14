@@ -19,4 +19,4 @@ synthetic_data/
 output/
 
 # paper analysis
-# paper/
+paper/*.ipynb
