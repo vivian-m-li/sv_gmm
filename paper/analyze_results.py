@@ -1,9 +1,11 @@
 import ast
 import os
+import subprocess
 
 import numpy as np
 import pandas as pd
 
+from src.utils.config_loader import load_config
 from src.utils.constants import NONREF_GTS
 from src.utils.helper import get_sample_ids
 
@@ -101,8 +103,63 @@ def compare_all_svs(dir):
         print("\n")
 
 
+def df_to_bed(df, output_file):
+    with open(output_file, "w") as f:
+        for _, row in df.iterrows():
+            f.write(
+                f"{row['chr']}\t{row['start']}\t{row['stop']}\t{row['id']}\n"
+            )
+
+
+def compare_sv_intersections(dir):
+    if not os.path.exists("output/results/split_svs.bed"):
+        # convert to bed files for bedtools
+        merged = pd.read_csv(os.path.join(dir, "merged.csv"))
+        merged = merged[merged["confidence"] != "inconclusive"]
+
+        split = merged[merged["n_svs_predicted"] > 1]
+        not_split = merged[merged["n_svs_predicted"] == 1]
+
+        for label, df in zip(["split", "not_split"], [split, not_split]):
+            df_to_bed(df, f"output/results/{label}_svs.bed")
+
+    # run bedtools intersect
+    if not os.path.exists("output/results/split_intersect.bed"):
+        cfg = load_config("config.toml")
+        for label in ["split", "not_split"]:
+            subprocess.run(
+                [
+                    "bash",
+                    os.path.join(
+                        os.getcwd(), "src/utils/bash/bed_intersect.sh"
+                    ),
+                ],
+                [
+                    cfg["bedtools"]["bin"],
+                    f"output/results/{label}_svs.bed",
+                    "data/1kg/1kg.subset.bed",
+                    f"output/results/{label}_intersect.bed",
+                ],
+            )
+
+    # compare the number of SV intersections per SV in each group
+    for label in ["split", "not_split"]:
+        intersect = pd.read_csv(
+            f"output/results/{label}_intersect.bed",
+            sep="\t",
+            header=None,
+            names=["chr", "start", "stop", "id", "chr_i", "start_i", "stop_i"],
+        )
+        counts = intersect["id"].value_counts()
+        print(label)
+        print(
+            f"mean intersections per sv: {np.mean(counts):.2f}, median: {np.median(counts)}"
+        )
+
+
 if __name__ == "__main__":
     dir = "output/results"
     # merge_dfs(dir)
     # print_split_distribution(dir)
-    compare_all_svs(dir)
+    # compare_all_svs(dir)
+    compare_sv_intersections(dir)

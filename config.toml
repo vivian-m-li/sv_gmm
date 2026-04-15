@@ -159,3 +159,13 @@ q_step = 0.1
 p_min = 100
 p_max = 600
 p_step = 100
+
+
+# ------------------------------------------------------------------------------
+# [bedtools] — Path to the bedtools executable
+# Required for analysis
+# ------------------------------------------------------------------------------
+[bedtools]
+
+# Absolute path to the compiled bedtools binary.
+bin = "/Users/vili4418/sv/bedtools/bin/bedtools"

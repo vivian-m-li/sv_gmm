@@ -624,9 +624,11 @@ def get_new_gene_intersections():
             og_intersections.add((sv_id, gene_id))
 
     df_to_bed(in_file="1kg/consensus_svs.csv", out_file="1kg/consensus_svs.bed")
+    bedtools_bin = "bedtools"  # TODO: load bedtools binary
     subprocess.run(
         ["bash", "bash/bed_intersect.sh"]
         + [  # noqa503
+            bedtools_bin,
             "1kg/consensus_svs.bed",
             "1kg/genes.bed",
             "1kg/consensus_gene_intersections.bed",
@@ -797,9 +799,11 @@ def get_overlapping_clustered_svs():
         df_to_bed(in_df=lookup, out_file=bed_file)
 
         output_bed_file = "1kg/sv_lookup_intersect.bed"
+        bedtools_bin = "bedtools"  # TODO: load bedtools binary
         subprocess.run(
             ["bash", "bash/bed_intersect.sh"]
             + [
+                bedtools_bin,
                 bed_file,
                 "1kg/consensus_svs.bed",
                 output_bed_file,

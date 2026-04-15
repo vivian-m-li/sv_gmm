@@ -1,8 +1,9 @@
 # !/bin/bash
 
-file_a=$1
-file_b=$2
-output_file=$3
+bedtools_bin=$1
+file_a=$2
+file_b=$3
+output_file=$4
 
-$HOME/sv/bedtools/bin/bedtools intersect -a "$file_a" -b "$file_b" -wa -wb > "$output_file"
+"$bedtools_bin" intersect -a "$file_a" -b "$file_b" -wa -wb > "$output_file"
 
