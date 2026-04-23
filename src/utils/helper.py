@@ -82,6 +82,21 @@ def get_svlen(evidence_by_mode: list[list[Evidence]]) -> list[list[SVStat]]:
     return all_stats
 
 
+def get_sample_mode_probabilities(
+    evidence_by_mode: list[list[Evidence]],
+) -> dict[dict[str, float]]:
+    """Calculates the probability of each sample belonging to each mode."""
+    n_modes = len(evidence_by_mode)
+    sample_mode_probabilities = {mode_idx: {} for mode_idx in range(n_modes)}
+    for mode_idx, mode in enumerate(evidence_by_mode):
+        for evidence in mode:
+            for mode_i in range(n_modes):
+                sample_mode_probabilities[mode_i][evidence.sample.id] = (
+                    evidence.mode_probabilities[mode_i]
+                )
+    return sample_mode_probabilities
+
+
 def remove_gatk_rows():
     """Removes synthetic tests run with GATK from each results file."""
     files = os.listdir("synthetic_data")

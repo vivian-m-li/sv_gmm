@@ -774,6 +774,7 @@ def gmm(
         outliers=outliers,
         window_size=(min(x), max(x)),
         x_by_mode=x_by_mode,
+        responsibility=np.array(),  # this is required but not filled out because this function isn't being used anywhere
         num_pruned=num_pruned,
         num_iterations=num_iterations_final,
     )

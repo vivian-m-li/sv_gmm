@@ -102,7 +102,7 @@ def query_stix_all(cfg: dict, sv_lookup_file: str):
     input_dir = cfg["input_dir"]
 
     filename = os.path.join(input_dir, sv_lookup_file)
-    _ = process_input_files(
+    df, _ = process_input_files(
         input_dir,
         sv_lookup_file,
         cfg["input_files"].get("sample_id_file"),
@@ -110,7 +110,8 @@ def query_stix_all(cfg: dict, sv_lookup_file: str):
         cfg["model"].get("default_insert_size"),
     )
 
-    df = pd.read_csv(filename, low_memory=False)
+    if df is None:
+        df = pd.read_csv(filename, low_memory=False)
     df["num_samples"] = 0
     sample_ids = get_sample_ids(input_dir)
     for index, row in df.iterrows():

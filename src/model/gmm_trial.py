@@ -467,7 +467,11 @@ def get_evidence_by_mode(
                 )  # (length, L-coordinate)
         data.append(data_by_mode)
     evidence_by_mode = [[] for _ in range(len(data))]
-    for evidence in sv_evidence:
+    for sample_idx, evidence in enumerate(sv_evidence):
+        # the indices should be the same because we don't shuffle the evidence
+        evidence.mode_probabilities = gmm_result.responsibility[
+            sample_idx
+        ].tolist()
         for i, mode in enumerate(data):
             try:
                 if gmm_model == "1d_len":
@@ -731,6 +735,7 @@ def gmm_trial(
             R,
             stem=stem,
         )  # mutates sv_evidence with ancestry data and homo/heterozygous for each sample
+
     evidence_by_mode = get_evidence_by_mode(
         gmm_result, sv_evidence, L, R, gmm_model=gmm_model
     )

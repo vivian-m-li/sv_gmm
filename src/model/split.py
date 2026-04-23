@@ -62,7 +62,7 @@ def split_sv(
         raise FileNotFoundError(f"SV lookup file {sv_lookup_file} not found.")
 
     # write input files that will be used later on during querying
-    insert_size_lookup = process_input_files(
+    _, insert_size_lookup = process_input_files(
         input_dir,
         sv_lookup_file,
         sample_id_file,

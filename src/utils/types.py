@@ -1,5 +1,5 @@
 import numpy as np
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -40,6 +40,7 @@ class EstimatedGMM:
     outliers: list[float]
     window_size: tuple[int, int]
     x_by_mode: list[np.ndarray[int]]
+    responsibility: np.ndarray
     num_pruned: list[int]
     num_iterations: int
 
@@ -86,6 +87,9 @@ class Evidence:
     end: int
     paired_ends: list[list[float]]
     mean_insert_size: int
+    mode_probabilities: list[float] = field(
+        default_factory=list
+    )  # probability of belonging to each mode. Length should match the number of modes in the GMM
 
 
 @dataclass
@@ -107,6 +111,9 @@ class ModeStat:
     num_heterozygous: int
     num_homozygous: int
     sample_ids: list[str]
+    sample_probabilities: dict[
+        str, float
+    ]  # probability of each sample belonging to this mode
     num_pruned: int
     af: float
 

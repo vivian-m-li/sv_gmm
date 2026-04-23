@@ -194,7 +194,10 @@ def calc_responsibility(
     cov: list[np.ndarray],
     p: np.ndarray,
 ):
-    """Calculates the responsibility matrix for each point/mode."""
+    """
+    Calculates the responsibility matrix for each point/mode.
+    Returns a matrix of size (number of samples) x (number of modes) where each entry represents the probability that a point belongs to a particular mode.
+    """
     gz = np.zeros((n, len(mu)))  # number of points by number of modes
     for i in range(len(x)):
         # For each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
@@ -309,7 +312,7 @@ def assign_values_to_modes(
     mu: np.ndarray,
     cov: list[np.ndarray],
     p: np.ndarray,
-) -> tuple[list[np.ndarray], list[int]]:
+) -> tuple[np.ndarray, tuple[list[np.ndarray], list[int]]]:
     """Assigns each data point to a mode based on the highest responsibility value."""
     gz = calc_responsibility(x, len(x), mu, cov, p)
     assignments = np.argmax(gz, axis=1)
@@ -318,7 +321,7 @@ def assign_values_to_modes(
         if mode is not None:
             x_by_mode[mode].append(x[i])
     x_by_mode = [np.array(data_points) for data_points in x_by_mode]
-    return x_by_mode
+    return gz, x_by_mode
 
 
 def gmm(
@@ -391,7 +394,7 @@ def gmm(
 
     final_params = opt_params[-1]
 
-    x_by_mode = assign_values_to_modes(
+    responsibility, x_by_mode = assign_values_to_modes(
         x, num_sv, final_params.mu, final_params.cov, final_params.p
     )
 
@@ -405,6 +408,7 @@ def gmm(
         outliers=outliers,
         window_size=(min(x[:, 0]), max(x[:, 0])),
         x_by_mode=x_by_mode,
+        responsibility=responsibility,
         num_pruned=[0 for _ in range(num_sv)],
         num_iterations=num_iterations_final,
     )

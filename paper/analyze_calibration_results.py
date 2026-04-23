@@ -298,7 +298,7 @@ def print_class_distribution():
         ]:
             print(
                 col,
-                f"mean={np.mean(subset[col]):.2f}",
+                f"μ={np.mean(subset[col]):.2f}, std={np.std(subset[col]):.2f}",
                 f"median={np.std(subset[col]):.2f}",
             )
         print("confidence:", subset["confidence"].value_counts())

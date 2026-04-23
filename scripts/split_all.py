@@ -108,11 +108,6 @@ def split_all(
     svs = pd.read_csv(os.path.join(input_dir, sv_lookup_file), low_memory=False)
     population_size = len(sample_ids)
 
-    # for _, row in svs.iterrows():
-    #     run_split_wrapper(
-    #         row.to_dict(), cfg, population_size, insert_size_lookup
-    #     )
-
     with multiprocessing.Manager():
         p = multiprocessing.Pool(SLURM_CPUS)
         args = [
@@ -138,7 +133,7 @@ def main(config_path: str = "config.toml"):
     sample_ids = get_sample_ids(os.path.join(input_dir, sample_id_file))
 
     # write input files that will be used later on during querying
-    insert_size_lookup = process_input_files(
+    _, insert_size_lookup = process_input_files(
         input_dir,
         cfg["input_files"]["sv_lookup_file"],
         sample_id_file,

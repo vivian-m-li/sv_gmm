@@ -103,7 +103,7 @@ def get_reference_samples(
     stop: int,
     input_dir: str,
 ) -> list[str]:
-    df = pd.read_csv(f"{input_dir}/svs_by_chr/chr{chr}.csv")
+    df = pd.read_csv(os.path.join(input_dir, "svs_by_chr", f"chr{chr}.csv"))
     row = df[(df["start"] == start) & (df["stop"] == stop)]
     if row.empty:  # query region does not correspond with an SV in the callset
         return []
@@ -185,7 +185,7 @@ def process_input_files(
     sample_id_file: str | None,
     insert_size_file: str | None,
     default_insert_size: int | None,
-) -> dict:
+) -> tuple[pd.DataFrame, dict]:
     """Processes input files for more efficient lookup during querying."""
 
     df = None
@@ -212,7 +212,7 @@ def process_input_files(
         dir, insert_size_file, default_insert_size, sample_ids
     )
 
-    return insert_size_lookup
+    return df, insert_size_lookup
 
 
 def giggle_format(chromosome: str, position: int):
@@ -237,7 +237,7 @@ def reverse_giggle_format(l: str, r: str):  # noqa741
 
 
 def lookup_sv_position(sv_id: str, dir: str = "1kg"):
-    lookup = pd.read_csv(f"{dir}/sv_lookup.csv")
+    lookup = pd.read_csv(os.path.join(dir, "sv_lookup.csv"))
     row = lookup[lookup["id"] == sv_id]
     if row.empty:
         raise ValueError(f"SV ID {sv_id} not found in lookup table.")

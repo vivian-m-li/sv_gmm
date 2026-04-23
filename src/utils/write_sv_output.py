@@ -17,6 +17,7 @@ from src.utils.helper import (
     get_deletions_df,
     get_all_split_trials_df,
     get_most_common_split_df,
+    get_sample_mode_probabilities,
     get_sv_lookup,
     get_sv_chr,
     get_sample_ids,
@@ -198,6 +199,8 @@ def write_sv_stats(
         np.mean([sv.length for lst in all_svlen for sv in lst])
     )
 
+    sample_mode_probabilities = get_sample_mode_probabilities(evidence_by_mode)
+
     mode_coords = []
     num_samples_run = 0
     for i, mode in enumerate(evidence_by_mode):
@@ -246,6 +249,7 @@ def write_sv_stats(
             num_heterozygous=num_heterozygous,
             num_homozygous=num_homozygous,
             sample_ids=sample_ids,
+            sample_probabilities=sample_mode_probabilities[i],
             num_pruned=gmm_result.num_pruned[i],
             af=af,
         )
