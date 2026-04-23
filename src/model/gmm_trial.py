@@ -169,7 +169,7 @@ def filter_and_plot_sequences_bokeh(
             title=f"L = {L}, R = {R}",
             width=800,
             height=600,
-            x_axis_label="distance from L",  # TODO: this only applies if we know L is the start of the SV
+            x_axis_label="distance from L",
             y_axis_label="deviation from y=x+b",
         )
 
@@ -227,6 +227,7 @@ def filter_and_plot_sequences_bokeh(
             z[1::2] -= z[0::2] + b  # subtract MLE y=x+b line
             z[0::2] -= min(ux)  # shift left by min(x) units
             mean_l = int(np.mean([paired_end[0] for paired_end in paired_ends]))
+            mean_r = int(np.mean([paired_end[1] for paired_end in paired_ends]))
             if (
                 len(z) >= min_pairs * 2
             ):  # if there are at least 5 pairs of paired-end reads
@@ -239,8 +240,9 @@ def filter_and_plot_sequences_bokeh(
                 mb[i, :] = [sdl, len(xp), b, 1]
                 sv_evidence[i] = Evidence(
                     sample=Sample(id=sample_id),
-                    intercept=b,
-                    mean_l=mean_l,
+                    svlen=b,
+                    start=mean_l,
+                    end=mean_r,
                     paired_ends=paired_ends,
                     mean_insert_size=insert_size_lookup[sample_id],
                 )
@@ -270,8 +272,9 @@ def filter_and_plot_sequences_bokeh(
                 mb[i, :] = [-np.inf, len(z) // 2, -np.inf, 0]
                 sv_evidence[i] = Evidence(
                     sample=Sample(id=sample_id),
-                    intercept=0,
-                    mean_l=mean_l,
+                    svlen=0,
+                    start=mean_l,
+                    end=mean_r,
                     paired_ends=paired_ends,
                     mean_insert_size=insert_size_lookup[sample_id],
                 )
@@ -365,7 +368,6 @@ def plot_fitted_lines_bokeh(
                 )
                 p.scatter([start_x], [start_y], size=2, color="red", alpha=0.6)
 
-            evidence.start_y = start_y
             sv_evidence.append(evidence)
 
     start_points_array = np.array(start_points)
@@ -469,13 +471,13 @@ def get_evidence_by_mode(
         for i, mode in enumerate(data):
             try:
                 if gmm_model == "1d_len":
-                    mode_data = evidence.intercept  # length
+                    mode_data = evidence.svlen  # length
                 elif gmm_model == "1d_L":
-                    mode_data = evidence.mean_l  # L-coordinate
+                    mode_data = evidence.start  # L-coordinate
                 else:
                     mode_data = (
-                        evidence.intercept,
-                        evidence.mean_l,
+                        evidence.svlen,
+                        evidence.start,
                     )  # (length, L-coordinate)
                 if (
                     mode_data in mode
@@ -487,7 +489,7 @@ def get_evidence_by_mode(
                 print(mode)
                 raise ValueError
     lengths_by_mode = [
-        np.mean([evidence.start_y for evidence in mode])
+        np.mean([evidence.svlen for evidence in mode])
         for mode in evidence_by_mode
     ]
     evidence_by_mode = [
@@ -594,8 +596,9 @@ def process_squiggle_data(
             sv_evidence.append(
                 Evidence(
                     sample=Sample(id=sample_id),
-                    intercept=b,
-                    mean_l=mean_l,
+                    svlen=b,
+                    start=mean_l,
+                    end=mean_r,
                     paired_ends=paired_ends,
                     mean_insert_size=insert_size_lookup[sample_id],
                 )
@@ -654,23 +657,26 @@ def process_data(
 
         # we should be able to rely on STIX to return only relevant reads
         # taking the mean of the coordinates will average out noise in the reads
-        mean_l = int(np.mean(ls))
-        mean_r = int(np.mean(rs))
+        med_l = int(np.median(ls))
+        med_r = int(np.median(rs))
 
         # don't subtract insert size anymore; this is already taken into account in the read coordinates
-        svlen = mean_r - mean_l
+        # TODO: are we subtracting insert size somewhere else? we don't actually need to cluster with the insert size taken into account, since the axes values are arbitrary. need to make sure plotting takes this into account though.
+        svlen = med_r - med_l
 
         sv_evidence.append(
             Evidence(
                 sample=Sample(id=sample_id),
-                intercept=svlen,
-                mean_l=mean_l,
+                start=med_l,
+                end=med_r,
+                svlen=svlen,
                 paired_ends=paired_ends,
                 mean_insert_size=insert_size_lookup[sample_id],
             )
         )
         # scale this by the SV coordinates so that the points are closer together
-        points.append((svlen - (R - L), mean_l - L))  # (length, L-coordinate)
+
+        points.append((svlen - (R - L), med_l - L))  # (length, L-coordinate)
 
     return np.array(points), sv_evidence
 

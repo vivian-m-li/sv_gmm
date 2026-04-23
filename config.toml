@@ -56,7 +56,7 @@ sv_lookup_file = "deletions.csv"
 # sv_lookup_file = "1kg.subset.vcf.gz"
 
 # txt file with one row for each sample ID
-sample_id_file = "lr_sample_ids.txt"
+sample_id_file = "sample_ids.txt"
 
 # Per-sample mean insert size file (two columns: sample_id, mean_insert_size).
 # If this file is absent a uniform default of default_insert_size bp is written
@@ -126,8 +126,7 @@ max_penalty = 100
 
 # Truth set to calibrate against (in input_dir).
 # Required columns: chr, start, stop, n_svs_actual
-# truth_set = "sv_subset.csv"
-truth_set = "mini_subset.csv"
+truth_set = "sv_subset.csv"
 
 # Search function to use for calibration.
 # Supported algorithms: bo (bayesian optimization) or grid (grid search)

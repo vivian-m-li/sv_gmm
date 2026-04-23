@@ -116,6 +116,10 @@ def compare_sv_intersections(dir):
         # convert to bed files for bedtools
         merged = pd.read_csv(os.path.join(dir, "merged.csv"))
         merged = merged[merged["confidence"] != "inconclusive"]
+        lookup = pd.read_csv("data/1kg/sv_lookup.csv")
+        merged = pd.merge(
+            merged, lookup[["id", "chr", "start", "stop"]], on="id", how="left"
+        )
 
         split = merged[merged["n_svs_predicted"] > 1]
         not_split = merged[merged["n_svs_predicted"] == 1]
@@ -133,8 +137,8 @@ def compare_sv_intersections(dir):
                     os.path.join(
                         os.getcwd(), "src/utils/bash/bed_intersect.sh"
                     ),
-                ],
-                [
+                ]
+                + [
                     cfg["bedtools"]["bin"],
                     f"output/results/{label}_svs.bed",
                     "data/1kg/1kg.subset.bed",
@@ -148,13 +152,34 @@ def compare_sv_intersections(dir):
             f"output/results/{label}_intersect.bed",
             sep="\t",
             header=None,
-            names=["chr", "start", "stop", "id", "chr_i", "start_i", "stop_i"],
+            names=[
+                "chr",
+                "start",
+                "stop",
+                "id",
+                "chr_i",
+                "start_i",
+                "stop_i",
+                "id_i",
+            ],
         )
+        # remove all rows where id == id_i (i.e. self-intersections)
+        intersect = intersect[intersect["id"] != intersect["id_i"]]
+
         counts = intersect["id"].value_counts()
         print(label)
         print(
             f"mean intersections per sv: {np.mean(counts):.2f}, median: {np.median(counts)}"
         )
+    # output
+
+    # 0.5 overlap required
+    # split: mean intersections per sv: 1.47, median: 1.0
+    # not_split: mean intersections per sv: 1.21, median: 1.0
+
+    # no minimum overlap required
+    # split: mean intersections per sv: 2.03, median: 1.0
+    # not_split: mean intersections per sv: 1.51, median: 1.0
 
 
 if __name__ == "__main__":

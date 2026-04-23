@@ -11,19 +11,19 @@ from src.utils.types import Evidence, SVStat
 # ----------------------------
 # Get commonly used dataframes
 # ----------------------------
-def get_deletions_df(stem: str = "1kg"):
+def get_deletions_df(stem: str = "data/1kg"):
     """Returns a dataframe of all SVs and genotypes for each sample."""
     file = os.path.join(stem, "deletions.csv")
     return pd.read_csv(file, low_memory=False)
 
 
-def get_all_split_trials_df(stem: str = "1kg"):
+def get_all_split_trials_df(stem: str = "output/results"):
     """Returns a dataframe of all SVs and GMM results for each run of the SV."""
     file = os.path.join(stem, "all_split_trials.csv")
     return pd.read_csv(file, low_memory=False)
 
 
-def get_most_common_split_df(stem: str = "1kg"):
+def get_most_common_split_df(stem: str = "output/results"):
     """Returns a dataframe of all SVs and GMM results after collapsing to consensus results."""
     file = os.path.join(stem, "most_common_split.csv")
     return pd.read_csv(file)
@@ -38,13 +38,13 @@ def get_sample_ids(file: str):
     return sample_ids
 
 
-def get_sv_lookup(stem: str = "1kg"):
+def get_sv_lookup(stem: str = "data/1kg"):
     """Get a dataframe mapping sv_id to chr, start, stop."""
     file = os.path.join(stem, "sv_lookup.csv")
     return pd.read_csv(file)
 
 
-def get_sv_chr(sv_id: str, stem: str = "1kg"):
+def get_sv_chr(sv_id: str, stem: str = "data/1kg"):
     """Get the chromosome, start, and stop for a given sv_id."""
     df = get_sv_lookup(stem)
     row = df[df["id"] == sv_id]

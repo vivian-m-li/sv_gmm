@@ -81,11 +81,11 @@ class Sample:
 @dataclass
 class Evidence:
     sample: Sample
-    intercept: float
-    mean_l: int  # mean L-coordinate
+    svlen: float
+    start: int  # median L-coordinate
+    end: int
     paired_ends: list[list[float]]
     mean_insert_size: int
-    start_y: float = 0  # this is not used anywhere
 
 
 @dataclass

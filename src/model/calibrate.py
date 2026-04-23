@@ -280,7 +280,7 @@ def run_calibration_bayesian_opt(
         transition_criteria=[
             # transition to BoTorch node once there are 15 trials on the experiment.
             MinTrials(
-                threshold=1,
+                threshold=15,
                 transition_to=botorch_node.name,
                 use_all_trials_in_exp=True,
             )

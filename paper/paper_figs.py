@@ -478,7 +478,7 @@ def synthetic_data_additional_svs():
         axs[i].axis("off")
 
     plt.tight_layout()
-    plt.savefig("plots/synthetic_data_additional_svs.pdf")
+    plt.savefig("output/plots/synthetic_data_additional_svs.pdf")
     plt.show()
 
 
@@ -720,8 +720,8 @@ def methods_figure_viz(svs, vcf_file: str):
 
     plt.tight_layout()
     plt.subplots_adjust(left=0.05, right=0.95)
-    plt.savefig("plots/methods.png")
-    plt.savefig("plots/methods.pdf")
+    plt.savefig("output/plots/methods.png")
+    plt.savefig("output/plots/methods.pdf")
     plt.show()
 
     # Plot the clustered reads separately so I can stack them in post-processing
@@ -810,9 +810,9 @@ def plot_sv_short_long_reads(sv_id, sample_ids, skip_evidence_plot=False):
 
 
 def find_example_svs():
-    df = pd.read_csv("results/svs_n_modes.csv")
+    df = pd.read_csv("output/results/svs_n_modes.csv")
     df.rename(columns={"sv_id": "id"}, inplace=True)
-    ancestry = pd.read_csv("results/ancestry_dissimilarity.csv")
+    ancestry = pd.read_csv("output/results/ancestry_dissimilarity.csv")
     df = df.merge(ancestry, on="id")
     df = df.sort_values(by="dissimilarity", ascending=False)
     df = df[
@@ -820,7 +820,7 @@ def find_example_svs():
         & (df["num_modes"] == 3)
         & (df["dissimilarity"] >= 0.5)
     ]
-    collapsed = pd.read_csv("results/most_common_split.csv")
+    collapsed = pd.read_csv("output/results/most_common_split.csv")
     for _, row in df.iterrows():
         sv_id = row["id"]
         # check if there are bam files for samples in each mode
@@ -842,7 +842,7 @@ def find_example_svs():
 
 
 def get_all_svs_df(path: str = "") -> pd.DataFrame:
-    filepath = os.path.join("results", path)
+    filepath = os.path.join("output/results", path)
     full_df = get_most_common_split_df(filepath)
     full_df["num_samples_run"] = full_df.apply(
         lambda row: int(
@@ -866,7 +866,7 @@ def get_all_svs_df(path: str = "") -> pd.DataFrame:
             "modes",
         ]
     ]
-    df = pd.read_csv(f"{filepath}/svs_n_modes_modified.csv")
+    df = pd.read_csv(os.path.join(filepath, "svs_n_modes.csv"))
     df = df.merge(full_df, on="sv_id")
     return df
 
@@ -885,10 +885,13 @@ def plot_sv_breakdown(path: str = ""):
     )
     svs_no_evidence = sv_lookup[~sv_lookup["id"].isin(sv_ids_run)]
     svs_no_evidence.rename(columns={"id": "sv_id"}, inplace=True)
+    svs_not_split = pd.concat(
+        [svs_no_evidence, svs_not_enough_evidence], ignore_index=True
+    )
 
     n_svs = []
     afs = []
-    for df_subset in [svs_no_evidence, svs_not_enough_evidence, svs_clustered]:
+    for df_subset in [svs_not_split, svs_clustered]:
         n_svs.append(df_subset.shape[0])
         afs.append(
             np.mean(
@@ -915,7 +918,6 @@ def plot_sv_breakdown(path: str = ""):
     )
     ax1 = axs[0]
     categories = [
-        "Clustered\n(Enough Reads)",
         "Inconclusive\n(Too Few Reads)",
         "No Evidence",
     ]
@@ -964,9 +966,9 @@ def plot_sv_breakdown(path: str = ""):
             color=colors[i],
         )
         bottom += values
-    ax2.set_xscale("log", base=10)
-    ax2.set_xticks([10, 100, 1000, 10000])
-    ax2.get_xaxis().set_major_formatter(plt.ScalarFormatter())
+    # ax2.set_xscale("log", base=10)
+    # ax2.set_xticks([10, 100, 1000, 10000])
+    # ax2.get_xaxis().set_major_formatter(plt.ScalarFormatter())
     for i, n in enumerate(n_samples):
         pos_x = modes[i] if i == 0 else modes[i] + 100
         pos_y = i + 0.55 if i == 0 else i
@@ -978,7 +980,7 @@ def plot_sv_breakdown(path: str = ""):
     fig.text(0.3, 0.02, "Number of SVs per Category", fontsize=14)
     plt.tight_layout()
     plt.subplots_adjust(left=0.11, bottom=0.19)
-    plt.savefig("plots/sv_breakdown.pdf")
+    plt.savefig("output/plots/sv_breakdown.pdf")
     plt.show()
 
 
@@ -1017,10 +1019,7 @@ def plot_af_delta_histogram():
 
     ax_box = ax.inset_axes([0.4, 0.65, 0.4, 0.3])
     ax_box.boxplot(
-        [
-            original_afs[original_afs <= 0.5],
-            original_afs_split[original_afs_split <= 0.5],
-        ],
+        [original_afs, original_afs_split],
         positions=[1, 2],
         widths=0.4,
         patch_artist=True,
@@ -1036,9 +1035,9 @@ def plot_af_delta_histogram():
         fontsize=12,
     )
     ax_box.set_ylabel("Original Allele\nFrequency", fontsize=12)
-    ax_box.set_ylim(0, 0.5)
+    ax_box.set_ylim(0, 1.0)
     ax_box.tick_params(axis="y", labelsize=12)
-    ax_box.yaxis.set_major_locator(FixedLocator(np.arange(0, 0.51, 0.1)))
+    ax_box.yaxis.set_major_locator(FixedLocator(np.arange(0, 1.01, 0.2)))
 
     ax.set_xlabel("Allele Frequency Ratio, New/Original", fontsize=14)
     ax.set_ylabel("Count", fontsize=14)
@@ -1050,12 +1049,12 @@ def plot_af_delta_histogram():
     # ax.tick_params(axis="x", which="minor", length=4, labelbottom=False)
     # ax.tick_params(axis="y", which="minor", length=4, labelleft=False)
     plt.tight_layout()
-    plt.savefig("plots/af_delta_histogram.pdf")
+    plt.savefig("output/plots/af_delta_histogram.pdf")
     plt.show()
 
 
 def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
-    ancestry_df = pd.read_csv("1kg/ancestry.tsv", delimiter="\t")
+    ancestry_df = pd.read_csv("data/1kg/ancestry.tsv", delimiter="\t")
 
     # create a lookup of sample_id:population
     # if multiple populations are listed for a sample, take the first one (only happens for 1 sample)
@@ -1200,7 +1199,7 @@ def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
             transform=ax.transAxes,
         )
     plt.tight_layout()
-    plt.savefig("plots/ancestry_comparison.pdf", bbox_inches="tight")
+    plt.savefig("output/plots/ancestry_comparison.pdf", bbox_inches="tight")
     plt.show()
 
 
@@ -1290,7 +1289,7 @@ def print_sv_stats(path: str = ""):
 
     fig.suptitle("Comparison of Pre-Split and Post-Split SV Stats", fontsize=16)
     plt.tight_layout()
-    plt.savefig("plots/sv_stats_comparison_boxplots.pdf")
+    plt.savefig("output/plots/sv_stats_comparison_boxplots.pdf")
     plt.show()
 
 
@@ -1517,7 +1516,7 @@ def bayesian_optimization_iterations(file: str):
 
 
 if __name__ == "__main__":
-    figures = [2]
+    figures = [5, 6, 7]
 
     # Figure 1
     if 1 in figures:
@@ -1537,7 +1536,7 @@ if __name__ == "__main__":
 
     # Figure 3
     if 3 in figures:
-        plot_sv_breakdown("biased_d")
+        plot_sv_breakdown()
 
     # Figure 4
     if 4 in figures:
