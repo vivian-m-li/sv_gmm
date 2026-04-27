@@ -37,7 +37,7 @@ def query_stix(
     )
     r_query = f"{query_region.chr}:{query_region.right_start}-{query_region.right_stop}"
     subprocess.run(
-        ["bash", "bash/query_stix.sh"]
+        ["bash", "src/data/bash/query_stix.sh"]
         + [  # noqa503
             l_query,
             r_query,

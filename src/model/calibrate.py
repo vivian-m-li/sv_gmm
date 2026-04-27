@@ -1,3 +1,4 @@
+import copy
 import multiprocessing
 import os
 import shutil
@@ -84,7 +85,9 @@ def run_dirichlet_inner(
     pen: int,
 ):
     stix_output_dir = f"{cfg['paths']['stix_output_dir']}_{q}"
-    cfg_copy = cfg.copy()
+
+    # do a deepcopy here so we're not modifying the original cfg values
+    cfg_copy = copy.deepcopy(cfg)
     cfg_copy["paths"]["stix_output_dir"] = stix_output_dir
 
     # get reads from stix file and filter reference samples
@@ -160,7 +163,7 @@ def run_calibration_test(
     print(f"Running calibration for d={d}, r={r}, q={q}, p={pen}")
     processed_file_dir = os.path.join(
         cfg["paths"]["intermediate_output_dir"],
-        "d{}_r{:.2f}_p{}".format(d, r, pen),
+        "d{}_r{:.2f}_p{}_q{:.2f}".format(d, r, pen, q),
     )
     if not os.path.exists(processed_file_dir):
         os.makedirs(processed_file_dir)
@@ -556,6 +559,10 @@ def calibrate(cfg: dict):
         sample_ids,
     )
 
+    # make sure output directories exist
+    for dirname in ["output_dir", "intermediate_output_dir"]:
+        os.makedirs(cfg["paths"][dirname], exist_ok=True)
+
     for q in np.arange(
         cfg["calibrate"]["q_min"],
         cfg["calibrate"]["q_max"] + 0.01,
@@ -571,10 +578,6 @@ def calibrate(cfg: dict):
             cfg["stix"]["database"],
             cfg["stix"]["num_shards"],
         )
-
-    # make sure output directories exist
-    for dir in ["output_dir", "stix_output_dir", "intermediate_output_dir"]:
-        os.makedirs(cfg["paths"][dir], exist_ok=True)
 
     search_func = cfg["calibrate"]["search_func"]
     if search_func == "bo":

@@ -156,6 +156,14 @@ def init_em(
     Initializes the expectation-maximization algorithm using k-means clustering on the data.
     Returns the sample size, means, variances, weights, and log likelihood of the initial GMM.
     """
+
+    # check that there are at least the same number of unique values as num_modes
+    # if not, then we can't split into more modes than there are values and we throw an error
+    unique_vals = np.unique(x, axis=0)
+    n_unique = len(unique_vals)
+    if n_unique < num_modes:
+        raise ValueError(f"Too few unique values ({n_unique}) to cluster into {num_modes}")
+
     # initial conditions
     kmeans = KMeans(n_clusters=num_modes)
     kmeans.fit(x)
@@ -193,7 +201,7 @@ def calc_responsibility(
     mu: list[np.ndarray],
     cov: list[np.ndarray],
     p: np.ndarray,
-):
+) -> np.ndarray:
     """
     Calculates the responsibility matrix for each point/mode.
     Returns a matrix of size (number of samples) x (number of modes) where each entry represents the probability that a point belongs to a particular mode.
@@ -360,7 +368,8 @@ def gmm(
             aic=0,
             outliers=[],
             window_size=(singleton, singleton),
-            x_by_mode=[x],
+            x_by_mode=[np.array(x)],
+            responsibility=np.array([[1.0]]),
             num_pruned=[0],
             num_iterations=0,
         )
@@ -380,10 +389,24 @@ def gmm(
             [force_n_modes] if force_n_modes is not None else range(1, 4)
         )
         for num_modes in mode_options:
-            params, num_iterations = run_em(
-                x, num_modes, L, R, d_threshold, r_threshold, max_penalty, plot
-            )
-            aic = calc_aic(params[-1].logL, num_modes)
+            try:
+                params, num_iterations = run_em(
+                    x, num_modes, L, R, d_threshold, r_threshold, max_penalty, plot
+                )
+                aic = calc_aic(params[-1].logL, num_modes)
+            except ValueError as e:
+                # print(e)
+                params = [
+                    GMM2D(
+                        mu=[[0, 0] for _ in range(num_modes)],
+                        cov=[[np.inf, np.inf] for _ in range(num_modes)],
+                        p=[1 / num_modes for _ in range(num_modes)],
+                        logL=-np.inf,
+                    )
+                ]
+                aic = np.inf
+                num_iterations = 0
+
             all_params.append(params)
             iterations.append(num_iterations)
             aic_vals.append(aic)

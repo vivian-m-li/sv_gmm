@@ -121,7 +121,7 @@ def merge_dfs(dir):
         inplace=True,
     )
     subset_run = pd.read_csv(
-        "output/calibration/sv_subset_sr_lr_nonref_most_samples.csv"
+        "data/calibration/sv_subset_sr_lr_nonref_most_samples.csv"
     )
     subset_run["sv_id"] = subset_run.apply(
         lambda row: f"{giggle_format(row['chr'], row['start'])}_{giggle_format(row['chr'], row['stop'])}",
@@ -491,22 +491,25 @@ def build_viz_subset():
         ):
             split_sv(
                 sv_id=sv_id,
+                input_dir="data/calibration",
+                output_dir="output/calibration",
+                sv_lookup_file="deletions.csv",
+                insert_size_file="insert_sizes.csv",
+                sample_id_file="lr_sample_ids.txt",
+                stix_file_dir=f"output/calibration/stix_output_{best_results['q']}",
+                read_overlap=best_results["q"],
                 d_threshold=best_results["d"],
                 r_threshold=best_results["r"],
                 max_penalty=best_results["p"],
-                input_dir="calibration",
-                insert_size_file="data/calibration/insert_sizes.csv",
-                sample_id_file="data/calibration/sample_ids.csv",
-                stix_file_dir=f"stix_output_{best_results['q']}",
             )
 
 
 if __name__ == "__main__":
-    # copy_result_files()
-    # add_evaluation_metrics()
-    # merge_dfs_all()
-    # build_viz_subset()
-    # copy_viz_files()
+    copy_result_files()
+    add_evaluation_metrics()
+    merge_dfs_all()
+    build_viz_subset()
+    copy_viz_files()
 
-    # print_class_distribution()
+    print_class_distribution()
     sample_length_heatmap()

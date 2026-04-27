@@ -50,6 +50,7 @@ def split_sv(
     run_split: bool = True,
     filter_reference: bool = True,
     single_trial: bool = True,
+    parallel: bool = False,
     plot: bool = True,
     print_messages: bool = True,
 ):
@@ -116,6 +117,7 @@ def split_sv(
             stix_index,
             stix_database,
             num_stix_shards,
+            parallel,
         )
     else:
         if print_messages:

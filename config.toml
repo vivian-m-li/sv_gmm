@@ -52,8 +52,7 @@ local_intermediate_output_dir = "output/results/processed_svs"
 
 # VCF or CSV file listing structural variants.
 # Supported formats: .vcf, .vcf.gz, .csv
-sv_lookup_file = "deletions.csv"
-# sv_lookup_file = "1kg.subset.vcf.gz"
+sv_lookup_file = "1kg.subset.csv"
 
 # txt file with one row for each sample ID
 sample_id_file = "sample_ids.txt"
@@ -109,13 +108,13 @@ read_overlap = 0.6
 default_insert_size = 450
 
 # Distance threshold for merging nearby read clusters (bp).
-d_threshold = 449
+d_threshold = 550
 
 # Reciprocal-overlap threshold for cluster assignment.
-r_threshold = 0.9
+r_threshold = 0.4
 
 # Maximum penalty term for spurious cluster suppression.
-max_penalty = 100
+max_penalty = 537
 
 
 # ------------------------------------------------------------------------------
@@ -150,7 +149,7 @@ r_step = 0.05
 
 # Fraction of the SV length that a flanking read is allowed to overlap the SV
 # region and still be included.
-q_min = 0.9
+q_min = 0.6
 q_max = 1.0
 q_step = 0.1
 

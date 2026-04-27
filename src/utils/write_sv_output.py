@@ -159,6 +159,7 @@ def get_raw_data(
         num_stix_shards=cfg["stix"]["num_shards"],
         run_split=False,
         filter_reference=False,
+        parallel=True,
         print_messages=print_messages,
     )
     num_samples = reads["sample_id"].nunique()
@@ -630,7 +631,7 @@ def get_new_gene_intersections():
     df_to_bed(in_file="1kg/consensus_svs.csv", out_file="1kg/consensus_svs.bed")
     bedtools_bin = "bedtools"  # TODO: load bedtools binary
     subprocess.run(
-        ["bash", "bash/bed_intersect.sh"]
+        ["bash", "src/utils/bash/bed_intersect.sh"]
         + [  # noqa503
             bedtools_bin,
             "1kg/consensus_svs.bed",
@@ -805,7 +806,7 @@ def get_overlapping_clustered_svs():
         output_bed_file = "1kg/sv_lookup_intersect.bed"
         bedtools_bin = "bedtools"  # TODO: load bedtools binary
         subprocess.run(
-            ["bash", "bash/bed_intersect.sh"]
+            ["bash", "src/utils/bash/bed_intersect.sh"]
             + [
                 bedtools_bin,
                 bed_file,
@@ -856,7 +857,7 @@ def write_samplot_files():
     for sv_id in sv_ids:
         chr, start, stop = get_sv_chr(sv_id)
         subprocess.run(
-            ["bash", "bash/samplot_viz.sh"]
+            ["bash", "src/utils/bash/samplot_viz.sh"]
             + [sv_id, chr, str(start), str(stop)],
             capture_output=True,
             text=True,

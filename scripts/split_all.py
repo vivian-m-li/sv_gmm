@@ -5,6 +5,7 @@ import shutil
 import time
 
 import pandas as pd
+from pprint import pprint
 
 from src.model.dirichlet import run_dirichlet
 from src.utils.config_loader import load_config
@@ -92,14 +93,14 @@ def run_split_wrapper(
     population_size: int,
     insert_size_lookup: dict[str, int],
 ):
-    run_split_trial(row, cfg, population_size, insert_size_lookup)
-    # try:
-    #     run_split_trial(row, cfg, population_size, insert_size_lookup)
-    # except Exception as e:
-    #     print(f"Error processing SV {row['id']}: {e}")
+    try:
+        run_split_trial(row, cfg, population_size, insert_size_lookup)
+    except Exception as e:
+        print(f"Error processing SV {row['id']}: {e}")
+        raise Exception("Exiting split_all...")
 
 
-@break_after(hours=30, minutes=00)
+@break_after(hours=62, minutes=00)
 def split_all(
     cfg: dict, sample_ids: set[str], insert_size_lookup: dict[str, int]
 ):
@@ -121,6 +122,8 @@ def split_all(
 
 def main(config_path: str = "config.toml"):
     cfg = load_config(config_path)
+    print("Config arguments:")
+    pprint(cfg)
 
     input_dir = cfg["paths"]["input_dir"]
     output_dir = cfg["paths"]["output_dir"]
