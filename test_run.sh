@@ -1,14 +1,15 @@
 #!/bin/bash
 
-# # Ensure your python version is loaded (in this case using module load)
-# module purge
-# module load python/3.11.3
+# Ensure your python version is loaded (in this case using module load)
+module purge
+module load python/3.11.3
 
-# # Activate your python environment (assuming in the same folder as this script)
+# Activate your python environment (assuming in the same folder as this script)
 source venv/bin/activate
 which python
 python --version
 
+# Load requirements and install package
 pip install -r min_requirements.txt
 pip install -e .
 
