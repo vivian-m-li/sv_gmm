@@ -14,7 +14,7 @@
 [paths]
 
 # Directory containing your input data (VCF/CSV callset, sample IDs, insert
-# sizes, etc.)
+# sizes, etc.).
 input_dir = "data/1kg"
 
 # Directory where results will be written.
@@ -29,8 +29,8 @@ stix_output_dir = "output/stix_output"
 intermediate_output_dir = "/scratch/Users/vili4418/processed_svs"
 
 # Local directory to store intermediate output files.
-# Files are first written to scratch_dir, then moved to intermediate_file_dir if
-# they are not the same.
+# Files are first written to intermediate_output_dir, then moved to
+# local_intermediate_output_dir if they are not the same.
 local_intermediate_output_dir = "output/results/processed_svs"
 
 # enable this when running query_stix_all.py
@@ -84,7 +84,6 @@ database = "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard"
 # Number of shards the index and database are split into.
 # Set to 1 if your index is a single file.
 num_shards = 8
-
 
 # ------------------------------------------------------------------------------
 # [query] — Read-level querying parameters

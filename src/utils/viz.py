@@ -450,7 +450,7 @@ def plot_2d_coords(
         for evidence in mode:
             ax1_vals = [GMM_AXES[axis1](x) for x in evidence.paired_ends]
             ax2_vals = [GMM_AXES[axis2](x) for x in evidence.paired_ends]
-            x.append([np.mean(ax1_vals), np.mean(ax2_vals)])
+            x.append([np.median(ax1_vals), np.median(ax2_vals)])
             num_evidence.append(len(evidence.paired_ends))
             sem_ax1.append(sem(ax1_vals))
             sem_ax2.append(sem(ax2_vals))
@@ -507,7 +507,7 @@ def plot_2d_coords(
             ax_main.text(
                 gmm_result.mu[0][0],
                 gmm_result.mu[0][1],
-                f"n={len(mode)}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}",
+                f"n={len(mode)}\n{axis1}: {np.median(x[:, 0]):.0f}\n{axis2}: {np.median(x[:, 1]):.0f}",
                 # f"n={len(mode)}\n{axis1}: {np.mean(x[:, 0]):.0f}\n{axis2}: {np.mean(x[:, 1]):.0f}\nAvg. num reads/sample: {np.mean(num_evidence):.1f}\nMean insert size: {int(np.mean(mean_insert_sizes))}",
                 fontsize=10,
                 ha="center",
@@ -533,7 +533,7 @@ def plot_2d_coords(
 
         # plot the 1D gaussian distributions along the axes
         ax_xhist = ax_main.inset_axes([0, 1, 1, 0.2], sharex=ax_main)
-        mean_x, std_x = np.mean(x[:, 0]), np.std(x[:, 0])
+        mean_x, std_x = np.median(x[:, 0]), np.std(x[:, 0])
         x_vals = np.linspace(mean_x - 3 * std_x, mean_x + 3 * std_x, 100)
         zorder = 10 - i
         if show_1d_distributions and axis1_dist:
@@ -558,7 +558,7 @@ def plot_2d_coords(
 
         ax_yhist = ax_main.inset_axes([1, 0, 0.2, 1], sharey=ax_main)
         ax_yhist.set_zorder(zorder - 1)
-        mean_y, std_y = np.mean(x[:, 1]), np.std(x[:, 1])
+        mean_y, std_y = np.median(x[:, 1]), np.std(x[:, 1])
         y_vals = np.linspace(mean_y - 3 * std_y, mean_y + 3 * std_y, 100)
         if show_1d_distributions and axis2_dist:
             ax_yhist.plot(
