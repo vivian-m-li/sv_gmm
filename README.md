@@ -1,4 +1,4 @@
-# SV_GMM
+# SPLIT
 
 This tool is designed to analyze genetic data, determining the number of structural variants in a reading frame using statistical inference.
 
@@ -16,24 +16,19 @@ This tool is designed to analyze genetic data, determining the number of structu
 ```
 python -m venv venv
 source venv/bin/activate
-pip3 install -r min_requirements.txt
+pip install -r min_requirements.txt
+pip install -e .
 ```
 
 - If you have any problems, feel free to refer to the `requirements.txt` file to see the full list of packages used in the paper.
 
-### STIX
+### GIGGLE index & STIX
 
-If you need will be providing a STIX database instead of processed read support, you will need to follow STIX download instructions from this [Github](https://github.com/ryanlayer/stix/tree/master).
-
-## Required Inputs
-
-- Structural Variant coordinates or 1000 Genomes ID
-
-### Files Needed (or added) in Input_Dir
+To create a GIGGLE index (a database for raw alignments), you will need to follow instructions from [GIGGLE GitHub](https://github.com/ryanlayer/giggle/tree/master). In addition, you will need to follow STIX download instructions from [STIX GitHub](https://github.com/ryanlayer/stix/tree/master).
 
 #### A. List of SVs and the genotype of patients
 
-- `--sv_lookup`: Contains the SV information from samples for all the deletions of interest. Can be provided as a **vcf (or vcf.gz) or a comma-delimited file** (details below). If a VCF is provided, the software will create the comma-delimited file for faster next usage instead of the VCF: "deletions.csv"
+- A file containing the SV information from samples for all the deletions of interest. Can be provided as a **vcf (or vcf.gz) or a comma-delimited file** (details below). If a VCF is provided, the software will create the comma-delimited file for faster next usage instead of the VCF.
 
   - CSV with the columns id, chr, start, stop, svlen, ref, alt, qual, filter, af, info, sample1, ..., sampleN, num_samples
   - info is a python dictionary
@@ -52,7 +47,7 @@ SPLIT uses information of sample read data within a given SV coordinate space to
 
 1. STIX database/index of CRAMS/BAMS. Please refer to the [STIX github](https://github.com/ryanlayer/stix/tree/master) on how to create this.
 
-- If using this approach, you will simply provide the paths to the STIX index (`--stix_index`), STIX database (`--stix_database`), where you store the active software (`-stix_bin`), and the number of shards used to build the database (`--num_stix_shards` which has a default of 1).
+- If using this approach, you will simply provide the paths to the STIX index, STIX database, where you store the active software, and the number of shards used to build the database.
 - In this case, SPLIT will query the database for read evidence of an SV for you.
 
 2. Read information already queried from a database in a tab-delimited-file with the naming convention being the same as that of the SV you are testing (e.g. if I'm considering SV chr3:1000-2000 then the file must be named 3:1000_3:2000.txt).
@@ -63,9 +58,6 @@ SPLIT uses information of sample read data within a given SV coordinate space to
 3	bed_0/HG00122.bed.gz	3	173522849	173522939	3	173524168	173524318	paired
 3	bed_0/HG00122.bed.gz	3	173522873	173522939	3	173524105	173524255	paired
 ```
-
-- THIS MERITS BETTER EXPLANATION FOR PAIRED VS SPLIT EXAMPLES
-<!-- TODO: this part of the file processing has been removed. only raw stix output is used now in analysis to avoid another temp file -->
 
 3. PROCESSED evidence in a comma-delimited-file with the same naming convention (e.g. if I'm considering SV chr3:1000-2000 then the file must be named 3:1000-1000_3:2000-2000.csv)
 
@@ -91,70 +83,90 @@ HG00149,173522763,173524247,173522838,173524265
   HG02941,436
   ```
 
+### Config File
+
+This file defines all file paths, input file names, executables (STIX and bedtools), query parameters, model parameters, and calibration parameters. An example is provided in data/assets/default_config.toml.
+
+This file is loaded into all scripts in the scripts/ directory. You can either provide a path to the config file or place it in your home directory with the name "config.toml".
+
+#### Input and output directories
+
+- `input_dir`: Directory containing your input data (VCF/CSV callset, sample IDs, insert sizes, etc.).
+- `output_dir`: Directory where results will be written.
+- `stix_output_dir`: Sub-directory where raw STIX query output files are cached between runs.
+- `intermediate_output_dir`: Intermediate directory used during processing. On HPC clusters, point this to a fast local scratch filesystem. On a local machine, a subdirectory of output_dir is fine.
+- `local_intermediate_output_dir`: Local directory to store intermediate output files. Files are first written to intermediate_output_dir, then moved to local_intermediate_output_dir if they are not the same.
+
+#### Input files
+
+- `sv_lookup_file`: VCF or CSV file listing structural variants.
+- `sample_id_file`: TXT file with one row for each sample ID.
+- `insert_size_file`: Per-sample mean insert size file (two columns: sample_id, mean_insert_size). If this file is absent a uniform default of default_insert_size bp is written automatically.
+- `ancestry_file`: Ancestry file with required columns "Sample name" and "Superpopulation code"
+
+#### STIX
+
+- `bin`: Absolute path to the compiled STIX binary.
+- `index`: Absolute path to the STIX index file
+- `database`: Absolute path to the STIX database.
+- `num_shards`: Number of shards the index and database are split into. Set to 1 if your index is a single file.
+
+#### Query
+
+- `read_overlap`: Fraction of the SV length that a flanking read is allowed to overlap the SV region and still be included. 1.0 = full overlap allowed; 0.5 = half the SV length.
+
+#### Calibrate (Required for scripts.calibrate_model)
+
+- `truth_set`: Truth set to calibrate against (in input_dir). Required columns: chr, start, stop, n_svs_actual
+- `search_func`: Search function to use for calibration. Supported algorithms: bo (bayesian optimization) or grid (grid search)
+- Hyperparameter boundaries: Specify the min and max values the parameter can take. If using grid search specify the step size as well.
+  - `d_min`, `d_max`, `d_step`: Minimum distance between SV cluster centroids in L, length space at which to start penalizing the model.
+  - `r_min`, `r_max`, `r_step`: Minimum reciprocal overlap between SV clusters at which to start penalizing the model.
+  - `q_min`, `q_max`, `q_step`: Fraction of the SV length that a flanking read is allowed to overlap the SV region and still be included.
+  - `p_min`, `p_max`, `p_step`: Maximum penalty term for spurious cluster suppression.
+
 ## Arguments
 
-```
-usage: query_sv.py [-h] [-l L] [-r R] [-id ID] [-p [P]] [-d [D]] [-lr [LR]] [-ref REF] [--input_dir INPUT_DIR] [--output_dir OUTPUT_DIR]
-                   [--sv_lookup SV_LOOKUP] [--insert_size_file INSERT_SIZE_FILE] [--stix_bin STIX_BIN] [--stix_index STIX_INDEX]
-                   [--stix_database STIX_DATABASE] [--num_stix_shards NUM_STIX_SHARDS]
-```
+To split a single SV: `python -m scripts.split_one [--config]`
 
 ```
 Required arguments:
     --l                           Leftmost coordinate of SV (format is chr:Num) (Required if svid not used)
     --r                           Rightmost coordinate of SV (format is chr:Num) (Required if svid not used)
     OR
-    --id                          Structural variant id from 1000Genomes Project (Required if l and r not provided)
-
-Directory Paths:
-    --input_dir                   path to where the sv_lookup and insert_size files are (default = "assets/")
-    --output_dir                  path to where the processed outputs are saved (if None then uses input_dir)
-
-Input Options:
-    --sv_lookup                   name of sv_lookup file in input directory. Can be vcf, vcf.gz, or csv with format described in Required Inputs (default = deletions.csv)
-    --insert_size_file            name of file with insert sizes in input directory. Format shown in Inputs (*Optional -- if None provided will use default insert size of 450)
-    --ref                         reference genome used (default = grch38)
+    --id                          Structural variant id from the input callset (Required if l and r not provided)
 
 Processing Flags:
     -p                           If include then will plot the Length and L-coordinate of each sample
     -d                           If include then will continue to rerun algorithm until acheives ≥ 80% confidence
 
-Required if running STIX to get related data
-    --stix_bin                    path to STIX executable (e.g. "~/stix/bin/stix")
-    --stix_index                  path to STIX index -- what used for parameter -i in STIX (e.g. "alt_sort_b")
-    --stix_database               path to STIX database -- what used for parameter -d in STIX (e.g. "1kg.ped.db")
-    --num_stix_shards             number of stix shards used (default = 1)
-
 ```
+
+To split an entire callset: `python -m scripts.split_all [--config]`
 
 ## Output
 
 ### Intermediate Files saved to input directory (if not already provided):
 
-- Sv-lookup as csv (if VCF provided): `deletions.csv` (refer to Required Input Files)
-- PROCESSED evidence for SV if not already provided
-
-- sv_lookup.csv?????
-  ```
-  id,chr,start,stop,svlen,af
-  HGSV_3,1,39999,107150,67151,0.11301916932907348
-  HGSV_22,1,586987,670994,84007,0.04792332268370607
-  ```
+- Sv-lookup as csv (if VCF provided) (refer to Required Input Files)
+- Raw alignments queried from STIX for provided genomic regions/SV coordinates
 
 ### Standard Output (printed)
 
 The algorithm will iterate through trials where the outcome refers to the mode number with the greatest probability (probabilities = [probability of 1 mode, probability of 2 modes, probability of 3 modes])
 
 ```
-Trial 1: outcome=2, probabilities=[0.25 0.5  0.25]
+
+Trial 1: outcome=2, probabilities=[0.25 0.5 0.25]
 Trial 2: outcome=2, probabilities=[0.2 0.6 0.2]
 Trial 3: outcome=2, probabilities=[0.16666667 0.66666667 0.16666667]
 Trial 4: outcome=2, probabilities=[0.14285714 0.71428571 0.14285714]
-Trial 5: outcome=2, probabilities=[0.125 0.75  0.125]
+Trial 5: outcome=2, probabilities=[0.125 0.75 0.125]
 Trial 6: outcome=2, probabilities=[0.11111111 0.77777778 0.11111111]
 Trial 7: outcome=2, probabilities=[0.1 0.8 0.1]
 Trial 8: outcome=2, probabilities=[0.09090909 0.81818182 0.09090909]
 3:173522965-173524108 - stopping after 8 iterations, 2 modes, ci=[array([0.63104355]), array([0.82350191])]
+
 ```
 
 ### Plots
@@ -164,7 +176,7 @@ If using the flag `-p`, a plot showing the clusters of SVs identified based on l
 
 ## Test
 
-Test if you can successfully run with `test_run.sh`. This uses a deletions.csv as sv-lookup and queried but unprocessed read evidence.
+Test if you can successfully run with `test_run.sh`. This uses the provided files and config in the assets directory.
 
 You should get the outputs and results shown in "Output" above.
 
@@ -172,31 +184,17 @@ You should get the outputs and results shown in "Output" above.
 
 ### How does SPLIT query STIX database for evidence of an SV (e.g. what is in the unprocessed evidence (.txt file))?
 
-- For short-read data (default), queries STIX for all evidence within the region, +- 50 bp from each end of the provided SV
-- For long-read data (requires option `-lr`), Parses the cigar string for all available 1kg samples with long-read data
-  - From the sample's entire cram file, download the bam file corresponding to an SV region (start - tolerance, stop + tolerance). Look for instances of "D" in the cigar string, corresponding with a deletion in the selected region. Use the size of the original SV +- an additional tolerance to find deletions that match the original SV. Using the reference, calculate the start/stop/length of the deletion.
+- It queries STIX for all evidence within the region, with some tolerance from each end of the provided SV. Short-read and long-read data can be used, depending on the STIX indices that are available. The STIX output is saved in an intermediate output directory to prevent having to re-query STIX (can be costly in time).
 
 ### How does SPLIT process the queried data?
 
-SPLIT then removes samples with genotypes of (0,0) and summarizes the read-data evidence into paired coordinates for samples (.csv file)
-
-```
-HG00096,113799540,113800187\
-HG00097,113799542,113800388\
-HG00099,113799516,113800321\
-HG00100,113799234,113800190,113799235,113800238,113799318,113800230,113799328,113800353,113799349,113800342,113799356,113800259,113799379,113800269,113799403,113800296,113799467,113800440\
-HG00101,113799430,113800209,113799529,113800307,113799553,113800389\
-```
+SPLIT removes samples that are homozygous for the reference genotype (0, 0) and takes the median start/end coordinates for each sample. The median L-coordinate and SV length (calculated as: R - L - mean_insert_size) are used to cluster the samples.
 
 ### How does SPLIT identify clusters/merged SVs?
 
-First, SPLIT merges each read evidence into simple coordinate space. It takes the mean L and mean length of each paired-end read so that each sample is represented as a 2D point (length, L).
+Each sample is represented as a 2D point (L, length). SPLIT then runs a Gaussian Mixture Model over all samples within the region and performs a model selection to select the best fitting distribution (1, 2, or 3 clusters). Finally, it assigns samples to the clusters if more than 1 SV was found in the region.
 
-Next, it runs the GMM.
-
-It probability determines the points are most likely to fit a 1, 2, or 3 mode distribution. Runs the EM algorithm for 30 iterations for each of the distributions and compares the AIC scores for each model. Any SV with 10 or fewer samples will be marked as "inconclusive".
-
-Finally, it assigns points to the modes if more than 1 SV was found in the region.
+Any region with 10 or fewer samples will be marked as "inconclusive".
 
 <!-- #### Best Distribution Over All Data Points
 
@@ -216,42 +214,11 @@ Finally, it assigns points to the modes if more than 1 SV was found in the regio
 
 ## Synthetic Data Workflow
 
-Synthetic data is generated to test the accuracy of SVeperator and GATK-ClusterBatch with increasing reciprocal overlap, _r_ for five different test cases. The `run_synthetic_data.sh` sbatch script on Fiji runs the `r_accuracy_test` function in `synthetic_tests.py`, varying the sample size and sv length.
-
-```
-n_samples_values=(10 21 66 206 313)
-svlen_values=(51 167 802 3377 17352)
-for n_samples in "${n_samples_values[@]}"; do
-  for svlen in "${svlen_values[@]}"; do
-    echo "Running with n_samples=$n_samples and svlen=$svlen"
-    start_time=$(date +%s)
-    python3 "$HOME/sv/sv_gmm/synthetic_tests.py" "$n_samples" "$svlen"
-    end_time=$(date +%s)
-    elapsed_time=$((end_time - start_time))
-    echo "Completed n_samples=$n_samples and svlen=$svlen in $elapsed_time seconds"
-  done
-done
-```
-
-Noise is added to generated data to replicate short-read data, and results are saved in the synthetic_data directory by sample size. The results for a given sample size and sv length can be plotted with the `plot_reciprocal_overlap_all` function in `viz.py`.
+Synthetic data is generated to test the accuracy of SPLIT and GATK-ClusterBatch with increasing reciprocal overlap, _r_ for three different test cases. Noise is added to generated data to replicate short-read alignments. Running `python -m scripts.synthetic_tests` with varying sample counts and SV lengths will replicate the process described in the paper.
 
 ## 1kG Data Processing
 
-The data used for this project originates from the 1000 Genomes Project's original 2504 samples. All data is found in the `/scratch/Shares/layer/stix/indices/` directory on fiji. A pre-built [STIX](https://github.com/ryanlayer/stix) index is used to query genomic regions for short and long reads (by sample) that serve as evidence for the SV of interest. Low-coverage short read, high-coverage short read, and long-read data are all available. The deletions that were present in the initial 1kG analysis are found in `1kgp/1kg_hg38_deletions.vcf` or `1kgp/deletions.csv`.
-
-### Low-coverage short-reads
-
-Low-coverage data is supported by not used in the main analysis. Depending on the reference genome, the appropriate STIX index is in the `1kg_hg37_low_cov` or `1kg_hg38_low_cov` directory.
-
-### High-coverage short-reads
-
-High-coverage data is found in the `1kg_high_coverage_vivian` directory.
-To run the analysis for a single SV, run `python query_sv.py` with the -id or -l and -r arguments.
-To run the pipeline on the entire dataset, run `python run_svs_until_converge.py`. The dirichlet process is run for each SV until "convergence" (we have high confidence in the outcome or 100 trials). A new file is written into the `processed_svs_converge` directory, and the files are concatenated into one large file (`sv_stats_converge.csv`) at the end of the function. The process is parallelized and runs on fiji.
-
-### Long-reads
-
-Long-read data is found in the `LR_vivian` directory. Once the data has been pre-processed, run `python run_lr_until_converge.py` to run the dirichlet process.
+The data used for this project originates from the 1000 Genomes Project. A pre-built [STIX](https://github.com/ryanlayer/stix) index is used to query genomic regions for short and long reads (by sample) that serve as evidence for the SV of interest. Low-coverage short read, high-coverage short read, and long-read data are all available. The deletions that were present in the initial 1kG callset are found in `assets/1kg.subset.vcf.gz`.
 
 ### Post-Processing & Figures
 
@@ -263,21 +230,3 @@ After writing the `all_split_trials.csv` file, run the `write_post_processed_fil
 - `outliers.csv`: outliers identified based on a threshold
 - `ancestry_dissimilarity.csv`: bray curtis dissimilarity calculated between clusters for SVs split into 2+ clusters
 - `new_gene_intersections.bed` (needs a working build of bedtools): new gene intersections resulting from the split SVs
-
-### Flowchart Figure
-
-To create the flowchart figure, we need:
-
-- the number of total deletions (from `deletions.csv`)
-- the number of SVs with no or too little evidence in STIX (<= 10 samples)
-  - no evidence: `deletions_df.shape[0] - svs_n_modes.shape[0]`
-  - little evidence: `svs_n_modes[svs_n_modes["confidence"] == "inconclusive"].shape[0]`
-  - total number: `deletions_df.shape[0] - svs_n_modes[svs_n_modes["confidence"] != "inconclusive"].shape[0]`
-- the number of SVs with an outcome
-  - `svs_n_modes[svs_n_modes["confidence"] != "inconclusive"].shape[0]`
-- the number of high confidence, medium confidence, and low confidence SVs
-  - ex: `svs_n_modes[svs_n_modes["confidence"] == "low"].shape[0]`
-- the predicted number of clusters depending on confidence
-  - ex: `Counter(svs_n_modes[svs_n_modes["confidence"] == "high"]["num_modes"])`
-- the second most likely number of clusters (in low confidence situation)
-  - `Counter(svs_n_modes[svs_n_modes["confidence"] == "low"]["num_modes_2"])`
