@@ -290,9 +290,7 @@ def generate_mapped_pairs_for_sv(
     mode_end: int,
     insert_mean: int,
     n_pairs: int = 10,
-    read_length_mean: int = 150,
-    read_length_sd: int = 5,
-    mapped_is_sd: float = 20.0,
+    fragment_length_sd: int = 10,
     left_jitter: int = 20,
     right_jitter: int = 20,
 ):
@@ -301,55 +299,33 @@ def generate_mapped_pairs_for_sv(
     mapped coordinates on the reference for discordant pairs supporting
     a deletion between mode_start and mode_end.
 
-    - insert_mean: per-sample mean insert size (from your insert_size_df).
-    - We simulate the *mapped* insert size = insert_mean + deletion_length + gaussian noise.
-    - read length sampled ~ N(read_length_mean, read_length_sd) and clipped.
-    - left mate placed so its *end* sits a small jitter upstream of mode_start.
+    - insert_mean: per-sample mean insert size
+    - insert size sampled sampled ~ N(insert_mean, fragment_length_sd)
+    - left mate placed so its end sits a small jitter upstream of mode_start.
     """
-    deletion_len = mode_end - mode_start
     pairs = []
-
     for _ in range(n_pairs):
-        # sample read length
-        L = int(
-            max(50, min(600, random.gauss(read_length_mean, read_length_sd)))
+        # fragment length + deletion length = insert size
+        # addn noise to fragment length (but not deletion length since that's fixed for the SV)
+
+        # generate the fragment length from a normal distribution
+        fragment_length = int(
+            max(50, min(600, random.gauss(insert_mean, fragment_length_sd)))
         )
 
-        # sample mapped insert size
-        target_is = int(
-            max(
-                2 * L + 1,
-                random.gauss(insert_mean + deletion_len, mapped_is_sd),
-            )
-        )
+        # split the fragment randomly to get the left and right ends
+        left_fragment_length = random.randint(1, fragment_length - 1)
+        right_fragment_length = fragment_length - left_fragment_length
 
-        # sample left mate end near the left breakpoint
-        left_end = mode_start - int(random.gauss(0, left_jitter))
-        left_start = left_end - (L - 1)
+        # add jitter to the left and right ends
+        left_jitter_amount = random.randint(-left_jitter, left_jitter)
+        right_jitter_amount = random.randint(-right_jitter, right_jitter)
 
-        # sample right mate start near the right breakpoint
-        right_start = mode_end + int(random.gauss(0, right_jitter))
-        right_end = right_start + (L - 1)
+        left_start = mode_start - left_fragment_length
+        left_end = mode_start - left_jitter_amount
 
-        # enforce approximate mapped insert size:
-        # current_is = right_end - left_start + 1
-        current_is = right_end - left_start + 1
-        delta = target_is - current_is
-
-        # We correct half the delta on each side so noise stays symmetric.
-        adjust = delta // 2
-
-        # shift left mate leftwards (negative adjust) or rightwards (positive)
-        left_start -= adjust
-        left_end = left_start + (L - 1)
-
-        # shift right mate in the opposite direction
-        right_start += delta - adjust
-        right_end = right_start + (L - 1)
-
-        # discard impossible mappings
-        if left_start < 1 or right_start <= left_start:
-            continue
+        right_end = mode_end + right_fragment_length
+        right_start = mode_end + right_jitter_amount
 
         pairs.append((left_start, left_end, right_start, right_end))
 
@@ -373,11 +349,11 @@ def generate_and_split_sample_reads(
     """Generates synthetic short-read data for testing purposes and runs the data through the SV analysis pipeline."""
     num_svs = len(svs)
 
-    # Decide how many samples we want in our population
+    # decide how many samples we want in our population
     num_samples = random.randint(30, 1000) if n_samples is None else n_samples
     samples = [f"sample_{i}" for i in range(num_samples)]
 
-    # Decide how we want to divide the samples between the SVs
+    # decide how we want to divide the samples between the SVs
     weights = generate_weights(num_svs) if p is None else p
     modes = assign_modes(weights, samples)
 
@@ -385,7 +361,7 @@ def generate_and_split_sample_reads(
         insert_size_file, dtype={"mean_insert_size": int}
     )
 
-    # For each sample, generate random evidence
+    # for each sample, generate random evidence
     reads = stix_output_to_df("", write_empty_file=True)
     evidence = defaultdict(list)
     insert_size_lookup = {}
@@ -417,7 +393,7 @@ def generate_and_split_sample_reads(
             ]
             evidence[sample].extend([pair[1], pair[2]])  # l_end, r_start
 
-    # Pass synthetic data through SV analysis pipeline
+    # pass synthetic data through SV analysis pipeline
     L = np.mean([start for start, _ in svs])
     R = np.mean([stop for _, stop in svs])
     evidence = {key: np.array(value) for key, value in evidence.items()}
