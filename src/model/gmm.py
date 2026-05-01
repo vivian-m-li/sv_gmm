@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.special import logsumexp
 from scipy.stats import multivariate_normal
 from sklearn.cluster import KMeans
 
@@ -111,18 +112,28 @@ def calc_log_likelihood(
     num_modes = len(mu)
     logL = 0.0
     for i in range(len(x)):
-        pdf = []
+        log_pdfs = []
         for k in range(num_modes):
-            pdf_i = None
-            while pdf_i is None:
+            log_pdf_i = None
+            iters = 0
+            while log_pdf_i is None:
                 try:
-                    pdf_i = p[k] * multivariate_normal.pdf(x[i], mu[k], cov[k])
+                    log_pdf_i = np.log(p[k]) + multivariate_normal.logpdf(
+                        x[i], mu[k], cov[k]
+                    )
                 except np.linalg.LinAlgError:
                     # if the covariance matrix is not positive definite, add a small value to the diagonal and try again
                     cov[k] += np.eye(cov[k].shape[0]) * 1e-6
-            pdf.append(pdf_i)
-        likelihood_i = np.sum(pdf)
-        logL += np.log(likelihood_i + 1e-300)  # avoid log(0)
+                    iters += 1
+
+                    # break after too many iterations
+                    if iters > 10:
+                        log_pdf_i = -np.inf
+
+            log_pdfs.append(log_pdf_i)
+
+        with np.errstate(under="ignore"):
+            logL += logsumexp(log_pdfs)
 
     # calculate final penalized logL
     penalty = model_penalty(mu, L, R, d_threshold, r_threshold, max_penalty)
@@ -162,7 +173,9 @@ def init_em(
     unique_vals = np.unique(x, axis=0)
     n_unique = len(unique_vals)
     if n_unique < num_modes:
-        raise ValueError(f"Too few unique values ({n_unique}) to cluster into {num_modes}")
+        raise ValueError(
+            f"Too few unique values ({n_unique}) to cluster into {num_modes}"
+        )
 
     # initial conditions
     kmeans = KMeans(n_clusters=num_modes)
@@ -325,11 +338,13 @@ def assign_values_to_modes(
     gz = calc_responsibility(x, len(x), mu, cov, p)
     assignments = np.argmax(gz, axis=1)
     x_by_mode = [[] for _ in range(num_modes)]
+    x_index_by_mode = [[] for _ in range(num_modes)]
     for i, mode in enumerate(assignments):
         if mode is not None:
             x_by_mode[mode].append(x[i])
+            x_index_by_mode[mode].append(i)
     x_by_mode = [np.array(data_points) for data_points in x_by_mode]
-    return gz, x_by_mode
+    return gz, x_by_mode, x_index_by_mode
 
 
 def gmm(
@@ -369,6 +384,7 @@ def gmm(
             outliers=[],
             window_size=(singleton, singleton),
             x_by_mode=[np.array(x)],
+            x_index_by_mode=[[0]],
             responsibility=np.array([[1.0]]),
             num_pruned=[0],
             num_iterations=0,
@@ -391,11 +407,17 @@ def gmm(
         for num_modes in mode_options:
             try:
                 params, num_iterations = run_em(
-                    x, num_modes, L, R, d_threshold, r_threshold, max_penalty, plot
+                    x,
+                    num_modes,
+                    L,
+                    R,
+                    d_threshold,
+                    r_threshold,
+                    max_penalty,
+                    plot,
                 )
                 aic = calc_aic(params[-1].logL, num_modes)
-            except ValueError as e:
-                # print(e)
+            except ValueError:
                 params = [
                     GMM2D(
                         mu=[[0, 0] for _ in range(num_modes)],
@@ -417,7 +439,7 @@ def gmm(
 
     final_params = opt_params[-1]
 
-    responsibility, x_by_mode = assign_values_to_modes(
+    responsibility, x_by_mode, x_index_by_mode = assign_values_to_modes(
         x, num_sv, final_params.mu, final_params.cov, final_params.p
     )
 
@@ -431,6 +453,7 @@ def gmm(
         outliers=outliers,
         window_size=(min(x[:, 0]), max(x[:, 0])),
         x_by_mode=x_by_mode,
+        x_index_by_mode=x_index_by_mode,
         responsibility=responsibility,
         num_pruned=[0 for _ in range(num_sv)],
         num_iterations=num_iterations_final,

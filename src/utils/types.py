@@ -40,6 +40,7 @@ class EstimatedGMM:
     outliers: list[float]
     window_size: tuple[int, int]
     x_by_mode: list[np.ndarray[int]]
+    x_index_by_mode: list[list[int]]
     responsibility: np.ndarray
     num_pruned: list[int]
     num_iterations: int

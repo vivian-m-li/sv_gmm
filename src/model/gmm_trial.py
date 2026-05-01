@@ -453,45 +453,35 @@ def get_evidence_by_mode(
     gmm_model: str = "2d",
 ) -> list[list[Evidence]]:
     sv_evidence = np.array(sv_evidence)
-    data = []
-    for mode in gmm_result.x_by_mode:
-        data_by_mode = []
-        for x in mode:
-            if gmm_model == "1d_len":
-                data_by_mode.append((x + (R - L)))  # length
-            elif gmm_model == "1d_L":
-                data_by_mode.append((x + L))  # L-coordinate
-            else:
-                data_by_mode.append(
-                    (x[0] + (R - L), x[1] + L)
-                )  # (length, L-coordinate)
-        data.append(data_by_mode)
-    evidence_by_mode = [[] for _ in range(len(data))]
+    evidence_by_mode = [[] for _ in range(gmm_result.num_modes)]
+
+    all_sample_ids = set()
+    assigned_sample_ids = set()
     for sample_idx, evidence in enumerate(sv_evidence):
         # the indices should be the same because we don't shuffle the evidence
         evidence.mode_probabilities = gmm_result.responsibility[
             sample_idx
         ].tolist()
-        for i, mode in enumerate(data):
-            try:
-                if gmm_model == "1d_len":
-                    mode_data = evidence.svlen  # length
-                elif gmm_model == "1d_L":
-                    mode_data = evidence.start  # L-coordinate
-                else:
-                    mode_data = (
-                        evidence.svlen,
-                        evidence.start,
-                    )  # (length, L-coordinate)
-                if (
-                    mode_data in mode
-                ):  # assumes that each mode has unique (length, L-coordinate) pairs
-                    evidence_by_mode[i].append(evidence)
-                    continue
-            except ValueError:
-                print(evidence)
-                print(mode)
-                raise ValueError
+        all_sample_ids.add(evidence.sample.id)
+        for i, mode in enumerate(gmm_result.x_index_by_mode):
+            # previously, we tried assigning samples to modes based on a unique
+            # (length, L-coordinate) pair
+            # however, this assumption is false
+            # now, we rely on the index of the sample and the index of the point
+            # passed into the gmm func. this is hacky and is possible will
+            # break in the future
+            if sample_idx in mode:
+                evidence_by_mode[i].append(evidence)
+                if evidence.sample.id in assigned_sample_ids:
+                    raise ValueError(
+                        f"Warning: sample {evidence.sample.id} is assigned to multiple modes."
+                    )
+                assigned_sample_ids.add(evidence.sample.id)
+                continue
+
+    # assert that each piece of evidence is assigned to at most one mode
+    assert len(assigned_sample_ids) == len(assigned_sample_ids)
+
     lengths_by_mode = [
         np.mean([evidence.svlen for evidence in mode])
         for mode in evidence_by_mode
