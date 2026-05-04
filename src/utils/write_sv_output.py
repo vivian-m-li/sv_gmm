@@ -205,6 +205,9 @@ def write_sv_stats(
     mode_coords = []
     num_samples_run = 0
     for i, mode in enumerate(evidence_by_mode):
+        if len(mode) == 0:
+            print(f"Missing mode data for {sv_stat}")
+            continue
         sample_ids = [e.sample.id for e in mode]
         num_samples = len(sample_ids)
         num_samples_run += num_samples
@@ -594,7 +597,9 @@ def get_consensus_svs(output_dir: str):
         sv_rows = sv_rows[sv_rows["num_modes"] == num_modes]
         all_mode_stats = [[] for _ in range(num_modes)]
         for _, row in sv_rows.iterrows():
-            modes = ast.literal_eval(row["modes"])
+            # this should be fixed upstream but this is to catch any errors that have gone through
+            modes = row["modes"].replace("nan", "0")
+            modes = ast.literal_eval(modes)
             modes = sorted(modes, key=lambda x: x["start"])
             for i, mode in enumerate(modes):
                 all_mode_stats[i].append(
@@ -870,24 +875,31 @@ def write_post_processed_files(
     sv_lookup: pd.DataFrame,
     *,
     ancestry_file: str | None = None,
+    verbose: bool = True,
 ):
     """Write all post-processed files after running SPLIT."""
     get_n_modes(output_dir, sv_lookup)
-    print("wrote svs_n_modes.csv")
+    if verbose:
+        print("wrote svs_n_modes.csv")
 
     get_consensus_svs(output_dir)
-    print("wrote consensus_svs.csv")
+    if verbose:
+        print("wrote consensus_svs.csv")
 
     write_most_common_split(output_dir)
-    print("wrote most_common_split.csv")
+    if verbose:
+        print("wrote most_common_split.csv")
 
     write_consensus_vcf(output_dir, sample_ids)
-    print("wrote split_consensus.vcf")
+    if verbose:
+        print("wrote split_consensus.vcf")
 
     get_outliers(output_dir)
-    print("wrote outliers.csv")
+    if verbose:
+        print("wrote outliers.csv")
 
     if ancestry_file is not None:
         write_ancestry_dissimilarity(output_dir, ancestry_file)
-        print("wrote ancestry_dissimilarity.csv")
+        if verbose:
+            print("wrote ancestry_dissimilarity.csv")
     # get_new_gene_intersections() # need bedtools to run this

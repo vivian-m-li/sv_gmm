@@ -21,8 +21,7 @@ def query_stix(
     """
     partial_outputs_dir = os.path.join(output_dir, "partial_outputs")
     if num_shards > 1:
-        if not parallel and not os.path.exists(partial_outputs_dir):
-            os.mkdir(partial_outputs_dir)
+        os.makedirs(partial_outputs_dir, exist_ok=True)
         stix_output_file = os.path.join(
             partial_outputs_dir, query_region.file_name
         )

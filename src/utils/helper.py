@@ -91,8 +91,12 @@ def get_sample_mode_probabilities(
     for mode_idx, mode in enumerate(evidence_by_mode):
         for evidence in mode:
             for mode_i in range(n_modes):
+                mode_prob = evidence.mode_probabilities[mode_i]
+                if np.isnan(mode_prob):
+                    mode_prob = 0
+
                 sample_mode_probabilities[mode_i][evidence.sample.id] = (
-                    evidence.mode_probabilities[mode_i]
+                    mode_prob
                 )
     return sample_mode_probabilities
 

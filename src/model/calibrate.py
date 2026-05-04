@@ -129,7 +129,6 @@ def run_dirichlet_inner(
             num_samples=num_samples,
             num_reference=num_samples - reads["sample_id"].nunique(),
         )
-        # TODO: in this function, a mode is getting added as a separate row. could just be a one-time issue
         write_sv_stats(
             sv_stat,
             gmm_result,
@@ -145,6 +144,26 @@ def run_dirichlet_inner(
         )
 
 
+def run_dirichlet_wrapper(
+    row: dict,
+    cfg: dict,
+    output_dir: str,
+    sample_ids: set[str],
+    insert_size_lookup: dict[str, int],
+    q: float,
+    d: int,
+    r: float,
+    pen: int,
+):
+    try:
+        run_dirichlet_inner(
+            row, cfg, output_dir, sample_ids, insert_size_lookup, q, d, r, pen,
+        )
+    except Exception as e:
+        print(f"Failed to run dirichlet for {row['chr']}:{row['start']}-{row['stop']} with parameters q={q}, d={d}, r={r}, pen={pen}: {e}")
+        raise Exception
+
+
 def run_calibration_test(
     sv_df: pd.DataFrame,
     cfg: dict,
@@ -158,7 +177,6 @@ def run_calibration_test(
 ):
     """
     Run a single calibration test for given distance and reciprocal overlap thresholds.
-    TODO: do analysis later on which combinations led to "partial correctness"
     """
     print(f"Running calibration for d={d}, r={r}, q={q}, p={pen}")
     processed_file_dir = os.path.join(
@@ -186,7 +204,7 @@ def run_calibration_test(
                 )
             )
 
-        p.starmap(run_dirichlet_inner, args)
+        p.starmap(run_dirichlet_wrapper, args)
         p.close()
         p.join()
 
@@ -199,7 +217,7 @@ def run_calibration_test(
     concat_multi_processed_sv_files(
         results_dir, processed_file_dir, "all_split_trials.csv"
     )
-    write_post_processed_files(results_dir, sample_ids, sv_df[["id"]])
+    write_post_processed_files(results_dir, sample_ids, sv_df[["id"]], verbose=False)
     shutil.rmtree(processed_file_dir)
 
     svs_n_modes = pd.read_csv(os.path.join(results_dir, "svs_n_modes.csv"))
@@ -242,7 +260,6 @@ def run_calibration_bayesian_opt(
     insert_size_lookup: dict[str, int],
     cfg: dict,
     *,
-    n_trials: int = 30,
     batch_size: int = 1,
     d_min: int,
     d_max: int,
@@ -338,6 +355,7 @@ def run_calibration_bayesian_opt(
     # load pre-existing results
     # if BO has been searching in one space for a while, then we should subsample
     # the existing results so the model doesn't get stuck in one space
+    n_prev_trials = 0
     if has_prev_results:
         df = pd.read_csv(results_file)
         for i, row in df.iterrows():
@@ -353,10 +371,13 @@ def run_calibration_bayesian_opt(
                 trial_index=trial_index,
                 raw_data={"pr_auc": (score, None)},
             )
+            n_prev_trials += 1
 
     # BO loop
-    for trial in range(n_trials):
-        print(f"Running Bayesian Optimization Trial {trial + 1}/{n_trials}")
+    n_trials = cfg["calibrate"]["n_trials"]
+    for trial in range(n_trials - n_prev_trials):
+        trial_count = trial + n_prev_trials + 1
+        print(f"Running Bayesian Optimization Trial {trial_count}/{n_trials}")
 
         # ask for the next candidate(s)
         if batch_size > 1:
@@ -388,7 +409,7 @@ def run_calibration_bayesian_opt(
 
         for t_index, params in parameterizations.items():
             score = calc_pr_auc(results["TP"], results["FP"], results["FN"])
-            print(f"Trial {t_index} F1 score = {score:.4f}")
+            print(f"Trial {t_index + 1} F1 score = {score:.4f}\n")
             ax_client.complete_trial(
                 trial_index=t_index,
                 raw_data={"pr_auc": (score, None)},
@@ -592,6 +613,7 @@ def calibrate(cfg: dict):
     calibrate_args = cfg["calibrate"].copy()
     del calibrate_args["truth_set"]
     del calibrate_args["search_func"]
+    del calibrate_args["n_trials"]
 
     calibration_function(
         merged_df,

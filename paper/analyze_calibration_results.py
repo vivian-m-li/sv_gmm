@@ -121,7 +121,7 @@ def merge_dfs(dir):
         inplace=True,
     )
     subset_run = pd.read_csv(
-        "data/calibration/sv_subset_sr_lr_nonref_most_samples.csv"
+        "data/calibration/sv_subset_sr_lr_nonref.csv"
     )
     subset_run["sv_id"] = subset_run.apply(
         lambda row: f"{giggle_format(row['chr'], row['start'])}_{giggle_format(row['chr'], row['stop'])}",
