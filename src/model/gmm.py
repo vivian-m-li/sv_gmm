@@ -22,7 +22,7 @@ def hinge_loss_distance(
     # 0 at d(mu_i, mu_j) = 141, which is 2 SD
     # c1 = -ln n -- max penalty
     num_modes = len(mu)
-    if num_modes <= 1:
+    if num_modes == 1:
         return 0.0
 
     loss = 0
@@ -48,7 +48,7 @@ def hinge_loss_overlap(
 ) -> float:
     """Adds a penalty to the log-likelihood to prevent high reciprocal overlap and avoid over-clustering."""
     num_modes = len(mu)
-    if num_modes <= 1:
+    if num_modes == 1:
         return 0.0
 
     loss = 0
@@ -61,8 +61,18 @@ def hinge_loss_overlap(
     return loss
 
 
+def sample_size_scale(sample_size: int, n_pivot: int = 100) -> float:
+    """
+    Scale the model penalty based on sample size to prevent over-penalizing small datasets where noise can cause clusters to be closer together, and under-penalizing large datasets where we have more confidence in the cluster estimates.
+
+    n_pivot is the sample size at which no scaling is applied (scale = 1.0)
+    """
+    return np.log(sample_size) / np.log(n_pivot)
+
+
 def model_penalty(
     mu: list[np.ndarray],
+    sample_size: int,
     L: int,
     R: int,
     d_threshold: int,
@@ -72,6 +82,10 @@ def model_penalty(
     """
     Aggregate model penalties from distance and reciprocal overlap into a single score.
     """
+    # penalties apply only to models with multiple clusters
+    if len(mu) == 1:
+        return 0.0
+
     svlen = R - L
     # penalty decreases with sv size since clusters will be closer together due to noise in read data
     d_penalty = hinge_loss_distance(
@@ -83,7 +97,7 @@ def model_penalty(
 
     # weight the two penalties based on sv length
     # shorter SVs -> more weight on overlap penalty since noise can cause clusters to be closer in distance
-    svlen_bounds = [50, 500]
+    svlen_bounds = [d_threshold, d_threshold * 2]
     weight_bounds = [0, 0.5]
     if svlen < svlen_bounds[0]:
         dist_weight = weight_bounds[0]
@@ -94,7 +108,10 @@ def model_penalty(
             (svlen - svlen_bounds[0]) / (svlen_bounds[1] - svlen_bounds[0])
         ) * (weight_bounds[1] - weight_bounds[0])
     overlap_weight = 1 - dist_weight
-    return dist_weight * d_penalty + overlap_weight * r_penalty
+
+    penalty = dist_weight * d_penalty + overlap_weight * r_penalty
+    scale = sample_size_scale(sample_size)
+    return penalty * scale
 
 
 def calc_log_likelihood(
@@ -136,7 +153,9 @@ def calc_log_likelihood(
             logL += logsumexp(log_pdfs)
 
     # calculate final penalized logL
-    penalty = model_penalty(mu, L, R, d_threshold, r_threshold, max_penalty)
+    penalty = model_penalty(
+        mu, len(x), L, R, d_threshold, r_threshold, max_penalty
+    )
     penalized_logL = logL - penalty
     return penalized_logL
 
