@@ -447,10 +447,6 @@ def populate_sample_info(
 def get_evidence_by_mode(
     gmm_result: EstimatedGMM,
     sv_evidence: list[Evidence],
-    L: int,
-    R: int,
-    *,
-    gmm_model: str = "2d",
 ) -> list[list[Evidence]]:
     sv_evidence = np.array(sv_evidence)
     evidence_by_mode = [[] for _ in range(gmm_result.num_modes)]
@@ -480,18 +476,7 @@ def get_evidence_by_mode(
                 continue
 
     # assert that each piece of evidence is assigned to at most one mode
-    assert len(assigned_sample_ids) == len(assigned_sample_ids)
-
-    lengths_by_mode = [
-        np.mean([evidence.svlen for evidence in mode])
-        for mode in evidence_by_mode
-    ]
-    evidence_by_mode = [
-        x
-        for _, x in sorted(
-            zip(lengths_by_mode, evidence_by_mode), key=lambda pair: pair[0]
-        )
-    ]
+    assert len(all_sample_ids) == len(assigned_sample_ids)
     return evidence_by_mode
 
 
@@ -714,7 +699,6 @@ def gmm_trial(
         r_threshold=r_threshold,
         max_penalty=max_penalty,
         plot=plot,
-        pr=False,
     )
 
     if not synthetic_data:
@@ -726,9 +710,7 @@ def gmm_trial(
             stem=stem,
         )  # mutates sv_evidence with ancestry data and homo/heterozygous for each sample
 
-    evidence_by_mode = get_evidence_by_mode(
-        gmm_result, sv_evidence, L, R, gmm_model=gmm_model
-    )
+    evidence_by_mode = get_evidence_by_mode(gmm_result, sv_evidence)
     if plot:
         plot_2d_coords_fig(
             evidence_by_mode,

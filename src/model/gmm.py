@@ -233,19 +233,33 @@ def calc_responsibility(
     mu: list[np.ndarray],
     cov: list[np.ndarray],
     p: np.ndarray,
+    *,
+    reassign_small_values: bool = False,
 ) -> np.ndarray:
     """
     Calculates the responsibility matrix for each point/mode.
-    Returns a matrix of size (number of samples) x (number of modes) where each entry represents the probability that a point belongs to a particular mode.
+    Returns a matrix of size (number of samples) x (number of modes) where each entry represents the probability that a proint belongs to a particular mode.
+    If reassign_small_values is True, then we reassign points with a very small responsibility to the nearest cluster based on distance. This forces each point to contribute to the parameter estimates of at least one cluster.
     """
     gz = np.zeros((n, len(mu)))  # number of points by number of modes
     for i in range(len(x)):
         # For each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
-        gz[i, :] = [
-            p[k] * multivariate_normal.pdf(x[i], mu[k], cov[k])
-            for k in range(len(mu))
-        ]
-        gz[i, :] /= np.sum(gz[i, :])
+        densities = np.array(
+            [
+                p[k] * multivariate_normal.pdf(x[i], mu[k], cov[k])
+                for k in range(len(mu))
+            ]
+        )
+
+        if reassign_small_values and (
+            np.all(densities <= RESPONSIBILITY_THRESHOLD)
+            or np.any(np.isnan(densities))
+        ):
+            # find the nearest cluster based on distance and assign responsibility of 1 to that cluster
+            distances = [np.linalg.norm(x[i] - mu[k]) for k in range(len(mu))]
+            gz[i, np.argmin(distances)] = 1.0
+        else:
+            gz[i, :] = densities / densities.sum()
     return gz
 
 
@@ -264,9 +278,10 @@ def em(
 ) -> GMM2D:
     """Performs one iteration of the expectation-maximization algorithm."""
     # Expectation step: calculate the posterior probabilities
-    gz = calc_responsibility(x, n, mu, cov, p)
+    gz = calc_responsibility(x, n, mu, cov, p, reassign_small_values=True)
 
     # Ensure that each point contributes to the responsibility matrix above some threshold
+    # this avoids math errors in the maximization step
     gz[(gz < RESPONSIBILITY_THRESHOLD) | np.isnan(gz)] = (
         RESPONSIBILITY_THRESHOLD
     )
@@ -366,6 +381,38 @@ def assign_values_to_modes(
     return gz, x_by_mode, x_index_by_mode
 
 
+def select_model(x, aic_vals, all_params, iterations):
+    """
+    Selects the optimal GMM model based on the AIC scores. Checks that each
+    model is valid by verifying that all clusters have at least one data point
+    assigned to them.
+    """
+    # only consider models that are valid
+    valid_models = []
+    min_aic = np.inf
+    for i, gmm_params in enumerate(all_params):
+        last_iter = gmm_params[-1]
+        gz = calc_responsibility(
+            x, len(x), last_iter.mu, last_iter.cov, last_iter.p
+        )
+        assignments = np.argmax(gz, axis=1)
+        if len(set(assignments)) == len(last_iter.mu):
+            valid_models.append(i)
+            if aic_vals[i] < min_aic:
+                min_aic = aic_vals[i]
+
+    if len(valid_models) == 0:
+        raise ValueError("No valid models found.")
+
+    # get the valid model with the lowest AIC score
+    min_aic_idx = aic_vals.index(min_aic)
+    opt_params = all_params[min_aic_idx]
+    num_iterations_final = iterations[min_aic_idx]
+    final_params = opt_params[-1]
+
+    return final_params, num_iterations_final
+
+
 def gmm(
     x: np.ndarray[tuple[float, int]],
     *,
@@ -375,7 +422,6 @@ def gmm(
     r_threshold: float = 0.8,
     max_penalty: int = 200,
     plot: bool = False,
-    pr: bool = False,
     force_n_modes: int | None = None,
 ) -> EstimatedGMM2D | None:
     """
@@ -417,6 +463,8 @@ def gmm(
         )
         num_iterations_final = num_iterations
         num_sv = 1
+
+        final_params = opt_params[-1]
     else:
         all_params = []
         iterations = []
@@ -451,12 +499,11 @@ def gmm(
             all_params.append(params)
             iterations.append(num_iterations)
             aic_vals.append(aic)
-        min_aic_idx = aic_vals.index(min(aic_vals))
-        opt_params = all_params[min_aic_idx]
-        num_iterations_final = iterations[min_aic_idx]
-        num_sv = len(opt_params[0].mu)
 
-    final_params = opt_params[-1]
+        final_params, num_iterations_final = select_model(
+            x, aic_vals, all_params, iterations
+        )
+        num_sv = len(final_params.mu)
 
     responsibility, x_by_mode, x_index_by_mode = assign_values_to_modes(
         x, num_sv, final_params.mu, final_params.cov, final_params.p
