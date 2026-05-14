@@ -95,9 +95,9 @@ def get_sample_mode_probabilities(
                 if np.isnan(mode_prob):
                     mode_prob = 0
 
-                sample_mode_probabilities[mode_i][evidence.sample.id] = (
-                    mode_prob
-                )
+                sample_mode_probabilities[mode_i][
+                    evidence.sample.id
+                ] = mode_prob
     return sample_mode_probabilities
 
 

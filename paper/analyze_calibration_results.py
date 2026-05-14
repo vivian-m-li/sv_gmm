@@ -120,9 +120,7 @@ def merge_dfs(dir):
         },
         inplace=True,
     )
-    subset_run = pd.read_csv(
-        "data/calibration/sv_subset_sr_lr_nonref.csv"
-    )
+    subset_run = pd.read_csv("data/calibration/sv_subset_sr_lr_nonref.csv")
     subset_run["sv_id"] = subset_run.apply(
         lambda row: f"{giggle_format(row['chr'], row['start'])}_{giggle_format(row['chr'], row['stop'])}",
         axis=1,
@@ -284,7 +282,18 @@ def print_class_distribution():
             "output/calibration/results", best_results_dir, "merged.csv"
         )
     )
+    all_results = pd.read_csv("output/calibration/results/results.csv")
+    row = all_results[
+        (all_results["d"] == best_results["d"])
+        & (all_results["r"] == best_results["r"])
+        & (all_results["q"] == best_results["q"])
+        & (all_results["p"] == best_results["p"])
+    ].iloc[0]
+
     print("Best params: d={}, r={}, q={}, p={}".format(*best_results), "\n")
+    print(
+        f"Accuracy={row['accuracy']:.2f}, Precision={row['precision']:.2f}, Recall={row['recall']:.2f}, F1={row['f1']:.2f}\n"
+    )
     for label in ["tp", "fn", "tn", "fp"]:
         print(label)
         subset = merged[merged["label"] == label]
@@ -298,8 +307,8 @@ def print_class_distribution():
         ]:
             print(
                 col,
+                f"median={np.median(subset[col]):.2f}",
                 f"μ={np.mean(subset[col]):.2f}, std={np.std(subset[col]):.2f}",
-                f"median={np.std(subset[col]):.2f}",
             )
         print("confidence:", subset["confidence"].value_counts())
         print("\n")

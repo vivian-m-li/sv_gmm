@@ -18,8 +18,8 @@ from src.model.dirichlet import run_dirichlet
 from src.utils.model_helper import (
     giggle_format,
     get_query_region,
-    calc_pr_auc,
     get_insert_size_lookup,
+    f1_score,
 )
 from src.utils.write_sv_output import (
     get_raw_data,
@@ -83,12 +83,14 @@ def run_dirichlet_inner(
     d: int,
     r: float,
     pen: int,
+    mult_q: bool,
 ):
-    stix_output_dir = f"{cfg['paths']['stix_output_dir']}_{q}"
-
     # do a deepcopy here so we're not modifying the original cfg values
     cfg_copy = copy.deepcopy(cfg)
-    cfg_copy["paths"]["stix_output_dir"] = stix_output_dir
+
+    if mult_q:
+        stix_output_dir = f"{cfg['paths']['stix_output_dir']}_{q}"
+        cfg_copy["paths"]["stix_output_dir"] = stix_output_dir
 
     # get reads from stix file and filter reference samples
     reads, num_samples = get_raw_data(
@@ -154,13 +156,25 @@ def run_dirichlet_wrapper(
     d: int,
     r: float,
     pen: int,
+    mult_q: bool,
 ):
     try:
         run_dirichlet_inner(
-            row, cfg, output_dir, sample_ids, insert_size_lookup, q, d, r, pen,
+            row,
+            cfg,
+            output_dir,
+            sample_ids,
+            insert_size_lookup,
+            q,
+            d,
+            r,
+            pen,
+            mult_q,
         )
     except Exception as e:
-        print(f"Failed to run dirichlet for {row['chr']}:{row['start']}-{row['stop']} with parameters q={q}, d={d}, r={r}, pen={pen}: {e}")
+        print(
+            f"Failed to run dirichlet for {row['chr']}:{row['start']}-{row['stop']} with parameters q={q}, d={d}, r={r}, pen={pen}: {e}"
+        )
         raise Exception
 
 
@@ -174,6 +188,7 @@ def run_calibration_test(
     pen: int,
     sample_ids: set[str],
     insert_size_lookup: dict[str, int],
+    mult_q: bool,
 ):
     """
     Run a single calibration test for given distance and reciprocal overlap thresholds.
@@ -201,6 +216,7 @@ def run_calibration_test(
                     d,
                     r,
                     pen,
+                    mult_q,
                 )
             )
 
@@ -217,7 +233,9 @@ def run_calibration_test(
     concat_multi_processed_sv_files(
         results_dir, processed_file_dir, "all_split_trials.csv"
     )
-    write_post_processed_files(results_dir, sample_ids, sv_df[["id"]], verbose=False)
+    write_post_processed_files(
+        results_dir, sample_ids, sv_df[["id"]], verbose=False
+    )
     shutil.rmtree(processed_file_dir)
 
     svs_n_modes = pd.read_csv(os.path.join(results_dir, "svs_n_modes.csv"))
@@ -228,22 +246,45 @@ def run_calibration_test(
     results = get_confusion_matrix(sv_df[columns], svs_n_modes, q)
 
     final_output_file = os.path.join(output_dir, "results.csv")
-    if not os.path.exists(final_output_file):
-        with open(final_output_file, "w") as f:
-            f.write("d,r,q,p,TP,FP,FN,TN\n")
-    with open(final_output_file, "a") as f:
-        f.write(
-            "{},{},{},{},{},{},{},{}\n".format(
-                d,
-                r,
-                q,
-                pen,
-                results["TP"],
-                results["FP"],
-                results["FN"],
-                results["TN"],
-            )
+    if os.path.exists(final_output_file):
+        all_results = pd.read_csv(final_output_file)
+    else:
+        all_results = pd.DataFrame(
+            columns=[
+                "d",
+                "r",
+                "q",
+                "p",
+                "TP",
+                "FP",
+                "FN",
+                "TN",
+                "accuracy",
+                "precision",
+                "recall",
+                "f1",
+            ]
         )
+
+    accuracy = (results["TP"] + results["TN"]) / sum(results.values())
+    precision = results["TP"] / (results["TP"] + results["FP"])
+    recall = results["TP"] / (results["TP"] + results["FN"])
+    f1 = 2 * (precision * recall) / (precision + recall)
+    all_results.loc[len(all_results)] = [
+        d,
+        r,
+        q,
+        pen,
+        results["TP"],
+        results["FP"],
+        results["FN"],
+        results["TN"],
+        accuracy,
+        precision,
+        recall,
+        f1,
+    ]
+    all_results.to_csv(final_output_file, index=False)
 
     return results
 
@@ -259,6 +300,7 @@ def run_calibration_bayesian_opt(
     sample_ids: set[str],
     insert_size_lookup: dict[str, int],
     cfg: dict,
+    mult_q: bool,
     *,
     batch_size: int = 1,
     d_min: int,
@@ -321,35 +363,39 @@ def run_calibration_bayesian_opt(
 
     # define the search space
     ax_client = AxClient(generation_strategy=gs, verbose_logging=False)
-    ax_client.create_experiment(
-        name="calibration_experiment",
-        parameters=[
-            {
-                "name": "d",
-                "type": "range",
-                "bounds": [d_min, d_max],
-                "value_type": "int",
-            },
-            {
-                "name": "r",
-                "type": "range",
-                "bounds": [r_min, r_max],
-                "value_type": "float",
-            },
+    parameters = [
+        {
+            "name": "d",
+            "type": "range",
+            "bounds": [d_min, d_max],
+            "value_type": "int",
+        },
+        {
+            "name": "r",
+            "type": "range",
+            "bounds": [r_min, r_max],
+            "value_type": "float",
+        },
+        {
+            "name": "p",
+            "type": "range",
+            "bounds": [p_min, p_max],
+            "value_type": "int",
+        },
+    ]
+    if mult_q:
+        parameters.append(
             {
                 "name": "q",
                 "type": "range",
                 "bounds": [q_min, q_max],
                 "value_type": "float",
             },
-            {
-                "name": "p",
-                "type": "range",
-                "bounds": [p_min, p_max],
-                "value_type": "int",
-            },
-        ],
-        objectives={"pr_auc": ObjectiveProperties(minimize=False)},
+        )
+    ax_client.create_experiment(
+        name="calibration_experiment",
+        parameters=parameters,
+        objectives={"f1": ObjectiveProperties(minimize=False)},
     )
 
     # load pre-existing results
@@ -365,11 +411,10 @@ def run_calibration_bayesian_opt(
                 "q": round(snap_to_grid(row["q"], q_min, q_step), 2),
                 "p": int(row["p"]),
             }
-            score = calc_pr_auc(row["TP"], row["FP"], row["FN"])
             _, trial_index = ax_client.attach_trial(params)
             ax_client.complete_trial(
                 trial_index=trial_index,
-                raw_data={"pr_auc": (score, None)},
+                raw_data={"f1": (row["f1"], None)},
             )
             n_prev_trials += 1
 
@@ -392,7 +437,11 @@ def run_calibration_bayesian_opt(
         for t_index, params in parameterizations.items():
             d = int(params["d"])
             r = round(params["r"], 2)
-            q = round(snap_to_grid(params["q"], q_min, q_step), 2)
+            q = (
+                round(snap_to_grid(params["q"], q_min, q_step), 2)
+                if mult_q
+                else q_min
+            )
             p = int(params["p"])
 
             # this function is parallelized for each SV but runs one calibration test for the given parameters
@@ -405,27 +454,32 @@ def run_calibration_bayesian_opt(
                 pen=p,
                 sample_ids=sample_ids,
                 insert_size_lookup=insert_size_lookup,
+                mult_q=mult_q,
             )
 
         for t_index, params in parameterizations.items():
-            score = calc_pr_auc(results["TP"], results["FP"], results["FN"])
+            score = f1_score(results)
             print(f"Trial {t_index + 1} F1 score = {score:.4f}\n")
             ax_client.complete_trial(
                 trial_index=t_index,
-                raw_data={"pr_auc": (score, None)},
+                raw_data={"f1": (score, None)},
             )
 
     # after BO loop, get the best parameters and run one final calibration test with those parameters to save the outputs
     best_params, metrics = ax_client.get_best_parameters()
     best_d = int(best_params["d"])
     best_r = round(best_params["r"], 2)
-    best_q = round(snap_to_grid(best_params["q"], q_min, q_step), 2)
+    best_q = (
+        round(snap_to_grid(best_params["q"], q_min, q_step), 2)
+        if mult_q
+        else q_min
+    )
     best_p = int(best_params["p"])
 
     print(
         f"Best parameters found by Bayesian Optimization: d={best_d}, r={best_r}, q={best_q}, p={best_p}"
     )
-    print(f"Best F1 score: {metrics[0]['pr_auc']:.4f}")
+    print(f"Best F1 score: {metrics[0]['f1']:.4f}")
 
     best_result = pd.DataFrame(
         [
@@ -434,7 +488,7 @@ def run_calibration_bayesian_opt(
                 "r": best_r,
                 "q": best_q,
                 "p": best_p,
-                "pr_auc": metrics[0]["pr_auc"],
+                "f1": metrics[0]["f1"],
             }
         ]
     )
@@ -448,6 +502,7 @@ def run_calibration_grid_search(
     sample_ids: set[str],
     insert_size_lookup: dict[str, int],
     cfg: dict,
+    mult_q: bool,
     *,
     d_min: int,
     d_max: int,
@@ -477,6 +532,7 @@ def run_calibration_grid_search(
                         pen=pen,
                         sample_ids=sample_ids,
                         insert_size_lookup=insert_size_lookup,
+                        mult_q=mult_q,
                     )
 
 
@@ -520,9 +576,14 @@ def download_stix_data(
     index_path: str,
     database_path: str,
     num_shards: int,
+    *,
+    mult_q: bool = False,
 ):
     """Download stix data for all regions in the subset before running calibration tests."""
-    output_dir = f"{stix_output_dir}_{q}"
+    if mult_q:
+        output_dir = f"{stix_output_dir}_{q}"
+    else:
+        output_dir = stix_output_dir
 
     # set up the correct file paths in case we need to query more SVs
     partial_outputs_dir = os.path.join(output_dir, "partial_outputs")
@@ -584,6 +645,7 @@ def calibrate(cfg: dict):
     for dirname in ["output_dir", "intermediate_output_dir"]:
         os.makedirs(cfg["paths"][dirname], exist_ok=True)
 
+    mult_q = cfg["calibrate"]["q_min"] != cfg["calibrate"]["q_max"]
     for q in np.arange(
         cfg["calibrate"]["q_min"],
         cfg["calibrate"]["q_max"] + 0.01,
@@ -598,6 +660,7 @@ def calibrate(cfg: dict):
             cfg["stix"]["index"],
             cfg["stix"]["database"],
             cfg["stix"]["num_shards"],
+            mult_q=mult_q,
         )
 
     search_func = cfg["calibrate"]["search_func"]
@@ -620,5 +683,6 @@ def calibrate(cfg: dict):
         sample_ids,
         insert_size_lookup,
         cfg,
+        mult_q,
         **calibrate_args,
     )

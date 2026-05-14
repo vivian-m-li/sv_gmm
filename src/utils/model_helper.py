@@ -347,13 +347,15 @@ def reciprocal_overlap(sv1: tuple[int, int], sv2: tuple[int, int]) -> float:
     return min(overlap_length / sv1_length, overlap_length / sv2_length)
 
 
-def calc_pr_auc(tp: float, fp: float, fn: float) -> float:
-    """
-    Compute a scalar PR-AUC proxy from confusion matrix fractions.
-    Approximate PR-AUC using the F1 score.
-    """
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+def f1_score(confusion_mat: dict) -> float:
+    """Calculates the F1 score given a confusion matrix."""
+    TP = confusion_mat["TP"]
+    FP = confusion_mat["FP"]
+    FN = confusion_mat["FN"]
+    if TP == 0:
+        return 0.0
+    precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
+    recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
     if precision + recall == 0:
         return 0.0
-    return 2 * precision * recall / (precision + recall)  # F1
+    return 2 * (precision * recall) / (precision + recall)

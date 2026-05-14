@@ -269,12 +269,12 @@ def get_samples_by_q(q: float):
     Gets the samples that have STIX data available for each query range (q) value.
     Writes the results to a csv file with columns: sv_id, sample_ids_{q} for each q value.
     """
-    filename = "calibration/samples_by_q.csv"
+    filename = "data/calibration/samples_by_q.csv"
     if not os.path.exists(filename):
-        deletions = pd.read_csv("calibration/deletions.csv")
-        subset = pd.read_csv("calibration/sv_subset.csv")
+        deletions = pd.read_csv("data/calibration/deletions.csv")
+        subset = pd.read_csv("data/calibration/sv_subset.csv")
         all_sample_ids = set()
-        with open("calibration/lr_sample_ids.txt", "r") as f:
+        with open("data/calibration/lr_sample_ids.txt", "r") as f:
             for line in f:
                 all_sample_ids.add(line.strip())
 
@@ -303,7 +303,7 @@ def get_samples_by_q(q: float):
             )
             for q in Q_VALS:
                 reads = stix_output_to_df(
-                    f"calibration/stix_output_{q}/{start}_{stop}.txt"
+                    f"data/calibration/stix_output_{q}/{start}_{stop}.txt"
                 )
                 reads = reads[reads["sample_id"].isin(all_sample_ids)]
 
@@ -396,7 +396,7 @@ def subset_svs_from_jaccard(
     genotyping_results_file is a csv file with mandatory columns: svid, jaccard
 
     """
-    intermediate_df_path = "calibration/merged_sv_lookup.csv"
+    intermediate_df_path = "output/calibration/merged_sv_lookup.csv"
     if not os.path.exists(intermediate_df_path):
         # read the sv lookup file
         # if it is a vcf, load it as a dataframe
@@ -523,7 +523,19 @@ def subset_svs_from_jaccard(
             n=n_svs_multi_mode, random_state=42
         )
     else:
-        svs_multi_modes = svs_multi_modes.head(n_svs_multi_mode)
+        # there are way more SVs with jaccard index < 1
+        # we don't want to sort them by # samples because that would bias the model calibration towards
+        # SVs with more samples
+
+        # keep only samples above the min # of samples in the svs_one_mode set, then randomly
+        # sample from the remaining SVs
+        min_n_samples = svs_one_mode["n_samples"].min()
+        svs_multi_modes = svs_multi_modes[
+            svs_multi_modes["n_samples"] >= min_n_samples
+        ]
+        svs_multi_modes = svs_multi_modes.sample(
+            n=n_svs_multi_mode, random_state=42
+        )
 
     print(
         f"Picking {n_svs_one_mode} SVs with jaccard index of 1 and {n_svs_multi_mode} SVs with jaccard index < 1"
@@ -636,12 +648,12 @@ def main():
 if __name__ == "__main__":
     # main()
     subset_svs_from_jaccard(
-        input_dir="calibration",
+        input_dir="data/calibration",
         sv_lookup_file="deletions.csv",
         genotyping_results_file="1k_sr_sv_non_ref-1k_sr_lr_gt_non_ref.bed.gz",
         n_svs=1000,
         filter_lr_samples_only=True,
         random_sampling=False,
         # keep_svs_from="sv_subset.csv",
-        subset_per_q=True,
+        subset_per_q=False,
     )

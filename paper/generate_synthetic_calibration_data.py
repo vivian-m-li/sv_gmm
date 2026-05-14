@@ -132,7 +132,7 @@ def generate_and_write_reads(
             index=False,
         )
 
-    sv_lookup.to_csv(os.path.join(input_dir, "sv_lookup.csv"), index=False)
+    sv_lookup.to_csv(os.path.join(input_dir, "deletions.csv"), index=False)
 
 
 def generate(cfg: dict, n_svs: int) -> None:
