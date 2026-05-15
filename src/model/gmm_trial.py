@@ -653,8 +653,8 @@ def process_data(
                 mean_insert_size=insert_size_lookup[sample_id],
             )
         )
-        # scale this by the SV coordinates so that the points are closer together
 
+        # scale this by the SV coordinates so that the points are closer together
         points.append((svlen - (R - L), med_l - L))  # (length, L-coordinate)
 
     return np.array(points), sv_evidence
@@ -670,6 +670,9 @@ def gmm_trial(
     d_threshold: int = 100,
     r_threshold: float = 0.8,
     max_penalty: int = 200,
+    init: str = "dp_kmeans++",
+    repulsion: bool = False,
+    model_comparison_func: str = "aic",
     min_pairs: int = 2,
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
@@ -698,7 +701,9 @@ def gmm_trial(
         d_threshold=d_threshold,
         r_threshold=r_threshold,
         max_penalty=max_penalty,
-        plot=plot,
+        init=init,
+        repulsion=repulsion,
+        model_comparison_func=model_comparison_func,
     )
 
     if not synthetic_data:
@@ -715,16 +720,17 @@ def gmm_trial(
         plot_2d_coords_fig(
             evidence_by_mode,
             plot_file,
-            **{
-                "L": L,
-                "R": R,
-                "axis1": "L",
-                "axis2": "Length",
-                "size_by": "",
-                "show_mode_stats": False,
-                "show_1d_distributions": False,
-                "insert_size_lookup": insert_size_lookup,
-            },
+            L=L,
+            R=R,
+            axis1="L",
+            axis2="Length",
+            add_error_bars=False,
+            size_by="",
+            show_mode_stats=True,
+            show_1d_distributions=True,
+            insert_size_lookup=insert_size_lookup,
+            repulsion=repulsion,
+            init="kmeans++",
         )
         # plot_single_sv(
         #     evidence_by_mode,

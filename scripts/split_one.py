@@ -167,6 +167,24 @@ def main():
         default=None,
         help="Maximum penalty for spurious cluster suppression",
     )
+    parser.add_argument(
+        "--init",
+        type=str,
+        default=None,
+        help="Initialization method for GMM clustering",
+    )
+    parser.add_argument(
+        "--repulsion",
+        type=bool,
+        default=None,
+        help="Whether to apply cluster repulsion during GMM clustering",
+    )
+    parser.add_argument(
+        "--model_comparison_func",
+        type=str,
+        default=None,
+        help="Model comparison function to use for selecting the best model",
+    )
     args = parser.parse_args()
 
     # load config, then let CLI flags override individual values
@@ -208,6 +226,11 @@ def main():
     d_threshold = _get(args.d_threshold, "model", "d_threshold", 50)
     r_threshold = _get(args.r_threshold, "model", "r_threshold", 0.9)
     max_penalty = _get(args.max_penalty, "model", "max_penalty", 100)
+    init = _get(args.init, "model", "init", "dp_kmeans++")
+    repulsion = _get(args.repulsion, "model", "repulsion", False)
+    model_comparison_func = _get(
+        args.model_comparison_func, "model", "model_comparison_func", "aic"
+    )
 
     l = parse_input(args.l) if args.l is not None else ""  # noqa741
     r = parse_input(args.r) if args.r is not None else ""
@@ -227,6 +250,9 @@ def main():
         d_threshold=d_threshold,
         r_threshold=r_threshold,
         max_penalty=max_penalty,
+        init=init,
+        repulsion=repulsion,
+        model_comparison_func=model_comparison_func,
         stix_bin=stix_bin,
         stix_index=stix_index,
         stix_database=stix_database,

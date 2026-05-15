@@ -107,7 +107,7 @@ def get_reference_samples(
     row = df[(df["start"] == start) & (df["stop"] == stop)]
     if row.empty:  # query region does not correspond with an SV in the callset
         return []
-    samples = reads["sample_id"].tolist()
+    samples = list(reads["sample_id"].unique())
     ref_samples = [
         sample_id for sample_id in samples if row.iloc[0][sample_id] == "(0, 0)"
     ]

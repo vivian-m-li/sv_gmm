@@ -271,9 +271,9 @@ def parameter_sweep(case: str = "B", path: str = ""):
 
     plt.tight_layout(w_pad=0)
     plt.savefig(
-        f"output/plots/parameter_sweep_heatmaps_case{case}{'_'if path else ''}{path}.pdf"
+        f"output/plots/synthetic_data/parameter_sweep_heatmaps_case{case}{'_'if path else ''}{path}.pdf"
     )
-    plt.show()
+    # plt.show()
 
 
 def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
@@ -434,9 +434,9 @@ def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
         hspace=0.37,
     )
     plt.savefig(
-        f"output/plots/synthetic_data_n={sample_size}_len={svlen}{'_'if path else ''}{path}.pdf"
+        f"output/plots/synthetic_data/n={sample_size}_len={svlen}{'_'if path else ''}{path}.pdf"
     )
-    plt.show()
+    # plt.show()
 
 
 def synthetic_data_additional_svs():
@@ -626,12 +626,7 @@ def methods_clustered(ax, svs, reads, insert_size_lookup, num_modes):
         min_pairs=1,
     )
     gmm_result = gmm(points, L=L, R=R, force_n_modes=num_modes)
-    evidence = get_evidence_by_mode(
-        gmm_result,
-        sv_evidence,
-        L,
-        R,
-    )
+    evidence = get_evidence_by_mode(gmm_result, sv_evidence)
 
     plot_2d_coords(
         ax,
@@ -1516,7 +1511,7 @@ def bayesian_optimization_iterations(file: str):
 
 
 if __name__ == "__main__":
-    figures = [5, 6, 7]
+    figures = [2]
 
     # Figure 1
     if 1 in figures:
@@ -1529,9 +1524,9 @@ if __name__ == "__main__":
     if 2 in figures:
         for case in ["B", "C", "D"]:
             parameter_sweep(case, "")
-        # for n_samples in [11, 25, 50, 100, 200, 400]:
-        #     for svlen in [50, 100, 200, 400, 800, 1600, 10000]:
-        #         synthetic_data_fig(n_samples, svlen, "")
+        for n_samples in [11, 25, 50, 100, 200, 400]:
+            for svlen in [50, 100, 200, 400, 800, 1600, 10000]:
+                synthetic_data_fig(n_samples, svlen, "")
         # synthetic_data_additional_svs()
 
     # Figure 3
@@ -1562,4 +1557,4 @@ if __name__ == "__main__":
         plot_num_trials()
 
     if 8 in figures:
-        bayesian_optimization_iterations("calibration/results/bo.out")
+        bayesian_optimization_iterations("output/calibration//bo.out")

@@ -5,7 +5,7 @@ from scipy.stats import dirichlet
 
 from src.model.gmm_trial import gmm_trial
 from src.utils.constants import COLORS
-from src.utils.model_helper import calculate_posteriors, calculate_ci
+from src.utils.model_helper import calculate_posteriors
 from src.utils.types import GMM, Evidence
 from src.utils.viz import plot_2d_coords
 
@@ -159,9 +159,12 @@ def run_dirichlet(
         c. Calculate posterior distributions and confidence intervals.
         d. Check stopping condition based on confidence interval.
     3. Return the outcomes, alpha values, and posterior distributions over all trials.
+
+    If init="kmeans++", then we skip the Dirichlet process and just run a single trial.
     """
     chr, L, R = kwargs["chr"], kwargs["L"], kwargs["R"]
 
+    init = kwargs.get("init", "dp_kmeans++")
     display_output = kwargs.get("plot", False)
 
     alpha = np.array([1, 1, 1])  # initialize alpha values
@@ -170,7 +173,9 @@ def run_dirichlet(
     posterior_distributions = []  # distributions over time
     gmm_results = []  # keep track of output gmms
     n = 0
-    while n < MAX_N:
+
+    max_n_trials = 1 if init == "kmeans++" else MAX_N
+    while n < max_n_trials:
         n += 1  # number of trials
 
         # Run the model to get the next outcome
@@ -180,6 +185,7 @@ def run_dirichlet(
             print(f"{chr}:{L}-{R} - stopping due to gmm_result = None")
             break
 
+        print("result:", gmm_result.num_modes, gmm_result.score)
         gmm_results.append((gmm_result, evidence_by_mode))
         num_modes = gmm_result.num_modes
         counts[num_modes - 1] += 1
@@ -192,19 +198,24 @@ def run_dirichlet(
         p, var = calculate_posteriors(alpha_posterior)
         posterior_distributions.append((p, var))
 
-        # Calculate the confidence interval
-        ci = calculate_ci(p, var, n)
+        # TODO: remove early stopping conditions - run to max # trials
+        # # Calculate the confidence interval
+        # ci = calculate_ci(p, var, n)
 
-        if display_output:
-            print(f"Trial {n}: outcome={num_modes}, probabilities={p}")
+        # if display_output:
+        #     print(f"Trial {n}: outcome={num_modes}, probabilities={p}")
 
-        # Check our stopping condition
-        if ci[0] >= 0.6:
-            if display_output:
-                print(
-                    f"{chr}:{L}-{R} - stopping after {n} iterations, {np.argmax(p) + 1} modes, ci={ci}"
-                )
-            break
+        # # Check our stopping condition
+        # if ci[0] >= 0.6:
+        #     if display_output:
+        #         print(
+        #             f"{chr}:{L}-{R} - stopping after {n} iterations, {np.argmax(p) + 1} modes, ci={ci}"
+        #         )
+        #     break
+
+    _, best_gmm_evidence = min(
+        gmm_results, key=lambda x: x[0].score if x[0] else np.inf
+    )
 
     if display_output:
         # get the file name of the plot
@@ -214,7 +225,7 @@ def run_dirichlet(
         fig, ax = plt.subplots(figsize=(6, 4))
         plot_2d_coords(
             ax,
-            gmm_results[-1][1],
+            best_gmm_evidence,
             L=L,
             R=R,
             axis1="L",
@@ -224,9 +235,8 @@ def run_dirichlet(
             show_mode_stats=True,
             show_1d_distributions=True,
             insert_size_file=insert_size_file,
-            d_threshold=kwargs.get("d_threshold", 100),
-            r_threshold=kwargs.get("r_threshold", 0.8),
-            max_penalty=kwargs.get("max_penalty", 200),
+            repulsion=kwargs.get("repulsion", False),
+            init="dp_kmeans++",
         )
         plt.tight_layout()
         plt.savefig(f"{plot_file}.png", dpi=200)

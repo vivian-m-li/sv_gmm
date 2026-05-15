@@ -44,6 +44,9 @@ def run_split_trial(
             "d_threshold": raw_model.get("d_threshold"),
             "r_threshold": raw_model.get("r_threshold"),
             "max_penalty": raw_model.get("max_penalty"),
+            "init": raw_model.get("init"),
+            "repulsion": raw_model.get("repulsion"),
+            "model_comparison_func": raw_model.get("model_comparison_func"),
         }.items()
         if v is not None
     }
