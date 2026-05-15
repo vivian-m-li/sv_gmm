@@ -110,7 +110,6 @@ def model_penalty(
     overlap_weight = 1 - dist_weight
 
     penalty = dist_weight * d_penalty + overlap_weight * r_penalty
-    scale = sample_size_scale(sample_size)
     return penalty
 
 
@@ -427,14 +426,14 @@ def em(
                 if j == k:
                     continue
                 diff = mu[k] - mu[j]
-                d = np.dot(diff, diff)
+                dist = np.linalg.norm(diff) + 1e-8
 
-                # gaussian repulsive kernel
-                weight = np.exp(-d / (2 * (tau**2)))
+                # decays from 1 (clusters on top of each other) to 0 (far apart)
+                # tau controls the length scale: repulsion is negligible beyond -3*tau
+                weight = np.exp(-dist / tau)
 
-                # repulsive gradient
-                grad = lambda_rep * weight * diff / (tau**2)
-                repulsion_grads[k] += grad
+                # unit vector pointing k away from j, scaled by weight; lambda_rep is redundant
+                repulsion_grads[k] += lambda_rep * weight * (diff / dist)
 
         # update mu with repulsion gradient
         for k in range(num_modes):
@@ -458,9 +457,9 @@ def run_em(
     max_penalty: int = 200,
     init: str = "kmeans++",
     repulsion: bool = False,
-    lambda_rep: float = 5000,
-    tau: float = 350,
-    repulsion_stepsize: float = 1.0,
+    lambda_rep: float = 1,
+    tau: float = 200,
+    repulsion_stepsize: float = 10.0,
 ) -> tuple[list[GMM2D], int]:
     """
     Given a dataset and an estimated number of modes for the GMM, estimates the parameters for each distribution.
@@ -550,7 +549,7 @@ def select_model(x, model_scores, all_params, iterations):
         else:
             valid_model_scores.append(np.inf)
 
-    if np.all(np.isinf(model_scores)):
+    if np.all(np.isinf(valid_model_scores)):
         raise ValueError("No valid models found.")
 
     # get the valid model with the lowest AIC score
@@ -573,8 +572,8 @@ def gmm(
     max_penalty: int = 200,
     init: str = "kmeans++",
     repulsion: bool = False,
-    lambda_rep: float = 5000,
-    tau: float = 350,
+    lambda_rep: float = 1.0,
+    tau: float = 200,
     repulsion_stepsize: float = 10.0,
     model_comparison_func: str = "aic",
     force_n_modes: int | None = None,
