@@ -111,7 +111,7 @@ def model_penalty(
 
     penalty = dist_weight * d_penalty + overlap_weight * r_penalty
     scale = sample_size_scale(sample_size)
-    return penalty * scale
+    return penalty
 
 
 def calc_log_likelihood(
@@ -152,6 +152,9 @@ def calc_log_likelihood(
         with np.errstate(under="ignore"):
             logL += logsumexp(log_pdfs)
 
+    return logL
+
+    # TODO: remove penalties
     # calculate final penalized logL
     penalty = model_penalty(
         mu, len(x), L, R, d_threshold, r_threshold, max_penalty
@@ -168,8 +171,8 @@ def calc_aic(
     num_params = (
         (num_modes * 2) + (num_modes * 3) + (num_modes - 1)
     )  # number of parameters for mu + cov + p - 1
-    # aic = 2k - 2ln(L)
-    aic = (2 * num_params) - (2 * logL)
+    # aic = - 2ln(L) + 2k
+    aic = -(2 * logL) + (2 * num_params)
     return aic
 
 
@@ -218,6 +221,66 @@ def calc_model_score(
         raise ValueError(f"Invalid model selection criterion: {f}")
 
 
+def init_em_random(
+    x: np.ndarray,
+    num_modes: int,
+    L: int,
+    R: int,
+    d_threshold: int,
+    r_threshold: float,
+    max_penalty: int,
+):
+    n = len(x)
+    gaussian_params = []
+
+    # copy scikit-learn's random-from-data initialization approach
+    for _ in range(10):  # try up to 10 times to find valid initial means
+        # randomly assign all points to a component
+        assignments = np.random.randint(0, num_modes, size=n)
+
+        # guarantee that every component gets at least one ponit
+        for k in range(num_modes):
+            if not np.any(assignments == k):
+                # if any component has no points assigned, then assign a random point to that component
+                assignments[np.random.randint(n)] = k
+
+        responsibility = np.zeros((n, num_modes))
+        responsibility[np.arange(n), assignments] = 1
+
+        # raw counts per component
+        counts = (
+            np.sum(responsibility, axis=0)
+            + 10 * np.finfo(responsibility.dtype).eps
+        )
+
+        mu_i = (responsibility.T @ x) / counts[:, np.newaxis]
+
+        # # set the initial responsibility matrix
+        # responsibility = np.zeros((n, num_modes))
+        # indices = np.random.choice(n, num_modes, replace=False)
+        # for col, index in enumerate(indices):
+        #     responsibility[index, col] = 1
+
+        # p_i = (
+        #     np.sum(responsibility, axis=0)
+        #     + 10 * np.finfo(responsibility.dtype).eps
+        # )
+
+        avg_X2 = (responsibility.T @ (x * x)) / counts[:, np.newaxis]
+        avg_means2 = mu_i**2
+        cov_i = avg_X2 - avg_means2 + RESPONSIBILITY_THRESHOLD
+
+        # normalize weights to sum to 1
+        p_i = counts / counts.sum()
+
+        logL_i = calc_log_likelihood(
+            x, mu_i, cov_i, p_i, L, R, d_threshold, r_threshold, max_penalty
+        )
+        gaussian_params.append((mu_i, cov_i, p_i, logL_i))
+
+    return max(gaussian_params, key=lambda x: x[3])
+
+
 def init_em(
     x: np.ndarray,
     num_modes: int,
@@ -226,6 +289,7 @@ def init_em(
     d_threshold: int,
     r_threshold: float,
     max_penalty: int,
+    init: str,
 ) -> tuple[int, np.ndarray, list[np.ndarray], np.ndarray, np.ndarray]:
     """
     Initializes the expectation-maximization algorithm using k-means clustering on the data.
@@ -241,35 +305,42 @@ def init_em(
             f"Too few unique values ({n_unique}) to cluster into {num_modes}"
         )
 
-    # initial conditions
-    kmeans = KMeans(n_clusters=num_modes)
-    kmeans.fit(x)
+    n = len(x)
+    # force kmeans++ initialization if we only had 1 mode since we can easily calculate the mu and cov from the data without running EM
+    if num_modes == 1 or "kmeans++" in init:
+        # initial conditions
+        kmeans = KMeans(n_clusters=num_modes, init="k-means++")
 
-    mu = kmeans.cluster_centers_  # initial means
-    unique, counts = np.unique(kmeans.labels_, return_counts=True)
-    count_lookup = dict(zip(unique, counts))
-    cov = [
-        (
-            np.cov(x[kmeans.labels_ == i].T)
-            if count_lookup[i] > 1
-            else np.eye(x.shape[1])
-        )
-        for i in range(num_modes)
-    ]  # initial covariances, sets a default covariance if only one point in a cluster
-    p = [
-        count_lookup[i] / len(x) for i in range(num_modes)
-    ]  # initial p_k proportions
-    logL = []  # logL values
-    n = len(x)  # sample size
+        # fit the k means model to the data and get the initial cluster centers, covariances, and proportions
+        kmeans.fit(x)
 
-    # initial log-likelihood
-    logL.append(
-        calc_log_likelihood(
+        mu = kmeans.cluster_centers_  # initial means
+        unique, counts = np.unique(kmeans.labels_, return_counts=True)
+        count_lookup = dict(zip(unique, counts))
+        cov = [
+            (
+                np.cov(x[kmeans.labels_ == i].T)
+                if count_lookup[i] > 1
+                else np.eye(x.shape[1])
+            )
+            for i in range(num_modes)
+        ]  # initial covariances, sets a default covariance if only one point in a cluster
+        p = [
+            count_lookup[i] / len(x) for i in range(num_modes)
+        ]  # initial p_k proportions
+
+        logL = calc_log_likelihood(
             x, mu, cov, p, L, R, d_threshold, r_threshold, max_penalty
         )
-    )
+    else:  # default to random init
+        mu, cov, p, logL = init_em_random(
+            x, num_modes, L, R, d_threshold, r_threshold, max_penalty
+        )
 
-    return n, mu, cov, p, logL
+    # initial log-likelihood
+    logLs = [logL]
+
+    return n, mu, cov, p, logLs
 
 
 def calc_responsibility(
@@ -304,7 +375,7 @@ def calc_responsibility(
             distances = [np.linalg.norm(x[i] - mu[k]) for k in range(len(mu))]
             gz[i, np.argmin(distances)] = 1.0
         else:
-            gz[i, :] = densities / densities.sum()
+            gz[i, :] = densities / (densities.sum() + 1e-10)
     return gz
 
 
@@ -399,13 +470,13 @@ def run_em(
     all_params: list[GMM2D] = []
 
     n, mu, cov, p, logL = init_em(
-        x, num_modes, L, R, d_threshold, r_threshold, max_penalty
+        x, num_modes, L, R, d_threshold, r_threshold, max_penalty, init
     )  # initialize parameters
     all_params.append(GMM2D(mu, cov, p, logL[0]))
 
     # only need to estimate mean and covariance matrix if we have 1 mode
-    if num_modes == 1:
-        return all_params, 0
+    if num_modes == 1 or init == "kmeans++":
+        return all_params, 1
 
     max_iterations = 30
     i = 0

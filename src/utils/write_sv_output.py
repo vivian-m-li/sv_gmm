@@ -513,6 +513,8 @@ def get_n_modes(
             sv_df.loc[len(sv_df)] = [sv_id, 1, "inconclusive", 0, 0, np.nan]
             continue
 
+        # TODO: compare model score values to get the "best" distribution
+
         outcomes = rows["num_modes"].values
         counter = Counter(outcomes)
         most_common = counter.most_common(2)
@@ -521,6 +523,7 @@ def get_n_modes(
 
         p, var = calculate_posteriors_from_trials(outcomes)
         ci = calculate_ci(p, var, len(outcomes))
+        # TODO: confidence calculation here will be removed eventually
         new_row = [sv_id, num_modes]
         if ci[0] >= 0.6:
             new_row.append("high")
