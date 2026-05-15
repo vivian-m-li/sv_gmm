@@ -176,8 +176,10 @@ def main():
     parser.add_argument(
         "--repulsion",
         type=bool,
-        default=None,
-        help="Whether to apply cluster repulsion during GMM clustering",
+        default=False,
+        nargs="?",
+        const=False,
+        help="Whether to apply a repulsive force between cluster centers during GMM clustering",
     )
     parser.add_argument(
         "--model_comparison_func",

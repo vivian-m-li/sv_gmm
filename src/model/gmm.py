@@ -320,9 +320,13 @@ def em(
     d_threshold: int,
     r_threshold: float,
     max_penalty: int,
+    repulsion: bool,  # whether to apply a repulsive force to clusters
+    lambda_rep,  # strength of the repulsive force
+    tau,  # interaction radius for the repulsive force
+    repulsion_stepsize,  # step size for applying the repulsive force to cluster centers
 ) -> GMM2D:
     """Performs one iteration of the expectation-maximization algorithm."""
-    # Expectation step: calculate the posterior probabilities
+    # Expectation step: calculate the posterior probabilities using previous parameters (Gaussian distributions)
     gz = calc_responsibility(x, n, mu, cov, p, reassign_small_values=True)
 
     # Ensure that each point contributes to the responsibility matrix above some threshold
@@ -344,6 +348,27 @@ def em(
     ]
     p = nk / n
 
+    # Cluster repulsion - adjust mu using a penalty function to prevent clusters from getting too close to each other and over-clustering
+    if repulsion:
+        repulsion_grads = [np.zeros_like(mu[k]) for k in range(num_modes)]
+        for k in range(num_modes):
+            for j in range(num_modes):
+                if j == k:
+                    continue
+                diff = mu[k] - mu[j]
+                d = np.dot(diff, diff)
+
+                # gaussian repulsive kernel
+                weight = np.exp(-d / (2 * (tau**2)))
+
+                # repulsive gradient
+                grad = lambda_rep * weight * diff / (tau**2)
+                repulsion_grads[k] += grad
+
+        # update mu with repulsion gradient
+        for k in range(num_modes):
+            mu[k] += repulsion_stepsize * repulsion_grads[k]
+
     # update likelihood
     logL = calc_log_likelihood(
         x, mu, cov, p, L, R, d_threshold, r_threshold, max_penalty
@@ -362,6 +387,9 @@ def run_em(
     max_penalty: int = 200,
     init: str = "kmeans++",
     repulsion: bool = False,
+    lambda_rep: float = 5000,
+    tau: float = 350,
+    repulsion_stepsize: float = 1.0,
 ) -> tuple[list[GMM2D], int]:
     """
     Given a dataset and an estimated number of modes for the GMM, estimates the parameters for each distribution.
@@ -395,12 +423,16 @@ def run_em(
             d_threshold,
             r_threshold,
             max_penalty,
+            repulsion,
+            lambda_rep,
+            tau,
+            repulsion_stepsize,
         )
         logL.append(gmm_result.logL)
         all_params.append(gmm_result)
 
         # Convergence check
-        if abs(logL[-1] - logL[-2]) < 0.05:
+        if abs(logL[-1] - logL[-2]) < 1e-3:
             break
 
         i += 1
@@ -470,6 +502,9 @@ def gmm(
     max_penalty: int = 200,
     init: str = "kmeans++",
     repulsion: bool = False,
+    lambda_rep: float = 5000,
+    tau: float = 350,
+    repulsion_stepsize: float = 10.0,
     model_comparison_func: str = "aic",
     force_n_modes: int | None = None,
     plot: bool = False,
@@ -533,6 +568,9 @@ def gmm(
                     max_penalty=max_penalty,
                     init=init,
                     repulsion=repulsion,
+                    lambda_rep=lambda_rep,
+                    tau=tau,
+                    repulsion_stepsize=repulsion_stepsize,
                 )
 
                 responsibility = calc_responsibility(
