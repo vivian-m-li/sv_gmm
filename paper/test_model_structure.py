@@ -1,5 +1,6 @@
 import copy
 import os
+import re
 import time
 
 import pandas as pd
@@ -8,6 +9,10 @@ from scripts.split_all import split_all
 from src.utils.config_loader import load_config
 from src.utils.helper import get_sample_ids
 from src.utils.model_helper import process_input_files, get_insert_size_lookup
+from src.utils.write_sv_output import (
+    concat_multi_processed_sv_files,
+    write_post_processed_files,
+)
 
 
 def write_test_result(name: str, cfg: dict, runtime: float):
@@ -31,13 +36,20 @@ def write_test_result(name: str, cfg: dict, runtime: float):
         df = pd.read_csv(results_file)
 
     truth_set = pd.read_csv(
-        os.path.join(cfg["paths"]["input_dir"], cfg["calibration"]["truth_set"])
+        os.path.join(cfg["paths"]["input_dir"], cfg["calibrate"]["truth_set"])
     )
     # compare results to truth set
     n_modes = pd.read_csv(
         os.path.join(cfg["paths"]["output_dir"], name, "svs_n_modes.csv")
     )
     n_modes = n_modes.rename({"num_modes": "n_svs_predicted"}, axis=1)
+    for i, row in n_modes.iterrows():
+        sv_id = row["sv_id"]
+        match = re.match(r"[\w+]_(\d+):(\d+)_[\d+]:(\d+)", sv_id)
+        chr, start, stop = match.groups()
+        n_modes.at[i, "chr"] = int(chr)
+        n_modes.at[i, "start"] = int(start)
+        n_modes.at[i, "stop"] = int(stop)
     merged = pd.merge(
         truth_set, n_modes, on=["chr", "start", "stop"], how="left"
     )
@@ -79,33 +91,63 @@ def write_test_result(name: str, cfg: dict, runtime: float):
 
 
 def single_test(name: str, cfg: dict, updated_cfg_vals: dict):
+    print("Running test:", name)
     start = time.time()
+
     cfg_copy = copy.deepcopy(cfg)
-    cfg_copy["paths"]["output_dir"] = os.path.join(
-        cfg_copy["paths"]["output_dir"], name
+    input_dir = cfg_copy["paths"]["input_dir"]
+
+    output_dir = os.path.join(cfg_copy["paths"]["output_dir"], name)
+    cfg_copy["paths"]["output_dir"] = output_dir
+
+    intermediate_output_dir = os.path.join(
+        cfg_copy["paths"]["intermediate_output_dir"], name
     )
+    cfg_copy["paths"]["intermediate_output_dir"] = intermediate_output_dir
+
+    os.makedirs(intermediate_output_dir, exist_ok=True)
+
     for k, v in updated_cfg_vals.items():
         cfg_copy["model"][k] = v
 
     sample_ids = get_sample_ids(
         os.path.join(
-            cfg_copy["paths"]["input_dir"],
+            input_dir,
             cfg_copy["input_files"]["sample_id_file"],
         )
     )
     insert_size_lookup = get_insert_size_lookup(
-        cfg_copy["paths"]["input_dir"],
+        input_dir,
         cfg_copy["input_files"]["insert_size_file"],
-        cfg_copy["model"]["default_inset_size"],
+        cfg_copy["model"]["default_insert_size"],
         sample_ids,
     )
 
     split_all(cfg_copy, sample_ids, insert_size_lookup)
 
-    end = time.time()
+    concat_multi_processed_sv_files(
+        output_dir, intermediate_output_dir, "all_split_trials.csv"
+    )
+    sv_lookup = pd.read_csv(
+        os.path.join(input_dir, cfg["input_files"]["sv_lookup_file"]),
+        low_memory=False,
+    )
+    write_post_processed_files(
+        output_dir,
+        sample_ids,
+        sv_lookup,
+        ancestry_file=os.path.join(
+            input_dir, cfg["input_files"].get("ancestry_file")
+        ),
+    )
+
     # convert runtime to hours
+    end = time.time()
     runtime = (end - start) / 3600
+
     write_test_result(name, cfg, runtime=runtime)
+
+    print("Finished running test:", name, "Runtime (hours):", runtime)
 
 
 def test_model_structure(cfg: dict):
@@ -114,6 +156,7 @@ def test_model_structure(cfg: dict):
         cfg["input_files"]["sv_lookup_file"],
         cfg["input_files"]["sample_id_file"],
         cfg["input_files"]["insert_size_file"],
+        None,
     )
 
     # Baseline: run with the default config
@@ -147,6 +190,6 @@ if __name__ == "__main__":
         "intermediate_output_dir"
     ] = "output/synthetic_calibration/calibration_outputs"
     cfg["input_files"]["sv_lookup_file"] = "deletions.csv"
-    cfg["calibration"]["truth_set"] = "sv_subset.csv"
+    cfg["calibrate"]["truth_set"] = "sv_subset.csv"
 
     test_model_structure(cfg)

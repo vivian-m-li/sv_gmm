@@ -108,6 +108,7 @@ def init_sv_stat_row(
         alt=row.get("alt"),
         qual=row.get("qual"),
         af=row.get("af"),
+        score=999999,
         num_samples=num_samples,
         num_samples_run=0,
         num_pruned=0,
@@ -194,6 +195,7 @@ def write_sv_stats(
     sv_stat.num_pruned = sum(gmm_result.num_pruned) + len(gmm_result.outliers)
     sv_stat.num_modes = gmm_result.num_modes
     sv_stat.num_iterations = gmm_result.num_iterations
+    sv_stat.score = gmm_result.score
 
     all_svlen = get_svlen(evidence_by_mode)
     sv_stat.svlen_post = int(
@@ -206,7 +208,7 @@ def write_sv_stats(
     num_samples_run = 0
     for i, mode in enumerate(evidence_by_mode):
         if len(mode) == 0:
-            print(f"Missing mode data for {sv_stat}")
+            print(f"Missing mode data for {sv_stat}\n")
             continue
         sample_ids = [e.sample.id for e in mode]
         num_samples = len(sample_ids)
@@ -513,25 +515,23 @@ def get_n_modes(
             sv_df.loc[len(sv_df)] = [sv_id, 1, "inconclusive", 0, 0, np.nan]
             continue
 
-        # TODO: compare model score values to get the "best" distribution
+        # pick the model with the best (minimum) score
+        best_score = min(rows["score"].values)
+        best_gmm = rows[rows["score"] == best_score].iloc[0]
 
+        new_row = [sv_id, best_gmm["num_modes"]]
+
+        # TODO: confidence calculation here will be removed eventually
         outcomes = rows["num_modes"].values
-        counter = Counter(outcomes)
-        most_common = counter.most_common(2)
-        num_modes = max(1, most_common[0][0])
-        num_modes_2 = int(most_common[1][0]) if len(counter) > 1 else np.nan
-
         p, var = calculate_posteriors_from_trials(outcomes)
         ci = calculate_ci(p, var, len(outcomes))
-        # TODO: confidence calculation here will be removed eventually
-        new_row = [sv_id, num_modes]
         if ci[0] >= 0.6:
             new_row.append("high")
         elif ci[0] >= 0.3:
             new_row.append("medium")
         else:
             new_row.append("low")
-        new_row.extend([ci[0][0], ci[1][0], num_modes_2])
+        new_row.extend([ci[0][0], ci[1][0], np.nan])
 
         sv_df.loc[len(sv_df)] = new_row
     sv_df.to_csv(os.path.join(output_dir, "svs_n_modes.csv"), index=False)

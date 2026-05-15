@@ -8,6 +8,13 @@ from src.utils.types import GMM2D, EstimatedGMM2D
 
 RESPONSIBILITY_THRESHOLD = 1e-10
 
+
+class TooFewUniqueValuesError(Exception):
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
+
+
 # ------------------------------
 # GMM/EM helper functions
 # ------------------------------
@@ -300,7 +307,7 @@ def init_em(
     unique_vals = np.unique(x, axis=0)
     n_unique = len(unique_vals)
     if n_unique < num_modes:
-        raise ValueError(
+        raise TooFewUniqueValuesError(
             f"Too few unique values ({n_unique}) to cluster into {num_modes}"
         )
 
@@ -530,36 +537,32 @@ def assign_values_to_modes(
     return gz, x_by_mode, x_index_by_mode
 
 
-def select_model(x, model_scores, all_params, iterations):
+def select_model(x: np.ndarray, model_results: dict):
     """
     Selects the optimal GMM model based on the AIC scores. Checks that each
     model is valid by verifying that all clusters have at least one data point
     assigned to them.
     """
-    # only consider models that are valid
-    valid_model_scores = []
-    for i, gmm_params in enumerate(all_params):
-        last_iter = gmm_params[-1]
+    best_model = None
+    for i, model in enumerate(model_results.values()):
+        if not model["valid"]:
+            continue
+
+        last_iter = model["params"][-1]
         gz = calc_responsibility(
             x, len(x), last_iter.mu, last_iter.cov, last_iter.p
         )
         assignments = np.argmax(gz, axis=1)
-        if len(set(assignments)) == len(last_iter.mu):
-            valid_model_scores.append(model_scores[i])
-        else:
-            valid_model_scores.append(np.inf)
+        if len(set(assignments)) != len(last_iter.mu):
+            continue
 
-    if np.all(np.isinf(valid_model_scores)):
+        if best_model is None or model["score"] < best_model["score"]:
+            best_model = model
+
+    if best_model is None:
         raise ValueError("No valid models found.")
 
-    # get the valid model with the lowest AIC score
-    min_score_idx = valid_model_scores.index(min(valid_model_scores))
-
-    opt_params = all_params[min_score_idx]
-    num_iterations_final = iterations[min_score_idx]
-    final_params = opt_params[-1]
-
-    return final_params, num_iterations_final
+    return best_model
 
 
 def gmm(
@@ -610,19 +613,19 @@ def gmm(
             num_iterations=0,
         )
 
-    outliers = []
-    model_scores = []
     if len(x) <= 10:  # small number of samples detected
         opt_params, num_iterations = run_em(
             x, num_modes=1, L=L, R=R, init="kmeans++"
         )
-        num_iterations_final = num_iterations
-        num_sv = 1
-
-        final_params = opt_params[-1]
+        best_model = {
+            "valid": True,
+            "num_sv": 1,
+            "score": np.inf,
+            "params": opt_params,
+            "num_iterations": num_iterations,
+        }
     else:
-        all_params = []
-        iterations = []
+        model_results = {}
         mode_options = (
             [force_n_modes] if force_n_modes is not None else range(1, 4)
         )
@@ -654,51 +657,44 @@ def gmm(
                     f=model_comparison_func,
                 )
 
-            except ValueError:
-                params = [
-                    GMM2D(
-                        mu=[[0, 0] for _ in range(num_modes)],
-                        cov=[[np.inf, np.inf] for _ in range(num_modes)],
-                        p=[1 / num_modes for _ in range(num_modes)],
-                        logL=-np.inf,
-                    )
-                ]
-                model_score = np.inf
-                num_iterations = 0
+            except TooFewUniqueValuesError:
+                model_results[num_modes] = {
+                    "valid": False,
+                    "num_sv": num_modes,
+                    "score": np.inf,
+                    "params": [],
+                    "num_iterations": 0,
+                }
 
-            all_params.append(params)
-            iterations.append(num_iterations)
-            model_scores.append(model_score)
+            model_results[num_modes] = {
+                "valid": True,
+                "num_sv": num_modes,
+                "score": model_score,
+                "params": params,
+                "num_iterations": num_iterations,
+            }
 
-        final_params, num_iterations_final = select_model(
-            x, model_scores, all_params, iterations
-        )
-        num_sv = len(final_params.mu)
+        best_model = select_model(x, model_results)
+
+    final_iter = best_model["params"][-1]
+    num_sv = best_model["num_sv"]
 
     responsibility, x_by_mode, x_index_by_mode = assign_values_to_modes(
-        x, num_sv, final_params.mu, final_params.cov, final_params.p
-    )
-
-    best_score = calc_model_score(
-        final_params.logL,
-        num_sv,
-        len(x),
-        responsibility,
-        f=model_comparison_func,
+        x, num_sv, final_iter.mu, final_iter.cov, final_iter.p
     )
 
     return EstimatedGMM2D(
-        mu=final_params.mu,
-        cov=final_params.cov,
-        p=final_params.p,
+        mu=final_iter.mu,
+        cov=final_iter.cov,
+        p=final_iter.p,
         num_modes=num_sv,
-        logL=final_params.logL,
-        score=best_score,
-        outliers=outliers,
+        logL=final_iter.logL,
+        score=best_model["score"],
+        outliers=[],  # this has been deprecated
         window_size=(min(x[:, 0]), max(x[:, 0])),
         x_by_mode=x_by_mode,
         x_index_by_mode=x_index_by_mode,
         responsibility=responsibility,
         num_pruned=[0 for _ in range(num_sv)],
-        num_iterations=num_iterations_final,
+        num_iterations=best_model["num_iterations"],
     )

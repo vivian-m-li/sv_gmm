@@ -58,8 +58,7 @@ intermediate_output_dir = "output/synthetic_calibration/calibration_outputs"
 
 # VCF or CSV file listing structural variants.
 # Supported formats: .vcf, .vcf.gz, .csv
-# sv_lookup_file = "1kg.subset.csv"
-sv_lookup_file = "deletions.csv"
+sv_lookup_file = "1kg.subset.csv"
 
 # txt file with one row for each sample ID
 sample_id_file = "sample_ids.txt"

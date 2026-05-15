@@ -130,6 +130,7 @@ class SVInfoGMM:
     ref: str | None
     alt: str | None
     qual: str | None
+    score: float
     # filter: list[str]
     af: str | None
     # info: dict
