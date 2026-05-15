@@ -206,6 +206,10 @@ def run_dirichlet(
                 )
             break
 
+    _, best_gmm_evidence = min(
+        gmm_results, key=lambda x: x[0].score if x[0] else np.inf
+    )
+
     if display_output:
         # get the file name of the plot
         plot_file = kwargs["plot_file"]
@@ -214,7 +218,7 @@ def run_dirichlet(
         fig, ax = plt.subplots(figsize=(6, 4))
         plot_2d_coords(
             ax,
-            gmm_results[-1][1],
+            best_gmm_evidence,
             L=L,
             R=R,
             axis1="L",
