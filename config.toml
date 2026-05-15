@@ -15,18 +15,18 @@
 
 # Directory containing your input data (VCF/CSV callset, sample IDs, insert
 # sizes, etc.).
-input_dir = "data/1kg"
+# input_dir = "data/1kg"
 
 # Directory where results will be written.
-output_dir = "output/results"
+# output_dir = "output/results"
 
 # Sub-directory where raw STIX query output files are cached between runs.
-stix_output_dir = "output/stix_output"
+# stix_output_dir = "output/stix_output"
 
 # Intermediate directory used during processing.
 # On HPC clusters, point this to a fast local scratch filesystem.
 # On a local machine, a subdirectory of output_dir is fine.
-intermediate_output_dir = "/scratch/Users/vili4418/processed_svs"
+# intermediate_output_dir = "/scratch/Users/vili4418/processed_svs"
 
 # Local directory to store intermediate output files.
 # Files are first written to intermediate_output_dir, then moved to
@@ -36,11 +36,17 @@ local_intermediate_output_dir = "output/results/processed_svs"
 # enable this when running query_stix_all.py
 # stix_output_dir = "/scratch/Users/vili4418/stix_output"
 
-# use these paths when running calibrate_model.py
+# use these paths when running calibrate_model.py on 1kg data
 # input_dir = "data/calibration"
 # output_dir = "output/calibration/results"
 # stix_output_dir = "output/calibration/stix_output"
 # intermediate_output_dir = "output/calibration/calibration_outputs"
+
+# use these paths when running calibrate_model.py on synthetic data
+input_dir = "data/synthetic_calibration"
+output_dir = "output/synthetic_calibration/results"
+stix_output_dir = "output/synthetic_calibration/stix_output"
+intermediate_output_dir = "output/synthetic_calibration/calibration_outputs"
 
 # use these paths when running synthetic_tests.py
 # output_dir = "output/synthetic_tests"
@@ -52,7 +58,8 @@ local_intermediate_output_dir = "output/results/processed_svs"
 
 # VCF or CSV file listing structural variants.
 # Supported formats: .vcf, .vcf.gz, .csv
-sv_lookup_file = "1kg.subset.csv"
+# sv_lookup_file = "1kg.subset.csv"
+sv_lookup_file = "deletions.csv"
 
 # txt file with one row for each sample ID
 sample_id_file = "sample_ids.txt"
@@ -115,6 +122,14 @@ r_threshold = 0.4
 # Maximum penalty term for spurious cluster suppression.
 max_penalty = 537
 
+# Initialization method for GMM clustering. Supported algorithms: dp_k-means++, k-means++ or random.
+init = "dp_kmeans++"
+
+# Whether to apply cluster repulsion to GMM clustering
+repulsion = "False"
+
+# Model comparison function to use for selecting the best model. Supported options: AIC, BIC, ICL
+model_comparison_func = "aic"
 
 # ------------------------------------------------------------------------------
 # [calibrate] — Model calibration parameters
@@ -129,6 +144,9 @@ truth_set = "sv_subset.csv"
 # Search function to use for calibration.
 # Supported algorithms: bo (bayesian optimization) or grid (grid search)
 search_func = "bo"
+
+# Total number of trials
+n_trials = 30
 
 # HYPERPARAMETER BOUNDARIES
 # Specify the min and max values the parameter can take. If using grid search,
@@ -148,7 +166,7 @@ r_step = 0.05
 
 # Fraction of the SV length that a flanking read is allowed to overlap the SV
 # region and still be included.
-q_min = 0.6
+q_min = 1.0
 q_max = 1.0
 q_step = 0.1
 
