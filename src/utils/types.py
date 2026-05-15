@@ -36,7 +36,7 @@ class SampleData(GaussianDistribution1D):
 class EstimatedGMM:
     num_modes: int
     logL: float | None
-    aic: float | None
+    score: float | None
     outliers: list[float]
     window_size: tuple[int, int]
     x_by_mode: list[np.ndarray[int]]

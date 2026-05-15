@@ -173,6 +173,51 @@ def calc_aic(
     return aic
 
 
+def calc_bic(
+    logL: float,
+    num_modes: int,
+    num_samples: int,
+) -> float:
+    """Calculates the penalized log-likelihood using BIC."""
+    num_params = (
+        (num_modes * 2) + (num_modes * 3) + (num_modes - 1)
+    )  # number of parameters for mu + cov + p - 1
+    bic = -(2 * logL) + (num_params * np.log(num_samples))
+    return bic
+
+
+def calc_icl(
+    logL: float,
+    num_modes: int,
+    num_samples: int,
+    gz: np.ndarray,
+) -> float:
+    """Calculates the penalized log-likelihood using ICL."""
+    bic = calc_bic(logL, num_modes, num_samples)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        entropy = -2 * np.nansum(gz * np.log(gz))
+    icl = bic + entropy
+    return icl
+
+
+def calc_model_score(
+    logL: float,
+    num_modes: int,
+    num_samples: int,
+    gz: np.ndarray,
+    f: str = "aic",
+) -> float:
+    """Calculates the penalized log-likelihood using the specified model selection criterion."""
+    if f == "aic":
+        return calc_aic(logL, num_modes)
+    elif f == "bic":
+        return calc_bic(logL, num_modes, num_samples)
+    elif f == "icl":
+        return calc_icl(logL, num_modes, num_samples, gz)
+    else:
+        raise ValueError(f"Invalid model selection criterion: {f}")
+
+
 def init_em(
     x: np.ndarray,
     num_modes: int,
@@ -383,15 +428,14 @@ def assign_values_to_modes(
     return gz, x_by_mode, x_index_by_mode
 
 
-def select_model(x, aic_vals, all_params, iterations):
+def select_model(x, model_scores, all_params, iterations):
     """
     Selects the optimal GMM model based on the AIC scores. Checks that each
     model is valid by verifying that all clusters have at least one data point
     assigned to them.
     """
     # only consider models that are valid
-    valid_models = []
-    min_aic = np.inf
+    valid_model_scores = []
     for i, gmm_params in enumerate(all_params):
         last_iter = gmm_params[-1]
         gz = calc_responsibility(
@@ -399,17 +443,18 @@ def select_model(x, aic_vals, all_params, iterations):
         )
         assignments = np.argmax(gz, axis=1)
         if len(set(assignments)) == len(last_iter.mu):
-            valid_models.append(i)
-            if aic_vals[i] < min_aic:
-                min_aic = aic_vals[i]
+            valid_model_scores.append(model_scores[i])
+        else:
+            valid_model_scores.append(np.inf)
 
-    if len(valid_models) == 0:
+    if np.all(np.isinf(model_scores)):
         raise ValueError("No valid models found.")
 
     # get the valid model with the lowest AIC score
-    min_aic_idx = aic_vals.index(min_aic)
-    opt_params = all_params[min_aic_idx]
-    num_iterations_final = iterations[min_aic_idx]
+    min_score_idx = valid_model_scores.index(min(valid_model_scores))
+
+    opt_params = all_params[min_score_idx]
+    num_iterations_final = iterations[min_score_idx]
     final_params = opt_params[-1]
 
     return final_params, num_iterations_final
@@ -449,8 +494,8 @@ def gmm(
             ],  # can't determine the covariance for only one pair of points
             p=[1],
             num_modes=1,
-            logL=0,
-            aic=0,
+            logL=-9999999,
+            score=9999999,
             outliers=[],
             window_size=(singleton, singleton),
             x_by_mode=[np.array(x)],
@@ -461,7 +506,7 @@ def gmm(
         )
 
     outliers = []
-    aic_vals = []
+    model_scores = []
     if len(x) <= 10:  # small number of samples detected
         opt_params, num_iterations = run_em(
             x, num_modes=1, L=L, R=R, init="kmeans++"
@@ -489,7 +534,18 @@ def gmm(
                     init=init,
                     repulsion=repulsion,
                 )
-                aic = calc_aic(params[-1].logL, num_modes)
+
+                responsibility = calc_responsibility(
+                    x, len(x), params[-1].mu, params[-1].cov, params[-1].p
+                )
+                model_score = calc_model_score(
+                    params[-1].logL,
+                    num_modes,
+                    len(x),
+                    responsibility,
+                    f=model_comparison_func,
+                )
+
             except ValueError:
                 params = [
                     GMM2D(
@@ -499,20 +555,28 @@ def gmm(
                         logL=-np.inf,
                     )
                 ]
-                aic = np.inf
+                model_score = np.inf
                 num_iterations = 0
 
             all_params.append(params)
             iterations.append(num_iterations)
-            aic_vals.append(aic)
+            model_scores.append(model_score)
 
         final_params, num_iterations_final = select_model(
-            x, aic_vals, all_params, iterations
+            x, model_scores, all_params, iterations
         )
         num_sv = len(final_params.mu)
 
     responsibility, x_by_mode, x_index_by_mode = assign_values_to_modes(
         x, num_sv, final_params.mu, final_params.cov, final_params.p
+    )
+
+    best_score = calc_model_score(
+        final_params.logL,
+        num_sv,
+        len(x),
+        responsibility,
+        f=model_comparison_func,
     )
 
     return EstimatedGMM2D(
@@ -521,7 +585,7 @@ def gmm(
         p=final_params.p,
         num_modes=num_sv,
         logL=final_params.logL,
-        aic=min(aic_vals) if len(aic_vals) > 0 else None,
+        score=best_score,
         outliers=outliers,
         window_size=(min(x[:, 0]), max(x[:, 0])),
         x_by_mode=x_by_mode,
