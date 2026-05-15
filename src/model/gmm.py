@@ -308,13 +308,15 @@ def em(
 
 def run_em(
     x: np.ndarray,  # data
+    *,
     num_modes: int,
     L: int,
     R: int,
     d_threshold: int = 100,
     r_threshold: float = 0.8,
     max_penalty: int = 200,
-    plot: bool = False,
+    init: str = "kmeans++",
+    repulsion: bool = False,
 ) -> tuple[list[GMM2D], int]:
     """
     Given a dataset and an estimated number of modes for the GMM, estimates the parameters for each distribution.
@@ -421,8 +423,11 @@ def gmm(
     d_threshold: int = 100,
     r_threshold: float = 0.8,
     max_penalty: int = 200,
-    plot: bool = False,
+    init: str = "kmeans++",
+    repulsion: bool = False,
+    model_comparison_func: str = "aic",
     force_n_modes: int | None = None,
+    plot: bool = False,
 ) -> EstimatedGMM2D | None:
     """
     Runs the GMM estimation process to determine the number of structural variants in a DNA reading frame.
@@ -459,7 +464,7 @@ def gmm(
     aic_vals = []
     if len(x) <= 10:  # small number of samples detected
         opt_params, num_iterations = run_em(
-            x, 1, L, R, d_threshold, r_threshold, max_penalty, plot
+            x, num_modes=1, L=L, R=R, init="kmeans++"
         )
         num_iterations_final = num_iterations
         num_sv = 1
@@ -475,13 +480,14 @@ def gmm(
             try:
                 params, num_iterations = run_em(
                     x,
-                    num_modes,
-                    L,
-                    R,
-                    d_threshold,
-                    r_threshold,
-                    max_penalty,
-                    plot,
+                    num_modes=num_modes,
+                    L=L,
+                    R=R,
+                    d_threshold=d_threshold,
+                    r_threshold=r_threshold,
+                    max_penalty=max_penalty,
+                    init=init,
+                    repulsion=repulsion,
                 )
                 aic = calc_aic(params[-1].logL, num_modes)
             except ValueError:

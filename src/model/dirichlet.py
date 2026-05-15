@@ -224,9 +224,8 @@ def run_dirichlet(
             show_mode_stats=True,
             show_1d_distributions=True,
             insert_size_file=insert_size_file,
-            d_threshold=kwargs.get("d_threshold", 100),
-            r_threshold=kwargs.get("r_threshold", 0.8),
-            max_penalty=kwargs.get("max_penalty", 200),
+            init=kwargs.get("init", "kmeans++"),
+            repulsion=kwargs.get("repulsion", False),
         )
         plt.tight_layout()
         plt.savefig(f"{plot_file}.png", dpi=200)
