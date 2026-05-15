@@ -33,7 +33,7 @@ def generate_and_write_deletions(
             svlen = int(rng.lognormal(mean=6, sigma=1.0))
             if svlen > 50:
                 break
-        r = random.uniform(0.05, 0.95)
+        r = random.uniform(0.4, 0.95)
 
         _, _, generated_svs = generate_sv_coordinates(
             case, svlen, r=r, start=start
