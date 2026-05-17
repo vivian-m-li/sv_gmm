@@ -120,6 +120,41 @@ def model_penalty(
     return penalty
 
 
+def regularize_covariance(cov: list[np.ndarray]) -> np.ndarray:
+    """Symmetrizes the covariance matrix and adds jitter to the diagonal until it is positive definite."""
+    regularized_cov = []
+    for mode_cov in cov:
+        dim = mode_cov.shape[0]
+
+        # NaN/Inf can't be fixed by jitter — fall back to identity immediately
+        if not np.all(np.isfinite(mode_cov)):
+            regularized_cov.append(np.eye(dim))
+            continue
+
+        c = (mode_cov + mode_cov.T) / 2  # enforce symmetry
+        jitter = 1e-6
+        for i in range(11):
+            try:
+                np.linalg.cholesky(c)  # cheapest SPD check
+                break
+            except np.linalg.LinAlgError:
+                if i == 10:
+                    # all 10 attempts failed — fall back to a safe diagonal matrix
+                    # scaled by the mean variance to stay in the right ballpark
+                    variance = np.nanmean(np.diag(mode_cov))
+                    c = np.eye(dim) * (
+                        variance
+                        if np.isfinite(variance) and variance > 0
+                        else 1.0
+                    )
+                else:
+                    c = c + np.eye(c.shape[0]) * jitter
+                    # grow jitter exponentially so we actually escape
+                    jitter *= 10
+        regularized_cov.append(c)
+    return regularized_cov
+
+
 def calc_log_likelihood(
     x: np.ndarray,
     mu: list[np.ndarray],
@@ -133,26 +168,18 @@ def calc_log_likelihood(
 ) -> float:
     """Calculates the log-likelihood of the data fitting the GMM."""
     num_modes = len(mu)
+    regularized_cov = regularize_covariance(cov)
+
     logL = 0.0
     for i in range(len(x)):
         log_pdfs = []
         for k in range(num_modes):
-            log_pdf_i = None
-            iters = 0
-            while log_pdf_i is None:
-                try:
-                    log_pdf_i = np.log(p[k]) + multivariate_normal.logpdf(
-                        x[i], mu[k], cov[k]
-                    )
-                except np.linalg.LinAlgError:
-                    # if the covariance matrix is not positive definite, add a small value to the diagonal and try again
-                    cov[k] += np.eye(cov[k].shape[0]) * 1e-6
-                    iters += 1
-
-                    # break after too many iterations
-                    if iters > 10:
-                        log_pdf_i = -np.inf
-
+            try:
+                log_pdf_i = np.log(p[k]) + multivariate_normal.logpdf(
+                    x[i], mu[k], regularized_cov[k]
+                )
+            except np.linalg.LinAlgError:
+                log_pdf_i = -np.inf
             log_pdfs.append(log_pdf_i)
 
         with np.errstate(under="ignore"):
@@ -363,25 +390,49 @@ def calc_responsibility(
     Returns a matrix of size (number of samples) x (number of modes) where each entry represents the probability that a proint belongs to a particular mode.
     If reassign_small_values is True, then we reassign points with a very small responsibility to the nearest cluster based on distance. This forces each point to contribute to the parameter estimates of at least one cluster.
     """
-    gz = np.zeros((n, len(mu)))  # number of points by number of modes
-    for i in range(len(x)):
-        # For each point, calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
-        densities = np.array(
-            [
-                p[k] * multivariate_normal.pdf(x[i], mu[k], cov[k])
-                for k in range(len(mu))
-            ]
-        )
+    regularized_cov = regularize_covariance(cov)
+    num_modes = len(mu)
+    gz = np.zeros((n, num_modes))  # number of points by number of modes
 
-        if reassign_small_values and (
-            np.all(densities <= RESPONSIBILITY_THRESHOLD)
-            or np.any(np.isnan(densities))
-        ):
-            # find the nearest cluster based on distance and assign responsibility of 1 to that cluster
-            distances = [np.linalg.norm(x[i] - mu[k]) for k in range(len(mu))]
-            gz[i, np.argmin(distances)] = 1.0
+    # compute responsibility for all points
+    # calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
+    for i in range(len(x)):
+        densities = []
+        for k in range(num_modes):
+            try:
+                density_k = p[k] * multivariate_normal.pdf(
+                    x[i], mu[k], regularized_cov[k]
+                )
+            except np.linalg.LinAlgError:
+                density_k = 0.0
+            densities.append(density_k)
+        densities = np.array(densities)
+
+        total = densities.sum()
+        if np.any(np.isnan(densities)) or total <= 1e-10:
+            # point is ambiguous — defer to the next step if reassign_small_values, otherwise assign uniform responsibility
+            gz[i, :] = np.nan if reassign_small_values else (1.0 / num_modes)
         else:
-            gz[i, :] = densities / (densities.sum() + 1e-10)
+            gz[i, :] = densities / total
+
+    # for each cluster with no ownership over any points, assign the nearest point to that cluster
+    if reassign_small_values:
+        for k in range(num_modes):
+            col = gz[:, k]
+            # a cluster is "empty" if its total responsibility is below threshold
+            if np.nansum(col) <= RESPONSIBILITY_THRESHOLD:
+                distances = [
+                    np.linalg.norm(x[i] - mu[k]) for i in range(len(x))
+                ]
+                nearest = np.argmin(distances)
+                # assign full responsibility to the nearest point for this cluster
+                gz[nearest, :] = 0.0
+                gz[nearest, k] = 1.0
+
+        # replace any remaining nans (ambiguous points not reassigned) with uniform
+        nan_rows = np.where(np.any(np.isnan(gz), axis=1))[0]
+        gz[nan_rows, :] = 1.0 / num_modes
+
     return gz
 
 
