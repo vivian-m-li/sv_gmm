@@ -23,12 +23,15 @@ from src.model.gmm_trial import gmm_trial
 
 def amend_sv_subset():
     """
-    Amends the sv_subset.csv file to include a "r" column after calculating the reciprocal overlap for each SV.
+    Amends the sv_subset.csv file to include:
+        - "r" column after calculating the reciprocal overlap for each SV
+        - "n" column for the number of nonref samples for the SV
     """
     dir = "data/synthetic_calibration"
 
     truth_set = pd.read_csv(os.path.join(dir, "sv_subset.csv"))
     truth_set["r"] = 0.0
+    truth_set["n"] = 0
 
     sample_ids = get_sample_ids(os.path.join(dir, "sample_ids.txt"))
     insert_size_lookup = get_insert_size_lookup(
@@ -36,10 +39,6 @@ def amend_sv_subset():
     )
 
     for row_idx, row in truth_set.iterrows():
-        n_svs_actual = int(row["n_svs_actual"])
-        if n_svs_actual == 1:
-            continue
-
         chr = str(int(row["chr"]))
         start = int(row["start"])
         stop = int(row["stop"])
@@ -49,6 +48,12 @@ def amend_sv_subset():
             f"{chr}:{start}_{chr}:{stop}.txt",
         )
         reads = stix_output_to_df(stix_file)
+        truth_set.at[row_idx, "n"] = len(reads["sample_id"].unique())
+
+        n_svs_actual = int(row["n_svs_actual"])
+        if n_svs_actual == 1:
+            continue
+
         gmm_result, evidence_by_mode = gmm_trial(
             reads,
             chr=chr,
