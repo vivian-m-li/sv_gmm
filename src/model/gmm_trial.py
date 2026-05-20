@@ -679,6 +679,7 @@ def gmm_trial(
     stem: str = "1kg",
     plot: bool = True,
     plot_file: str | None = None,
+    force_n_modes: int | None = None,
 ):
     """Runs the GMM pipeline and visualizes the results."""
     # transforms data to cluster
@@ -705,6 +706,7 @@ def gmm_trial(
         repulsion=repulsion,
         model_comparison_func=model_comparison_func,
         plot=plot,
+        force_n_modes=force_n_modes,
     )
 
     if not synthetic_data:

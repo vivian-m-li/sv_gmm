@@ -222,34 +222,33 @@ def write_sv_stats(
         lengths = []
         starts = []
         ends = []
-        min_start = float("inf")
-        max_end = float("-inf")
         for evidence in mode:
-            mean_l = np.mean(
+            med_l = np.median(
                 [paired_end[0] for paired_end in evidence.paired_ends]
             )
-            mean_r = np.mean(
+            med_r = np.median(
                 [paired_end[1] for paired_end in evidence.paired_ends]
             )
-            mean_length = np.mean(
+            med_length = np.median(
                 [
                     paired_end[1] - paired_end[0] - evidence.mean_insert_size
                     for paired_end in evidence.paired_ends
                 ]
             )
-            lengths.append(mean_length)
-            starts.append(mean_l)
-            ends.append(mean_r)
-            min_start = min(min_start, mean_l)
-            max_end = max(max_end, mean_r)
-        mode_coords.append((min_start, max_end))
+            lengths.append(med_length)
+            starts.append(med_l)
+            ends.append(med_r)
+
+        mode_start = int(np.median(starts))
+        mode_end = int(np.median(ends))
+        mode_coords.append((mode_start, mode_end))
 
         mode_stat = ModeStat(
-            length=int(np.mean(lengths)),
+            length=int(np.median(lengths)),
             length_sd=float(np.std(lengths)),
-            start=int(np.mean(starts)),
+            start=mode_start,
             start_sd=float(np.std(starts)),
-            end=int(np.mean(ends)),
+            end=mode_end,
             end_sd=float(np.std(ends)),
             num_samples=num_samples,
             num_heterozygous=num_heterozygous,
