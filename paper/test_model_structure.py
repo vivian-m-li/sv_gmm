@@ -178,6 +178,59 @@ def test_model_structure(cfg: dict):
         "model_comparison_func_icl", cfg, {"model_comparison_func": "icl"}
     )
 
+    # Test the remaining permutations
+
+    # kmeans++ (bic/icl)
+    single_test(
+        "init_kmeans++_model_comparison_func_bic",
+        cfg,
+        {"init": "kmeans++", "model_comparison_func": "bic"},
+    )
+    single_test(
+        "init_kmeans++_model_comparison_func_icl",
+        cfg,
+        {"init": "kmeans++", "model_comparison_func": "icl"},
+    )
+
+    # random (repulsion true/false, aic/bic/icl)
+    single_test(
+        "init_random_repulsion_true_tau_scaled_2",
+        cfg,
+        {"init": "random", "repulsion": "True"},
+    )
+    single_test(
+        "init_random_repulsion_true_model_comparison_func_bic",
+        cfg,
+        {"init": "random", "repulsion": "True", "model_comparison_func": "bic"},
+    )
+    single_test(
+        "init_random_repulsion_true_model_comparison_func_icl",
+        cfg,
+        {"init": "random", "repulsion": "True", "model_comparison_func": "icl"},
+    )
+    single_test(
+        "init_random_model_comparison_func_bic",
+        cfg,
+        {"init": "random", "model_comparison_func": "bic"},
+    )
+    single_test(
+        "init_random_model_comparison_func_icl",
+        cfg,
+        {"init": "random", "model_comparison_func": "icl"},
+    )
+
+    # dp_kmeans++ (repulsion + bic/icl)
+    single_test(
+        "repulsion_true_model_comparison_func_bic",
+        cfg,
+        {"repulsion": "True", "model_comparison_func": "bic"},
+    )
+    single_test(
+        "repulsion_true_model_comparison_func_icl",
+        cfg,
+        {"repulsion": "True", "model_comparison_func": "icl"},
+    )
+
 
 if __name__ == "__main__":
     cfg = load_config()
