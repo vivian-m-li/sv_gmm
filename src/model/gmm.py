@@ -87,6 +87,7 @@ def model_penalty(
     max_penalty: int,
 ) -> float:
     """
+    DEPRECATED (including all functions it calls)
     Aggregate model penalties from distance and reciprocal overlap into a single score.
     """
     # penalties apply only to models with multiple clusters
@@ -162,9 +163,6 @@ def calc_log_likelihood(
     p: np.ndarray,
     L: int,
     R: int,
-    d_threshold: int,
-    r_threshold: float,
-    max_penalty: int,
 ) -> float:
     """Calculates the log-likelihood of the data fitting the GMM."""
     num_modes = len(mu)
@@ -186,14 +184,6 @@ def calc_log_likelihood(
             logL += logsumexp(log_pdfs)
 
     return logL
-
-    # TODO: remove penalties
-    # calculate final penalized logL
-    penalty = model_penalty(
-        mu, len(x), L, R, d_threshold, r_threshold, max_penalty
-    )
-    penalized_logL = logL - penalty
-    return penalized_logL
 
 
 def calc_aic(
@@ -259,9 +249,6 @@ def init_em_random(
     num_modes: int,
     L: int,
     R: int,
-    d_threshold: int,
-    r_threshold: float,
-    max_penalty: int,
 ):
     n = len(x)
     gaussian_params = []
@@ -288,17 +275,6 @@ def init_em_random(
 
         mu_i = (responsibility.T @ x) / counts[:, np.newaxis]
 
-        # # set the initial responsibility matrix
-        # responsibility = np.zeros((n, num_modes))
-        # indices = np.random.choice(n, num_modes, replace=False)
-        # for col, index in enumerate(indices):
-        #     responsibility[index, col] = 1
-
-        # p_i = (
-        #     np.sum(responsibility, axis=0)
-        #     + 10 * np.finfo(responsibility.dtype).eps
-        # )
-
         avg_X2 = (responsibility.T @ (x * x)) / counts[:, np.newaxis]
         avg_means2 = mu_i**2
         cov_i = avg_X2 - avg_means2 + RESPONSIBILITY_THRESHOLD
@@ -306,9 +282,7 @@ def init_em_random(
         # normalize weights to sum to 1
         p_i = counts / counts.sum()
 
-        logL_i = calc_log_likelihood(
-            x, mu_i, cov_i, p_i, L, R, d_threshold, r_threshold, max_penalty
-        )
+        logL_i = calc_log_likelihood(x, mu_i, cov_i, p_i, L, R)
         gaussian_params.append((mu_i, cov_i, p_i, logL_i))
 
     return max(gaussian_params, key=lambda x: x[3])
@@ -319,9 +293,6 @@ def init_em(
     num_modes: int,
     L: int,
     R: int,
-    d_threshold: int,
-    r_threshold: float,
-    max_penalty: int,
     init: str,
 ) -> tuple[int, np.ndarray, list[np.ndarray], np.ndarray, np.ndarray]:
     """
@@ -362,13 +333,9 @@ def init_em(
             count_lookup[i] / len(x) for i in range(num_modes)
         ]  # initial p_k proportions
 
-        logL = calc_log_likelihood(
-            x, mu, cov, p, L, R, d_threshold, r_threshold, max_penalty
-        )
+        logL = calc_log_likelihood(x, mu, cov, p, L, R)
     else:  # default to random init
-        mu, cov, p, logL = init_em_random(
-            x, num_modes, L, R, d_threshold, r_threshold, max_penalty
-        )
+        mu, cov, p, logL = init_em_random(x, num_modes, L, R)
 
     # initial log-likelihood
     logLs = [logL]
@@ -445,12 +412,8 @@ def em(
     p: np.ndarray,
     L: int,
     R: int,
-    d_threshold: int,
-    r_threshold: float,
-    max_penalty: int,
     repulsion: bool,  # whether to apply a repulsive force to clusters
-    lambda_rep,  # strength of the repulsive force
-    tau,  # interaction radius for the repulsive force
+    r_threshold: float,  # interaction radius for the repulsive force
     repulsion_stepsize,  # step size for applying the repulsive force to cluster centers
 ) -> GMM2D:
     """Performs one iteration of the expectation-maximization algorithm."""
@@ -478,6 +441,11 @@ def em(
 
     # Cluster repulsion - adjust mu using a penalty function to prevent clusters from getting too close to each other and over-clustering
     if repulsion:
+        svlen = R - L
+        max_overlap_allowed = svlen * r_threshold
+        # if dist < svlen-max_overlap_allowed, then we want to apply repulsion
+        tau_scaled = (svlen - max_overlap_allowed) / 3
+
         repulsion_grads = [np.zeros_like(mu[k]) for k in range(num_modes)]
         for k in range(num_modes):
             for j in range(num_modes):
@@ -488,19 +456,17 @@ def em(
 
                 # decays from 1 (clusters on top of each other) to 0 (far apart)
                 # tau controls the length scale: repulsion is negligible beyond -3*tau
-                weight = np.exp(-dist / tau)
+                weight = np.exp(-dist / tau_scaled)
 
-                # unit vector pointing k away from j, scaled by weight; lambda_rep is redundant
-                repulsion_grads[k] += lambda_rep * weight * (diff / dist)
+                # unit vector pointing k away from j
+                repulsion_grads[k] += weight * (diff / dist)
 
         # update mu with repulsion gradient
         for k in range(num_modes):
             mu[k] += repulsion_stepsize * repulsion_grads[k]
 
     # update likelihood
-    logL = calc_log_likelihood(
-        x, mu, cov, p, L, R, d_threshold, r_threshold, max_penalty
-    )
+    logL = calc_log_likelihood(x, mu, cov, p, L, R)
     return GMM2D(mu, cov, p, logL)
 
 
@@ -510,13 +476,9 @@ def run_em(
     num_modes: int,
     L: int,
     R: int,
-    d_threshold: int = 100,
-    r_threshold: float = 0.8,
-    max_penalty: int = 200,
     init: str = "kmeans++",
     repulsion: bool = False,
-    lambda_rep: float = 1,
-    tau: float = 200,
+    r_threshold: float = 0.8,
     repulsion_stepsize: float = 10.0,
 ) -> tuple[list[GMM2D], int]:
     """
@@ -526,9 +488,8 @@ def run_em(
     """
     all_params: list[GMM2D] = []
 
-    n, mu, cov, p, logL = init_em(
-        x, num_modes, L, R, d_threshold, r_threshold, max_penalty, init
-    )  # initialize parameters
+    # initialize parameters
+    n, mu, cov, p, logL = init_em(x, num_modes, L, R, init)
     all_params.append(GMM2D(mu, cov, p, logL[0]))
 
     # only need to estimate mean and covariance matrix if we have 1 mode
@@ -548,12 +509,8 @@ def run_em(
             prev_gmm.p,
             L,
             R,
-            d_threshold,
-            r_threshold,
-            max_penalty,
             repulsion,
-            lambda_rep,
-            tau,
+            r_threshold,
             repulsion_stepsize,
         )
         logL.append(gmm_result.logL)
@@ -621,15 +578,11 @@ def gmm(
     *,
     L,
     R,
-    d_threshold: int = 100,
-    r_threshold: float = 0.8,
-    max_penalty: int = 200,
     init: str = "kmeans++",
     repulsion: bool = False,
-    lambda_rep: float = 1.0,
-    tau: float = 200,
+    r_threshold: float = 0.8,
     repulsion_stepsize: float = 10.0,
-    model_comparison_func: str = "aic",
+    model_comparison_func: str = "bic",
     force_n_modes: int | None = None,
     plot: bool = False,
 ) -> EstimatedGMM2D | None:
@@ -687,13 +640,9 @@ def gmm(
                     num_modes=num_modes,
                     L=L,
                     R=R,
-                    d_threshold=d_threshold,
-                    r_threshold=r_threshold,
-                    max_penalty=max_penalty,
                     init=init,
                     repulsion=repulsion,
-                    lambda_rep=lambda_rep,
-                    tau=tau,
+                    r_threshold=r_threshold,
                     repulsion_stepsize=repulsion_stepsize,
                 )
 

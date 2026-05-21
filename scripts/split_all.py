@@ -41,9 +41,8 @@ def run_split_trial(
     model_params = {
         k: v
         for k, v in {
-            "d_threshold": raw_model.get("d_threshold"),
             "r_threshold": raw_model.get("r_threshold"),
-            "max_penalty": raw_model.get("max_penalty"),
+            "repulsion_stepsize": raw_model.get("repulsion_stepsize"),
             "init": raw_model.get("init"),
             "repulsion": raw_model.get("repulsion"),
             "model_comparison_func": raw_model.get("model_comparison_func"),
@@ -64,7 +63,7 @@ def run_split_trial(
                 "R": row["stop"],
                 "plot": False,
                 "stem": input_dir,
-                **model_params,  # d_threshold, r_threshold, max_penalty
+                **model_params,
             },
         )
 
