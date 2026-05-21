@@ -31,9 +31,8 @@ def main():
     --stix_index:       Path to STIX index
     --stix_database:    Path to STIX database
     --num_stix_shards:  Number of shards for STIX index/database
-    --d_threshold:      Distance threshold for cluster merging (model param)
-    --r_threshold:      Reciprocal-overlap threshold (model param)
-    --max_penalty:      Maximum penalty for spurious cluster suppression (model param)
+    --r_threshold:      Repulsion distance threshold (model param)
+    --repulsion_stepsize: Stepsize for repulsion force (model param)
     """
     parser = argparse.ArgumentParser(
         description="Queries structural variants in a specific region"
@@ -150,24 +149,6 @@ def main():
 
     # Model parameters
     parser.add_argument(
-        "--d_threshold",
-        type=int,
-        default=None,
-        help="Distance threshold for penalizing cluster assignments (bp)",
-    )
-    parser.add_argument(
-        "--r_threshold",
-        type=float,
-        default=None,
-        help="Reciprocal-overlap threshold for penalizing cluster assignments",
-    )
-    parser.add_argument(
-        "--max_penalty",
-        type=int,
-        default=None,
-        help="Maximum penalty for spurious cluster suppression",
-    )
-    parser.add_argument(
         "--init",
         type=str,
         default=None,
@@ -180,6 +161,18 @@ def main():
         nargs="?",
         const=True,
         help="Whether to apply a repulsive force between cluster centers during GMM clustering",
+    )
+    parser.add_argument(
+        "--r_threshold",
+        type=float,
+        default=None,
+        help="Reciprocal-overlap threshold for penalizing cluster assignments",
+    )
+    parser.add_argument(
+        "--repulsion_stepsize",
+        type=int,
+        default=None,
+        help="Maximum penalty for spurious cluster suppression",
     )
     parser.add_argument(
         "--model_comparison_func",
@@ -225,13 +218,14 @@ def main():
     stix_index = _get(args.stix_index, "stix", "index", None) or None
     stix_database = _get(args.stix_database, "stix", "database", None) or None
     num_stix_shards = _get(args.num_stix_shards, "stix", "num_shards", 1)
-    d_threshold = _get(args.d_threshold, "model", "d_threshold", 50)
-    r_threshold = _get(args.r_threshold, "model", "r_threshold", 0.9)
-    max_penalty = _get(args.max_penalty, "model", "max_penalty", 100)
-    init = _get(args.init, "model", "init", "dp_kmeans++")
+    init = _get(args.init, "model", "init", "kmeans++")
     repulsion = _get(args.repulsion, "model", "repulsion", False)
+    r_threshold = _get(args.r_threshold, "model", "r_threshold", 0.8)
+    repulsion_stepsize = _get(
+        args.repulsion_stepsize, "model", "repulsion_stepsize", 10.0
+    )
     model_comparison_func = _get(
-        args.model_comparison_func, "model", "model_comparison_func", "aic"
+        args.model_comparison_func, "model", "model_comparison_func", "bic"
     )
 
     l = parse_input(args.l) if args.l is not None else ""  # noqa741
@@ -249,11 +243,10 @@ def main():
         sample_id_file=sample_id_file,
         insert_size_file=insert_size_file,
         read_overlap=read_overlap,
-        d_threshold=d_threshold,
-        r_threshold=r_threshold,
-        max_penalty=max_penalty,
         init=init,
         repulsion=repulsion,
+        r_threshold=r_threshold,
+        repulsion_stepsize=repulsion_stepsize,
         model_comparison_func=model_comparison_func,
         stix_bin=stix_bin,
         stix_index=stix_index,

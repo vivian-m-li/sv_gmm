@@ -498,6 +498,7 @@ def build_viz_subset():
         if not os.path.exists(
             os.path.join("output/calibration/plots", plot_file)
         ):
+            # TODO: update parameter names
             split_sv(
                 sv_id=sv_id,
                 input_dir="data/calibration",

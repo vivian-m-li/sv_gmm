@@ -422,9 +422,11 @@ def generate_and_split_sample_reads(
             synthetic_data=True,
             gmm_model=gmm_model,
             insert_size_lookup=insert_size_lookup,
-            d_threshold=model_params["d_threshold"],
+            init=model_params["init"],
+            repulsion=model_params["repulsion"],
             r_threshold=model_params["r_threshold"],
-            max_penalty=model_params["max_penalty"],
+            repulsion_stepsize=model_params["repulsion_stepsize"],
+            model_comparison_func=model_params["model_comparison_func"],
         )
         return gmm_result, evidence_by_mode
 
