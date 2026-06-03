@@ -1396,6 +1396,7 @@ def bayesian_optimization_iterations(file: str):
     Plot the F1 score and parameter values at each iteration of the
     Bayesian optimization process to show how the optimization converges
     over time.
+    TODO: update parameter names
     """
     # parse eofile for each iteration
     param_names = [

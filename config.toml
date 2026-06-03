@@ -36,11 +36,17 @@ local_intermediate_output_dir = "output/results/processed_svs"
 # enable this when running query_stix_all.py
 # stix_output_dir = "/scratch/Users/vili4418/stix_output"
 
-# use these paths when running calibrate_model.py
+# use these paths when running calibrate_model.py on 1kg data
 # input_dir = "data/calibration"
 # output_dir = "output/calibration/results"
 # stix_output_dir = "output/calibration/stix_output"
 # intermediate_output_dir = "output/calibration/calibration_outputs"
+
+# use these paths when running calibrate_model.py on synthetic data
+# input_dir = "data/synthetic_calibration"
+# output_dir = "output/synthetic_calibration/results"
+# stix_output_dir = "output/synthetic_calibration/stix_output"
+# intermediate_output_dir = "output/synthetic_calibration/calibration_outputs"
 
 # use these paths when running synthetic_tests.py
 # output_dir = "output/synthetic_tests"
@@ -64,6 +70,10 @@ insert_size_file = "insert_sizes.csv"
 
 # Ancestry file with required columns "Sample name" and "Superpopulation code"
 ancestry_file = "ancestry.tsv"
+
+# use these paths when running scripts.calibrate_model
+# sv_lookup_file = "deletions.csv"
+# sample_id_file = "lr_sample_ids.txt"
 
 # ------------------------------------------------------------------------------
 # [stix] — Paths to the STIX executable and index
@@ -106,15 +116,28 @@ read_overlap = 0.6
 # if the file above does not exist.
 default_insert_size = 450
 
-# Distance threshold for merging nearby read clusters (bp).
-d_threshold = 550
 
-# Reciprocal-overlap threshold for cluster assignment.
-r_threshold = 0.4
+# Initialization method for GMM clustering. Supported algorithms: dp_k-means++, k-means++ or random.
+init = "kmeans++"
+
+# Whether to apply cluster repulsion to GMM clustering
+repulsion = "False"
+
+# Used if repulsion is True. Interaction radius for the repulsive force
+r_threshold = 0.8
+
+# Used if repulsion is True. Repulsion stepsize
+repulsion_stepsize = 10.0
+
+# Model comparison function to use for selecting the best model. Supported options: AIC, BIC, ICL
+model_comparison_func = "bic"
+
+# DEPRECATED
+# Distance threshold for merging nearby read clusters (bp).
+d_threshold = 500
 
 # Maximum penalty term for spurious cluster suppression.
 max_penalty = 537
-
 
 # ------------------------------------------------------------------------------
 # [calibrate] — Model calibration parameters
@@ -130,31 +153,40 @@ truth_set = "sv_subset.csv"
 # Supported algorithms: bo (bayesian optimization) or grid (grid search)
 search_func = "bo"
 
+# Total number of trials
+n_trials = 30
+
 # HYPERPARAMETER BOUNDARIES
 # Specify the min and max values the parameter can take. If using grid search,
 # specify the step size as well.
 
-# Minimum distance between SV cluster centroids in L, length space at which to
-# start penalizing the model.
-d_min = 50
-d_max = 550
-d_step = 50
-
-# Minimum reciprocal overlap between SV clusters at which to start penalizing
-# the model.
-r_min = 0.4
-r_max = 0.9
-r_step = 0.05
-
 # Fraction of the SV length that a flanking read is allowed to overlap the SV
 # region and still be included.
-q_min = 0.6
+q_min = 1.0
 q_max = 1.0
 q_step = 0.1
 
+# Interaction radius for the repulsive force
+r_min = 0.4
+r_max = 0.95
+r_step = 0.05
+
+# Repulsion stepsize
+epsilon_min = 1
+epsilon_max = 25
+epsilon_step = 1
+
+# DEPRECATED
+
+# Minimum distance between SV cluster centroids in L, length space at which to
+# start penalizing the model.
+d_min = 50
+d_max = 500
+d_step = 50
+
 # Maximum penalty term for spurious cluster suppression.
 p_min = 100
-p_max = 600
+p_max = 1000
 p_step = 100
 
 

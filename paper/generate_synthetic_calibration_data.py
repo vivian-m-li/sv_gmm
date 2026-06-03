@@ -12,7 +12,96 @@ from src.synthetic.generate_data import (
 )
 from src.utils.config_loader import load_config
 from src.utils.helper import get_sample_ids, stix_output_to_df
-from src.utils.model_helper import calc_af
+from src.utils.model_helper import (
+    calc_af,
+    get_insert_size_lookup,
+    reciprocal_overlap,
+)
+
+from src.model.gmm_trial import gmm_trial
+
+
+def amend_sv_subset():
+    """
+    Amends the sv_subset.csv file to include:
+        - "r" column after calculating the reciprocal overlap for each SV
+        - "n" column for the number of nonref samples for the SV
+    """
+    dir = "data/synthetic_calibration"
+
+    truth_set = pd.read_csv(os.path.join(dir, "sv_subset.csv"))
+    truth_set["r"] = 0.0
+    truth_set["n"] = 0
+
+    sample_ids = get_sample_ids(os.path.join(dir, "sample_ids.txt"))
+    insert_size_lookup = get_insert_size_lookup(
+        dir, "insert_sizes.csv", 450, sample_ids
+    )
+
+    for row_idx, row in truth_set.iterrows():
+        chr = str(int(row["chr"]))
+        start = int(row["start"])
+        stop = int(row["stop"])
+
+        stix_file = os.path.join(
+            "output/synthetic_calibration/stix_output",
+            f"{chr}:{start}_{chr}:{stop}.txt",
+        )
+        reads = stix_output_to_df(stix_file)
+        truth_set.at[row_idx, "n"] = len(reads["sample_id"].unique())
+
+        n_svs_actual = int(row["n_svs_actual"])
+        if n_svs_actual == 1:
+            continue
+
+        gmm_result, evidence_by_mode = gmm_trial(
+            reads,
+            chr=chr,
+            L=start,
+            R=stop,
+            init="kmeans++",
+            repulsion=False,
+            model_comparison_func="aic",
+            plot=False,
+            stem="data/synthetic_calibration",
+            insert_size_lookup=insert_size_lookup,
+            force_n_modes=n_svs_actual,
+        )
+
+        svs = []
+        for mode in evidence_by_mode:
+            lengths = []
+            starts = []
+            ends = []
+            for evidence in mode:
+                med_l = np.median(
+                    [paired_end[0] for paired_end in evidence.paired_ends]
+                )
+                med_r = np.median(
+                    [paired_end[1] for paired_end in evidence.paired_ends]
+                )
+                med_length = np.median(
+                    [
+                        paired_end[1]
+                        - paired_end[0]
+                        - evidence.mean_insert_size
+                        for paired_end in evidence.paired_ends
+                    ]
+                )
+                lengths.append(med_length)
+                starts.append(med_l)
+                ends.append(med_r)
+
+            mode_start = int(np.median(starts))
+            mode_end = int(np.median(ends))
+            svs.append((mode_start, mode_end))
+
+        truth_set.at[row_idx, "r"] = round(
+            reciprocal_overlap(svs[0], svs[1]), 2
+        )
+        print(f"Processed {row_idx}/{truth_set.shape[0]} SVs", end="\r")
+
+    truth_set.to_csv(os.path.join(dir, "sv_subset.csv"), index=False)
 
 
 def generate_and_write_deletions(
@@ -25,7 +114,9 @@ def generate_and_write_deletions(
 
     start = 1000000
     deletions = pd.DataFrame(columns=["id", "chr", "start", "stop", "svlen"])
-    truth_set = pd.DataFrame(columns=["chr", "start", "stop", "n_svs_actual"])
+    truth_set = pd.DataFrame(
+        columns=["chr", "start", "stop", "n_svs_actual", "r"]
+    )
     all_generated_svs = {}
     for _ in range(n_svs):
         case = random.choice(["A", "B", "C"])
@@ -33,7 +124,7 @@ def generate_and_write_deletions(
             svlen = int(rng.lognormal(mean=6, sigma=1.0))
             if svlen > 50:
                 break
-        r = random.uniform(0.05, 0.95)
+        r = random.uniform(0.4, 0.95)
 
         _, _, generated_svs = generate_sv_coordinates(
             case, svlen, r=r, start=start
@@ -58,6 +149,7 @@ def generate_and_write_deletions(
             sv_start,
             sv_end,
             len(generated_svs),
+            r,
         ]
 
         start += svlen * 2  # space out the deletions

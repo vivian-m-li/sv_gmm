@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-from src.model.gmm_trial import gmm_trial
+from src.model.dirichlet import run_dirichlet
 from src.utils.helper import stix_output_to_df
 
 
@@ -291,8 +291,7 @@ def generate_mapped_pairs_for_sv(
     insert_mean: int,
     n_pairs: int = 10,
     fragment_length_sd: int = 10,
-    left_jitter: int = 20,
-    right_jitter: int = 20,
+    read_jitter: int = 20,
 ):
     """
     Return a list of tuples (l_start, l_end, r_start, r_end) representing
@@ -318,8 +317,8 @@ def generate_mapped_pairs_for_sv(
         right_fragment_length = fragment_length - left_fragment_length
 
         # add jitter to the left and right ends
-        left_jitter_amount = random.randint(-left_jitter, left_jitter)
-        right_jitter_amount = random.randint(-right_jitter, right_jitter)
+        left_jitter_amount = random.gauss(0, read_jitter)
+        right_jitter_amount = random.gauss(0, read_jitter)
 
         left_start = mode_start - left_fragment_length
         left_end = mode_start - left_jitter_amount
@@ -350,7 +349,7 @@ def generate_and_split_sample_reads(
     num_svs = len(svs)
 
     # decide how many samples we want in our population
-    num_samples = random.randint(30, 1000) if n_samples is None else n_samples
+    num_samples = random.randint(11, 2504) if n_samples is None else n_samples
     samples = [f"sample_{i}" for i in range(num_samples)]
 
     # decide how we want to divide the samples between the SVs
@@ -394,8 +393,8 @@ def generate_and_split_sample_reads(
             evidence[sample].extend([pair[1], pair[2]])  # l_end, r_start
 
     # pass synthetic data through SV analysis pipeline
-    L = np.mean([start for start, _ in svs])
-    R = np.mean([stop for _, stop in svs])
+    L = np.median([start for start, _ in svs])
+    R = np.median([stop for _, stop in svs])
     evidence = {key: np.array(value) for key, value in evidence.items()}
 
     if plot_reads:
@@ -414,7 +413,7 @@ def generate_and_split_sample_reads(
         data_to_vcf(evidence, insert_size_lookup, vcf_filename)
 
     if run_split:
-        gmm_result, evidence_by_mode = gmm_trial(
+        gmm_results, _, _ = run_dirichlet(
             reads,
             chr=str(chr),
             L=L,
@@ -423,21 +422,29 @@ def generate_and_split_sample_reads(
             synthetic_data=True,
             gmm_model=gmm_model,
             insert_size_lookup=insert_size_lookup,
-            d_threshold=model_params["d_threshold"],
+            init=model_params["init"],
+            repulsion=model_params["repulsion"],
             r_threshold=model_params["r_threshold"],
-            max_penalty=model_params["max_penalty"],
+            repulsion_stepsize=model_params["repulsion_stepsize"],
+            model_comparison_func=model_params["model_comparison_func"],
+        )
+        gmm_result, evidence_by_mode = min(
+            gmm_results, key=lambda x: x[0].score if x[0] else np.inf
         )
         return gmm_result, evidence_by_mode
 
     return None, []
 
 
-def generate_sv_coordinates(case: str, svlen: int):
+def generate_sv_coordinates(
+    case: str, svlen: int, *, r: float | None = None, start: int | None = None
+):
     """Generates synthetic data with increasing r (reciprocal overlap) and runs the GMM on it to test accuracy."""
     # SVLEN = 802  # median SV length for high coverage data
-    SV1_L = 100000
+    SV1_L = 1000000 if start is None else start
     SV1_R = SV1_L + svlen
     SV1 = (SV1_L, SV1_R)
+    rs = np.arange(0.05, 1.01, 0.05) if r is None else [r]
 
     data = []
     match case:
@@ -445,7 +452,7 @@ def generate_sv_coordinates(case: str, svlen: int):
             data.append([case, 0, [[SV1_L, SV1_L + svlen]]])
         case "B":
             # two nested SVs
-            for r in np.arange(0.05, 1.05, 0.05):
+            for r in rs:
                 midpoint = SV1_L + (0.5 * svlen)
                 sv2_len = int(svlen / r)
                 data.append(
@@ -463,19 +470,17 @@ def generate_sv_coordinates(case: str, svlen: int):
                 )
         case "C":
             # two overlapping SVs
-            for r in np.arange(0, 1.05, 0.05):
+            for r in rs:
                 overlap = int(r * svlen)
                 sv2_start = SV1_R - overlap
                 data.append([case, r, [SV1, (sv2_start, sv2_start + svlen)]])
         case "D":
             # three overlapping SVs
-            for r1 in np.arange(0, 1.05, 0.05):  # overlap between sv1 and sv2
+            for r1 in rs:  # overlap between sv1 and sv2
                 overlap12 = int(r1 * svlen)
                 sv2_start = SV1_R - overlap12
                 sv2_end = sv2_start + svlen
-                for r2 in np.arange(
-                    0, 1.05, 0.05
-                ):  # overlap between sv2 and sv3
+                for r2 in rs:  # overlap between sv2 and sv3
                     overlap23 = int(r2 * svlen)
                     sv3_start = sv2_end - overlap23
                     sv3_end = sv3_start + svlen

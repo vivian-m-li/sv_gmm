@@ -667,15 +667,18 @@ def gmm_trial(
     L: int,  # sv start
     R: int,  # sv stop
     insert_size_lookup: dict[str, int],
-    d_threshold: int = 100,
+    init: str = "kmeans++",
+    repulsion: bool = False,
     r_threshold: float = 0.8,
-    max_penalty: int = 200,
+    repulsion_stepsize: float = 10.0,
+    model_comparison_func: str = "aic",
     min_pairs: int = 2,
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
     stem: str = "1kg",
     plot: bool = True,
     plot_file: str | None = None,
+    force_n_modes: int | None = None,
 ):
     """Runs the GMM pipeline and visualizes the results."""
     # transforms data to cluster
@@ -695,10 +698,13 @@ def gmm_trial(
         points,
         L=L,
         R=R,
-        d_threshold=d_threshold,
         r_threshold=r_threshold,
-        max_penalty=max_penalty,
+        repulsion_stepsize=repulsion_stepsize,
+        init=init,
+        repulsion=repulsion,
+        model_comparison_func=model_comparison_func,
         plot=plot,
+        force_n_modes=force_n_modes,
     )
 
     if not synthetic_data:
@@ -715,16 +721,17 @@ def gmm_trial(
         plot_2d_coords_fig(
             evidence_by_mode,
             plot_file,
-            **{
-                "L": L,
-                "R": R,
-                "axis1": "L",
-                "axis2": "Length",
-                "size_by": "",
-                "show_mode_stats": False,
-                "show_1d_distributions": False,
-                "insert_size_lookup": insert_size_lookup,
-            },
+            L=L,
+            R=R,
+            axis1="L",
+            axis2="Length",
+            add_error_bars=False,
+            size_by="",
+            show_mode_stats=True,
+            show_1d_distributions=True,
+            insert_size_lookup=insert_size_lookup,
+            init="kmeans++",
+            repulsion=repulsion,
         )
         # plot_single_sv(
         #     evidence_by_mode,

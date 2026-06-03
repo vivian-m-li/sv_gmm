@@ -80,9 +80,8 @@ def run_dirichlet_inner(
     sample_ids: set[str],
     insert_size_lookup: dict[str, int],
     q: float,
-    d: int,
     r: float,
-    pen: int,
+    epsilon: float,
     mult_q: bool,
 ):
     # do a deepcopy here so we're not modifying the original cfg values
@@ -108,15 +107,18 @@ def run_dirichlet_inner(
         # if no samples have any data supporting the SV then not included
         gmm_results, alphas, posterior_distributions = [(None, [])], [], []
     else:
+        # hardcode init to random because we don't need to calibrate kmeans++
         gmm_results, alphas, posterior_distributions = run_dirichlet(
             reads,
             **{
                 "chr": row["chr"],
                 "L": row["start"],
                 "R": row["stop"],
-                "d_threshold": d,
+                "init": "random",
+                "repulsion": True,
                 "r_threshold": r,
-                "max_penalty": pen,
+                "repulsion_stepsize": epsilon,
+                "model_comparison_func": "bic",
                 "synthetic_data": True,
                 "plot": False,
                 "stem": cfg["paths"]["input_dir"],
@@ -153,9 +155,8 @@ def run_dirichlet_wrapper(
     sample_ids: set[str],
     insert_size_lookup: dict[str, int],
     q: float,
-    d: int,
     r: float,
-    pen: int,
+    epsilon: float,
     mult_q: bool,
 ):
     try:
@@ -166,14 +167,13 @@ def run_dirichlet_wrapper(
             sample_ids,
             insert_size_lookup,
             q,
-            d,
             r,
-            pen,
+            epsilon,
             mult_q,
         )
     except Exception as e:
         print(
-            f"Failed to run dirichlet for {row['chr']}:{row['start']}-{row['stop']} with parameters q={q}, d={d}, r={r}, pen={pen}: {e}"
+            f"Failed to run dirichlet for {row['chr']}:{row['start']}-{row['stop']} with parameters q={q}, r={r}, epsilon={epsilon}: {e}"
         )
         raise Exception
 
@@ -182,10 +182,9 @@ def run_calibration_test(
     sv_df: pd.DataFrame,
     cfg: dict,
     *,
-    d: int,
-    r: float,
     q: float,
-    pen: int,
+    r: float,
+    epsilon: float,
     sample_ids: set[str],
     insert_size_lookup: dict[str, int],
     mult_q: bool,
@@ -193,10 +192,10 @@ def run_calibration_test(
     """
     Run a single calibration test for given distance and reciprocal overlap thresholds.
     """
-    print(f"Running calibration for d={d}, r={r}, q={q}, p={pen}")
+    print(f"Running calibration for q={q}, r={r}, epsilon={epsilon}")
     processed_file_dir = os.path.join(
         cfg["paths"]["intermediate_output_dir"],
-        "d{}_r{:.2f}_p{}_q{:.2f}".format(d, r, pen, q),
+        "q{:.2f}_r{:.2f}_epsilon{:.2f}".format(q, r, epsilon),
     )
     if not os.path.exists(processed_file_dir):
         os.makedirs(processed_file_dir)
@@ -213,9 +212,8 @@ def run_calibration_test(
                     sample_ids,
                     insert_size_lookup,
                     q,
-                    d,
                     r,
-                    pen,
+                    epsilon,
                     mult_q,
                 )
             )
@@ -226,7 +224,7 @@ def run_calibration_test(
 
     output_dir = cfg["paths"]["output_dir"]
     results_dir = os.path.join(
-        output_dir, "d{}_r{:.2f}_q{:.2f}_p{}".format(d, r, q, pen)
+        output_dir, "q{:.2f}_r{:.2f}_epsilon{:.2f}".format(q, r, epsilon)
     )
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
@@ -251,10 +249,9 @@ def run_calibration_test(
     else:
         all_results = pd.DataFrame(
             columns=[
-                "d",
-                "r",
                 "q",
-                "p",
+                "r",
+                "epsilon",
                 "TP",
                 "FP",
                 "FN",
@@ -271,10 +268,9 @@ def run_calibration_test(
     recall = results["TP"] / (results["TP"] + results["FN"])
     f1 = 2 * (precision * recall) / (precision + recall)
     all_results.loc[len(all_results)] = [
-        d,
-        r,
         q,
-        pen,
+        r,
+        epsilon,
         results["TP"],
         results["FP"],
         results["FN"],
@@ -303,18 +299,15 @@ def run_calibration_bayesian_opt(
     mult_q: bool,
     *,
     batch_size: int = 1,
-    d_min: int,
-    d_max: int,
-    d_step: int,
-    r_min: float,
-    r_max: float,
-    r_step: float,
     q_min: float,
     q_max: float,
     q_step: float,
-    p_min: int,
-    p_max: int,
-    p_step: int,
+    r_min: float,
+    r_max: float,
+    r_step: float,
+    epsilon_min: float,
+    epsilon_max: float,
+    epsilon_step: float,
 ):
     """
     Run calibration using Bayesian Optimization to find the parameter
@@ -342,7 +335,7 @@ def run_calibration_bayesian_opt(
         transition_criteria=[
             # transition to BoTorch node once there are 15 trials on the experiment.
             MinTrials(
-                threshold=15,
+                threshold=5,
                 transition_to=botorch_node.name,
                 use_all_trials_in_exp=True,
             )
@@ -365,21 +358,15 @@ def run_calibration_bayesian_opt(
     ax_client = AxClient(generation_strategy=gs, verbose_logging=False)
     parameters = [
         {
-            "name": "d",
-            "type": "range",
-            "bounds": [d_min, d_max],
-            "value_type": "int",
-        },
-        {
             "name": "r",
             "type": "range",
             "bounds": [r_min, r_max],
             "value_type": "float",
         },
         {
-            "name": "p",
+            "name": "epsilon",
             "type": "range",
-            "bounds": [p_min, p_max],
+            "bounds": [epsilon_min, epsilon_max],
             "value_type": "int",
         },
     ]
@@ -406,10 +393,9 @@ def run_calibration_bayesian_opt(
         df = pd.read_csv(results_file)
         for i, row in df.iterrows():
             params = {
-                "d": int(row["d"]),
-                "r": round(row["r"], 2),
                 "q": round(snap_to_grid(row["q"], q_min, q_step), 2),
-                "p": int(row["p"]),
+                "r": round(row["r"], 2),
+                "epsilon": int(row["epsilon"]),
             }
             _, trial_index = ax_client.attach_trial(params)
             ax_client.complete_trial(
@@ -435,23 +421,21 @@ def run_calibration_bayesian_opt(
 
         # evaluate each candidate
         for t_index, params in parameterizations.items():
-            d = int(params["d"])
-            r = round(params["r"], 2)
             q = (
                 round(snap_to_grid(params["q"], q_min, q_step), 2)
                 if mult_q
                 else q_min
             )
-            p = int(params["p"])
+            r = round(params["r"], 2)
+            epsilon = round(params["epsilon"], 2)
 
             # this function is parallelized for each SV but runs one calibration test for the given parameters
             results = run_calibration_test(
                 sv_df,
                 cfg,
-                d=d,
-                r=r,
                 q=q,
-                pen=p,
+                r=r,
+                epsilon=epsilon,
                 sample_ids=sample_ids,
                 insert_size_lookup=insert_size_lookup,
                 mult_q=mult_q,
@@ -467,27 +451,25 @@ def run_calibration_bayesian_opt(
 
     # after BO loop, get the best parameters and run one final calibration test with those parameters to save the outputs
     best_params, metrics = ax_client.get_best_parameters()
-    best_d = int(best_params["d"])
-    best_r = round(best_params["r"], 2)
     best_q = (
         round(snap_to_grid(best_params["q"], q_min, q_step), 2)
         if mult_q
         else q_min
     )
-    best_p = int(best_params["p"])
+    best_r = round(best_params["r"], 2)
+    best_epsilon = int(best_params["epsilon"])
 
     print(
-        f"Best parameters found by Bayesian Optimization: d={best_d}, r={best_r}, q={best_q}, p={best_p}"
+        f"Best parameters found by Bayesian Optimization: q={best_q}, r={best_r}, p={best_epsilon}"
     )
     print(f"Best F1 score: {metrics[0]['f1']:.4f}")
 
     best_result = pd.DataFrame(
         [
             {
-                "d": best_d,
-                "r": best_r,
                 "q": best_q,
-                "p": best_p,
+                "r": best_r,
+                "epsilon": epsilon,
                 "f1": metrics[0]["f1"],
             }
         ]
@@ -504,36 +486,31 @@ def run_calibration_grid_search(
     cfg: dict,
     mult_q: bool,
     *,
-    d_min: int,
-    d_max: int,
-    d_step: int,
-    r_min: float,
-    r_max: float,
-    r_step: float,
     q_min: float,
     q_max: float,
     q_step: float,
-    p_min: int,
-    p_max: int,
-    p_step: int,
+    r_min: float,
+    r_max: float,
+    r_step: float,
+    epsilon_min: float,
+    epsilon_max: float,
+    epsilon_step: float,
 ):
     """Run calibration tests over a grid of distance and reciprocal overlap thresholds."""
-    # run calibration tests over grid of d, r, and q values
+    # run calibration tests over grid of parameter values
     for q in np.arange(q_min, q_max + 0.01, q_step):
-        for d in range(d_min, d_max + 1, d_step):
-            for r in np.arange(r_min, r_max + 0.01, r_step):
-                for pen in range(p_min, p_max + 1, p_step):
-                    run_calibration_test(
-                        sv_df,
-                        cfg,
-                        d=d,
-                        r=round(r, 2),
-                        q=round(q, 2),
-                        pen=pen,
-                        sample_ids=sample_ids,
-                        insert_size_lookup=insert_size_lookup,
-                        mult_q=mult_q,
-                    )
+        for r in np.arange(r_min, r_max + 0.01, r_step):
+            for epsilon in range(epsilon_min, epsilon_max + 1, epsilon_step):
+                run_calibration_test(
+                    sv_df,
+                    cfg,
+                    q=round(q, 2),
+                    r=round(r, 2),
+                    epsilon=round(epsilon, 2),
+                    sample_ids=sample_ids,
+                    insert_size_lookup=insert_size_lookup,
+                    mult_q=mult_q,
+                )
 
 
 def download_stix_data_inner(
@@ -608,8 +585,6 @@ def download_stix_data(
         p.starmap(download_stix_data_inner, args)
         p.close()
         p.join()
-
-    os.rmdir(partial_outputs_dir)
 
 
 def calibrate(cfg: dict):

@@ -10,22 +10,20 @@ from src.utils.model_helper import giggle_format
 from paper.data_processing.get_bam_files import get_bam_files
 
 FIJI_PATH = "vili4418@fiji.colorado.edu:/Users/vili4418/sv/sv_gmm"
+RESULTS_DIR = "output/calibration/results"
 
 
 def sample_length_heatmap():
     best_results = pd.read_csv(
-        "output/calibration/results/best_params.csv"
+        os.path.join(RESULTS_DIR, "best_params.csv")
     ).loc[0]
-    best_results_dir = "d{}_r{:.2f}_q{:.2f}_p{}".format(
-        int(best_results["d"]),
-        best_results["r"],
+    best_results_dir = "q{:.2f}_r{:.2f}_epsilon{}".format(
         best_results["q"],
-        int(best_results["p"]),
+        best_results["r"],
+        int(best_results["epsilon"]),
     )
     merged = pd.read_csv(
-        os.path.join(
-            "output/calibration/results", best_results_dir, "merged.csv"
-        )
+        os.path.join(RESULTS_DIR, best_results_dir, "merged.csv")
     )
 
     sample_size_ranges = [
@@ -111,7 +109,7 @@ def sample_length_heatmap():
 
 def merge_dfs(dir):
     svs_classified = pd.read_csv(
-        os.path.join("output/calibration/results", dir, "svs_n_modes.csv")
+        os.path.join(RESULTS_DIR, dir, "svs_n_modes.csv")
     )
     svs_classified.rename(
         columns={
@@ -120,7 +118,9 @@ def merge_dfs(dir):
         },
         inplace=True,
     )
-    subset_run = pd.read_csv("data/calibration/sv_subset_sr_lr_nonref.csv")
+    subset_run = pd.read_csv(
+        "data/calibration/sv_subset_sr_lr_nonref_most_samples.csv"
+    )
     subset_run["sv_id"] = subset_run.apply(
         lambda row: f"{giggle_format(row['chr'], row['start'])}_{giggle_format(row['chr'], row['stop'])}",
         axis=1,
@@ -142,7 +142,7 @@ def merge_dfs(dir):
         svs_classified.at[i, "label"] = label
 
     sv_runs = pd.read_csv(
-        os.path.join("output/calibration/results", dir, "most_common_split.csv")
+        os.path.join(RESULTS_DIR, dir, "most_common_split.csv")
     )[
         [
             "id",
@@ -204,42 +204,42 @@ def merge_dfs(dir):
 
 
 def copy_result_files():
-    results_file = "output/calibration/results/results.csv"
+    results_file = os.path.join(RESULTS_DIR, "results.csv")
     if not os.path.exists(results_file):
         for file in [
             results_file,
-            "output/calibration/results/best_params.csv",
+            os.path.join(RESULTS_DIR, "best_params.csv"),
         ]:
             subprocess.run(
                 [
                     "scp",
-                    f"{FIJI_PATH}/output/calibration/results/{os.path.basename(file)}",
+                    os.path.join(
+                        FIJI_PATH, RESULTS_DIR, os.path.basename(file)
+                    ),
                     file,
                 ]
             )
     results = pd.read_csv(results_file)
     for _, row in results.iterrows():
-        d = int(row["d"])
-        r = f"{row['r']:.2f}"
         q = f"{row['q']:.2f}"
-        p = int(row["p"])
-        dir_name = os.path.join(
-            "output/calibration/results", f"d{d}_r{r}_q{q}_p{p}"
-        )
+        r = f"{row['r']:.2f}"
+        epsilon = int(row["epsilon"])
+        dir_name = os.path.join(RESULTS_DIR, f"q{q}_r{r}_epsilon{epsilon}")
         if not os.path.exists(dir_name):
             os.mkdir(dir_name)
             for filename in ["svs_n_modes.csv", "most_common_split.csv"]:
                 subprocess.run(
                     [
                         "scp",
-                        f"{FIJI_PATH}/{dir_name}/{filename}",
+                        os.path.join(FIJI_PATH, dir_name, filename),
                         dir_name,
                     ]
                 )
 
 
 def add_evaluation_metrics():
-    results = pd.read_csv("output/calibration/results/results.csv")
+    filename = os.path.join(RESULTS_DIR, "results.csv")
+    results = pd.read_csv(filename)
     results["accuracy"] = (results["TP"] + results["TN"]) / (
         results["TP"] + results["FP"] + results["TN"] + results["FN"]
     )
@@ -248,49 +248,42 @@ def add_evaluation_metrics():
     results["f1"] = (2 * results["precision"] * results["recall"]) / (
         results["precision"] + results["recall"]
     )
-    results.to_csv("output/calibration/results/results.csv", index=False)
+    results.to_csv(filename, index=False)
 
 
 def merge_dfs_all():
-    results = pd.read_csv("output/calibration/results/results.csv")
+    results = pd.read_csv(os.path.join(RESULTS_DIR, "results.csv"))
     for _, row in results.iterrows():
-        d = int(row["d"])
-        r = f"{row['r']:.2f}"
         q = f"{row['q']:.2f}"
-        p = int(row["p"])
-        dir_name = os.path.join(
-            "output/calibration/results", f"d{d}_r{r}_q{q}_p{p}"
-        )
+        r = f"{row['r']:.2f}"
+        epsilon = int(row["epsilon"])
+        dir_name = os.path.join(RESULTS_DIR, f"q{q}_r{r}_epsilon{epsilon}")
         merged_df_path = os.path.join(dir_name, "merged.csv")
         if not os.path.exists(merged_df_path):
-            full_df = merge_dfs(f"d{d}_r{r}_q{q}_p{p}")
+            full_df = merge_dfs(f"q{q}_r{r}_epsilon{epsilon}")
             full_df.to_csv(merged_df_path, index=False)
 
 
 def print_class_distribution():
     best_results = pd.read_csv(
-        "output/calibration/results/best_params.csv"
+        os.path.join(RESULTS_DIR, "best_params.csv")
     ).loc[0]
-    best_results_dir = "d{}_r{:.2f}_q{:.2f}_p{}".format(
-        int(best_results["d"]),
-        best_results["r"],
+    best_results_dir = "q{:.2f}_r{:.2f}_epsilon{}".format(
         best_results["q"],
-        int(best_results["p"]),
+        best_results["r"],
+        int(best_results["epsilon"]),
     )
     merged = pd.read_csv(
-        os.path.join(
-            "output/calibration/results", best_results_dir, "merged.csv"
-        )
+        os.path.join(RESULTS_DIR, best_results_dir, "merged.csv")
     )
-    all_results = pd.read_csv("output/calibration/results/results.csv")
+    all_results = pd.read_csv(os.path.join(RESULTS_DIR, "results.csv"))
     row = all_results[
-        (all_results["d"] == best_results["d"])
+        (all_results["q"] == best_results["q"])
         & (all_results["r"] == best_results["r"])
-        & (all_results["q"] == best_results["q"])
-        & (all_results["p"] == best_results["p"])
+        & (all_results["epsilon"] == best_results["epsilon"])
     ].iloc[0]
 
-    print("Best params: d={}, r={}, q={}, p={}".format(*best_results), "\n")
+    print("Best params: q={}, r={}, epsilon={}".format(*best_results), "\n")
     print(
         f"Accuracy={row['accuracy']:.2f}, Precision={row['precision']:.2f}, Recall={row['recall']:.2f}, F1={row['f1']:.2f}\n"
     )
@@ -458,17 +451,16 @@ def build_viz_subset():
     filename = "data/calibration/viz_subset.csv"
 
     best_results = pd.read_csv(
-        "output/calibration/results/best_params.csv"
+        os.path.join(RESULTS_DIR, "best_params.csv")
     ).loc[0]
-    best_results_dir = "d{}_r{:.2f}_q{:.2f}_p{}".format(
-        int(best_results["d"]),
-        best_results["r"],
+    best_results_dir = "q{:.2f}_r{:.2f}_epsilon{}".format(
         best_results["q"],
-        int(best_results["p"]),
+        best_results["r"],
+        int(best_results["epsilon"]),
     )
     if not os.path.exists(filename):
         merged_df_path = os.path.join(
-            "output/calibration/results", best_results_dir, "merged.csv"
+            RESULTS_DIR, best_results_dir, "merged.csv"
         )
         if not os.path.exists(merged_df_path):
             full_df = merge_dfs(best_results_dir)
@@ -507,15 +499,13 @@ def build_viz_subset():
                 sample_id_file="lr_sample_ids.txt",
                 stix_file_dir=f"output/calibration/stix_output_{best_results['q']}",
                 read_overlap=best_results["q"],
-                d_threshold=best_results["d"],
                 r_threshold=best_results["r"],
-                max_penalty=best_results["p"],
+                repulsion_stepsize=best_results["epsilon"],
             )
 
 
 if __name__ == "__main__":
     copy_result_files()
-    add_evaluation_metrics()
     merge_dfs_all()
     build_viz_subset()
     copy_viz_files()
