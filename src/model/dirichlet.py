@@ -9,7 +9,7 @@ from src.utils.model_helper import calculate_posteriors
 from src.utils.types import GMM, Evidence
 from src.utils.viz import plot_2d_coords
 
-MAX_N = 100  # maximum number of iterations for the Dirichlet process
+MAX_N = 30  # maximum number of iterations for the Dirichlet process
 
 
 # ----------------------------------------
@@ -197,21 +197,8 @@ def run_dirichlet(
         p, var = calculate_posteriors(alpha_posterior)
         posterior_distributions.append((p, var))
 
-        # TODO: remove early stopping conditions - run to max # trials
-
-        # # Calculate the confidence interval
-        # ci = calculate_ci(p, var, n)
-
-        # if display_output:
-        #     print(f"Trial {n}: outcome={num_modes}, probabilities={p}")
-
-        # # Check our stopping condition
-        # if ci[0] >= 0.6:
-        #     if display_output:
-        #         print(
-        #             f"{chr}:{L}-{R} - stopping after {n} iterations, {np.argmax(p) + 1} modes, ci={ci}"
-        #         )
-        #     break
+        if display_output:
+            print(f"Trial {n}: outcome={num_modes}, probabilities={p}")
 
     _, best_gmm_evidence = min(
         gmm_results, key=lambda x: x[0].score if x[0] else np.inf

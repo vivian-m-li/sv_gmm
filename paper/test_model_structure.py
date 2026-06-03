@@ -16,7 +16,10 @@ from src.utils.write_sv_output import (
 
 
 def write_test_result(name: str, cfg: dict, runtime: float):
-    results_file = os.path.join(cfg["paths"]["output_dir"], "results.csv")
+    input_dir = cfg["paths"]["input_dir"]
+    output_dir = cfg["paths"]["output_dir"]
+    
+    results_file = os.path.join(output_dir, "results.csv")
     if not os.path.exists(results_file):
         df = pd.DataFrame(
             columns=[
@@ -36,17 +39,25 @@ def write_test_result(name: str, cfg: dict, runtime: float):
         df = pd.read_csv(results_file)
 
     truth_set = pd.read_csv(
-        os.path.join(cfg["paths"]["input_dir"], cfg["calibrate"]["truth_set"])
+        os.path.join(input_dir, cfg["calibrate"]["truth_set"])
     )
     # compare results to truth set
     n_modes = pd.read_csv(
-        os.path.join(cfg["paths"]["output_dir"], name, "svs_n_modes.csv")
+        os.path.join(output_dir, name, "svs_n_modes.csv")
     )
     n_modes = n_modes.rename({"num_modes": "n_svs_predicted"}, axis=1)
+
+    # sv ids can either be in the form of the regex below or just the ID
+    lookup = pd.read_csv(os.path.join(input_dir, "sv_lookup.csv"))
+
     for i, row in n_modes.iterrows():
         sv_id = row["sv_id"]
         match = re.match(r"[\w+]_(\d+):(\d+)_[\d+]:(\d+)", sv_id)
-        chr, start, stop = match.groups()
+        if match is None:
+            lookup_row = lookup[lookup["id"] == sv_id].iloc[0]
+            chr, start, stop = lookup_row["chr"], lookup_row["start"], lookup_row["stop"]
+        else:
+            chr, start, stop = match.groups()
         n_modes.at[i, "chr"] = int(chr)
         n_modes.at[i, "start"] = int(start)
         n_modes.at[i, "stop"] = int(stop)
@@ -123,14 +134,16 @@ def single_test(name: str, cfg: dict, updated_cfg_vals: dict):
         sample_ids,
     )
 
-    split_all(cfg_copy, sample_ids, insert_size_lookup)
+    sv_lookup_file = cfg["input_files"]["sv_lookup_file"]
+    sv_lookup = pd.read_csv(os.path.join(input_dir, sv_lookup_file), low_memory=False)
+    subset = pd.read_csv(os.path.join(input_dir, cfg["calibrate"]["truth_set"]))
+    subset = subset.drop(columns=["n_svs_actual"])
+    sv_lookup = pd.merge(sv_lookup, subset, on=["chr", "start", "stop"], how="inner")
+
+    split_all(cfg_copy, sample_ids, insert_size_lookup, sv_lookup)
 
     concat_multi_processed_sv_files(
         output_dir, intermediate_output_dir, "all_split_trials.csv"
-    )
-    sv_lookup = pd.read_csv(
-        os.path.join(input_dir, cfg["input_files"]["sv_lookup_file"]),
-        low_memory=False,
     )
     write_post_processed_files(
         output_dir,
@@ -236,13 +249,14 @@ if __name__ == "__main__":
     cfg = load_config()
 
     # hard-code paths in case the config file is off
-    cfg["paths"]["input_dir"] = "data/synthetic_calibration"
-    cfg["paths"]["output_dir"] = "output/synthetic_calibration/results"
-    cfg["paths"]["stix_output_dir"] = "output/synthetic_calibration/stix_output"
+    cfg["paths"]["input_dir"] = "data/calibration"
+    cfg["paths"]["output_dir"] = "output/calibration/model_results"
+    cfg["paths"]["stix_output_dir"] = "output/calibration/stix_output_0.9"
     cfg["paths"][
         "intermediate_output_dir"
-    ] = "output/synthetic_calibration/calibration_outputs"
+    ] = "output/calibration/calibration_outputs/model_tests"
     cfg["input_files"]["sv_lookup_file"] = "deletions.csv"
-    cfg["calibrate"]["truth_set"] = "sv_subset.csv"
+    cfg["input_files"]["sample_id_file"] = "lr_sample_ids.txt"
+    cfg["calibrate"]["truth_set"] = "sv_subset_sr_lr_nonref_most_samples.csv"
 
     test_model_structure(cfg)

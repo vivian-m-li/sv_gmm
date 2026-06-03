@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-from src.model.gmm_trial import gmm_trial
+from src.model.dirichlet import run_dirichlet
 from src.utils.helper import stix_output_to_df
 
 
@@ -413,7 +413,7 @@ def generate_and_split_sample_reads(
         data_to_vcf(evidence, insert_size_lookup, vcf_filename)
 
     if run_split:
-        gmm_result, evidence_by_mode = gmm_trial(
+        gmm_results, _, _ = run_dirichlet(
             reads,
             chr=str(chr),
             L=L,
@@ -427,6 +427,9 @@ def generate_and_split_sample_reads(
             r_threshold=model_params["r_threshold"],
             repulsion_stepsize=model_params["repulsion_stepsize"],
             model_comparison_func=model_params["model_comparison_func"],
+        )
+        gmm_result, evidence_by_mode = min(
+            gmm_results, key=lambda x: x[0].score if x[0] else np.inf
         )
         return gmm_result, evidence_by_mode
 

@@ -335,7 +335,7 @@ def run_calibration_bayesian_opt(
         transition_criteria=[
             # transition to BoTorch node once there are 15 trials on the experiment.
             MinTrials(
-                threshold=15,
+                threshold=5,
                 transition_to=botorch_node.name,
                 use_all_trials_in_exp=True,
             )
@@ -395,7 +395,7 @@ def run_calibration_bayesian_opt(
             params = {
                 "q": round(snap_to_grid(row["q"], q_min, q_step), 2),
                 "r": round(row["r"], 2),
-                "epsilon": round(row["epsilon"], 2),
+                "epsilon": int(row["epsilon"]),
             }
             _, trial_index = ax_client.attach_trial(params)
             ax_client.complete_trial(
@@ -585,8 +585,6 @@ def download_stix_data(
         p.starmap(download_stix_data_inner, args)
         p.close()
         p.join()
-
-    os.rmdir(partial_outputs_dir)
 
 
 def calibrate(cfg: dict):

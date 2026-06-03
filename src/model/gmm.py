@@ -177,7 +177,7 @@ def calc_log_likelihood(
                     x[i], mu[k], regularized_cov[k]
                 )
             except np.linalg.LinAlgError:
-                log_pdf_i = -np.inf
+                log_pdf_i = -999999
             log_pdfs.append(log_pdf_i)
 
         with np.errstate(under="ignore"):
@@ -624,7 +624,7 @@ def gmm(
         best_model = {
             "valid": True,
             "num_sv": 1,
-            "score": np.inf,
+            "score": 999999,
             "params": opt_params,
             "num_iterations": num_iterations,
         }
@@ -661,7 +661,7 @@ def gmm(
                 model_results[num_modes] = {
                     "valid": False,
                     "num_sv": num_modes,
-                    "score": np.inf,
+                    "score": 999999,
                     "params": [],
                     "num_iterations": 0,
                 }
