@@ -7,10 +7,15 @@ import time
 import pandas as pd
 from pprint import pprint
 
+from src.data.query_stix import query_stix
 from src.model.dirichlet import run_dirichlet
 from src.utils.config_loader import load_config
 from src.utils.helper import get_sample_ids
-from src.utils.model_helper import process_input_files
+from src.utils.model_helper import (
+    process_input_files,
+    get_query_region,
+    giggle_format,
+)
 from src.utils.timeout import break_after
 from src.utils.write_sv_output import (
     get_raw_data,
@@ -102,14 +107,80 @@ def run_split_wrapper(
         raise Exception("Exiting split_all...")
 
 
-@break_after(hours=62, minutes=00)
+def download_stix_data_inner(row: pd.Series, cfg: dict):
+    query_region = get_query_region(
+        giggle_format(row.chr, row.start),
+        giggle_format(row.chr, row.stop),
+        cfg["query"]["read_overlap"],
+    )
+
+    output_dir = cfg["paths"]["stix_output_dir"]
+    filename = f"{query_region.file_name}.txt"
+    file = os.path.join(output_dir, filename)
+
+    # check if the data for this region already exists
+    if os.path.isfile(file):
+        return
+
+    stix_file = query_stix(
+        query_region,
+        output_dir,
+        cfg["stix"]["bin"],
+        cfg["stix"]["index"],
+        cfg["stix"]["database"],
+        cfg["stix"]["num_shards"],
+        True,
+    )
+    print(f"Downloaded STIX data {stix_file}", flush=True)
+
+
+def download_stix_data(svs: pd.DataFrame, cfg: dict):
+    """Download stix data for all SVs before SPLIT."""
+    partial_outputs_dir = os.path.join(
+        cfg["paths"]["stix_output_dir"], "partial_outputs",
+    )
+    os.makedirs(partial_outputs_dir, exist_ok=True)
+
+    with multiprocessing.Manager():
+        p = multiprocessing.Pool(SLURM_CPUS)
+        args = []
+        for _, row in svs.iterrows():
+            args.append((row, cfg))
+
+        p.starmap(download_stix_data_inner, args)
+        p.close()
+        p.join()
+
+
+def get_processed_svs(svs: pd.DataFrame, cfg: dict):
+    """Returns all SVs that were fully processed before time-out."""
+    output_dir = cfg["paths"]["local_intermediate_output_dir"]
+    processed = []
+    for _, row in svs.iterrows():
+        sv_id = row["id"]
+        if os.path.exists(os.path.join(output_dir, f"{sv_id}_posteriors.csv")):
+            processed.append(sv_id)
+    return processed
+
+
+@break_after(hours=84, minutes=00)
 def split_all(
-    cfg: dict, sample_ids: set[str], insert_size_lookup: dict[str, int]
+    cfg: dict, sample_ids: set[str], insert_size_lookup: dict[str, int], svs: pd.DataFrame | None = None
 ):
     input_dir = cfg["paths"]["input_dir"]
-    sv_lookup_file = cfg["input_files"]["sv_lookup_file"]
-    svs = pd.read_csv(os.path.join(input_dir, sv_lookup_file), low_memory=False)
+    if svs is None:
+        sv_lookup_file = cfg["input_files"]["sv_lookup_file"]
+        svs = pd.read_csv(os.path.join(input_dir, sv_lookup_file), low_memory=False)
     population_size = len(sample_ids)
+
+    download_stix_data(svs, cfg)
+
+    processed_svs = get_processed_svs(svs, cfg)
+    n_processed = len(processed_svs)
+    if n_processed > 0:
+        print(f"Already processed {n_processed} SVs", flush=True)
+
+    svs = svs[~svs["id"].isin(processed_svs)]
 
     with multiprocessing.Manager():
         p = multiprocessing.Pool(SLURM_CPUS)
@@ -117,6 +188,7 @@ def split_all(
             (row.to_dict(), cfg, population_size, insert_size_lookup)
             for _, row in svs.iterrows()
         ]
+        print(f"Processing {len(args)} SVs...", flush=True)
         p.starmap(run_split_wrapper, args)
         p.close()
         p.join()
@@ -172,11 +244,11 @@ def main(config_path: str = "config.toml"):
                 os.path.join(local_intermediate_output_dir, file),
             )
 
-    print("Concatenating multi-processed SV files...")
+    print("Concatenating multi-processed SV files...", flush=True)
     concat_multi_processed_sv_files(
         output_dir, local_intermediate_output_dir, "all_split_trials.csv"
     )
-    print("Writing post-processed files...")
+    print("Writing post-processed files...", flush=True)
     sv_lookup = pd.read_csv(
         os.path.join(input_dir, cfg["input_files"]["sv_lookup_file"]),
         low_memory=False,
@@ -194,7 +266,7 @@ def main(config_path: str = "config.toml"):
     elapsed_time = end - start
     hours, remainder = divmod(elapsed_time, 3600)
     minutes, _ = divmod(remainder, 60)
-    print(f"Completed in {int(hours)}h {int(minutes)}m")
+    print(f"Completed in {int(hours)}h {int(minutes)}m", flush=True)
 
 
 if __name__ == "__main__":
