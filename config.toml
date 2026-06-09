@@ -13,28 +13,27 @@
 # ------------------------------------------------------------------------------
 [paths]
 
-# Directory containing your input data (VCF/CSV callset, sample IDs, insert
+# input_dir: directory containing your input data (VCF/CSV callset, sample IDs, insert
 # sizes, etc.).
-input_dir = "data/1kg"
 
-# Directory where results will be written.
-output_dir = "output/results"
+# output_dir: directory where results will be written.
 
-# Sub-directory where raw STIX query output files are cached between runs.
-stix_output_dir = "output/stix_output"
+# stix_output_dir: sub-directory where raw STIX query output files are cached between runs.
 
-# Intermediate directory used during processing.
+# intermediate_output_dir: intermediate directory used during processing.
 # On HPC clusters, point this to a fast local scratch filesystem.
 # On a local machine, a subdirectory of output_dir is fine.
-intermediate_output_dir = "/scratch/Users/vili4418/processed_svs"
 
-# Local directory to store intermediate output files.
+# local_intermediate_output_dir: local directory to store intermediate output files.
 # Files are first written to intermediate_output_dir, then moved to
 # local_intermediate_output_dir if they are not the same.
-local_intermediate_output_dir = "output/results/processed_svs"
 
-# enable this when running query_stix_all.py
-# stix_output_dir = "/scratch/Users/vili4418/stix_output"
+# default parameter values for running on 1kg data
+input_dir = "data/1kg"
+output_dir = "output/results"
+stix_output_dir = "output/stix_output"
+intermediate_output_dir = "/scratch/Users/vili4418/processed_svs"
+local_intermediate_output_dir = "output/results/processed_svs"
 
 # use these paths when running calibrate_model.py on 1kg data
 # input_dir = "data/calibration"
@@ -105,7 +104,6 @@ num_shards = 8
 # 1.0 = full overlap allowed; 0.5 = half the SV length.
 read_overlap = 0.6
 
-
 # ------------------------------------------------------------------------------
 # [model] — Gaussian mixture model / Dirichlet process parameters
 # These are passed directly into the GMM; leave a value commented out to use the
@@ -116,18 +114,18 @@ read_overlap = 0.6
 # if the file above does not exist.
 default_insert_size = 450
 
-
 # Initialization method for GMM clustering. Supported algorithms: dp_k-means++, k-means++ or random.
-init = "kmeans++"
+init = "random"
 
 # Whether to apply cluster repulsion to GMM clustering
-repulsion = "False"
+repulsion = "True"
 
 # Used if repulsion is True. Interaction radius for the repulsive force
-r_threshold = 0.8
+r_threshold = 0.4
 
 # Used if repulsion is True. Repulsion stepsize
-repulsion_stepsize = 10.0
+repulsion_stepsize = 1
+# set stepsize to 6 for synthetic data
 
 # Model comparison function to use for selecting the best model. Supported options: AIC, BIC, ICL
 model_comparison_func = "bic"
