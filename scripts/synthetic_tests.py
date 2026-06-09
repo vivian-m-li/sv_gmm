@@ -4,6 +4,7 @@ import csv
 import math
 import multiprocessing
 import os
+from pprint import pprint
 
 import numpy as np
 import pandas as pd
@@ -281,6 +282,12 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     cfg = load_config(args.config)
+    print(
+        f"Running synthetic data tests with n={args.n}, svlen={args.svlen}, case={args.case}"
+    )
+    print("Config args:")
+    pprint(cfg)
+
     split_synthetic_svs(
         cfg,
         n_samples=args.n,

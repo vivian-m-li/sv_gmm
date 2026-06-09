@@ -290,8 +290,8 @@ def generate_mapped_pairs_for_sv(
     mode_end: int,
     insert_mean: int,
     n_pairs: int = 10,
-    fragment_length_sd: int = 10,
-    read_jitter: int = 20,
+    fragment_length_sd: int = 30,
+    read_jitter: int = 40,
 ):
     """
     Return a list of tuples (l_start, l_end, r_start, r_end) representing
@@ -431,6 +431,7 @@ def generate_and_split_sample_reads(
         gmm_result, evidence_by_mode = min(
             gmm_results, key=lambda x: x[0].score if x[0] else np.inf
         )
+
         return gmm_result, evidence_by_mode
 
     return None, []
