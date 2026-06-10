@@ -24,7 +24,7 @@ def concat_mean_insert_sizes(output_dir: str, filename: str):
     df.to_csv(filename, index=False)
 
 
-@break_after(hours=11, minutes=55)
+@break_after(hours=5, minutes=55)
 def get_insert_sizes(
     cfg,
     samples_file: str,
@@ -32,6 +32,9 @@ def get_insert_sizes(
     output_dir = cfg["paths"]["input_dir"]
     insert_files_dir = os.path.join(output_dir, "insert_size_files")
     os.makedirs(insert_files_dir, exist_ok=True)
+
+    temp_file_dir = cfg["paths"]["intermediate_output_dir"]
+    os.makedirs(temp_file_dir, exist_ok=True)
 
     df = pd.read_csv(
         samples_file, sep="\t" if samples_file.endswith(".tsv") else ","
@@ -54,11 +57,11 @@ def get_insert_sizes(
         url = row["url"].values[0]
 
         subprocess.run(
-            ["bash", "bash/get_insert_size.sh"]
+            ["bash", "src/data/bash/get_insert_size.sh"]
             + [
                 sample_id,
                 url,
-                cfg["paths"]["intermediate_output_dir"],
+                temp_file_dir,
                 insert_files_dir,
                 cfg["samtools"]["bin"],
             ],
@@ -67,7 +70,7 @@ def get_insert_sizes(
         )
 
         end = time.time()
-        print(f"{sample_id} - time to get mean insert size={end - start}")
+        print(f"{sample_id} - time to get mean insert size={end - start}", flush=True)
 
     concat_mean_insert_sizes(
         insert_files_dir,
