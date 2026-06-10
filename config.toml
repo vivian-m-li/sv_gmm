@@ -50,6 +50,9 @@ local_intermediate_output_dir = "output/results/processed_svs"
 # use these paths when running synthetic_tests.py
 # output_dir = "output/synthetic_tests"
 
+# use these paths when running get_insert_sizes
+# intermediate_output_dir = "/scratch/Users/vili4418/insert_size_files"
+
 # ------------------------------------------------------------------------------
 # [input_files] — Files expected inside input_dir
 # ------------------------------------------------------------------------------
@@ -196,3 +199,12 @@ p_step = 100
 
 # Absolute path to the compiled bedtools binary.
 bin = "/Users/vili4418/sv/bedtools/bin/bedtools"
+
+# ------------------------------------------------------------------------------
+# [samtools] — Path to the samtools executable
+# Required to extract insert size information using BAM/CRAM files when insert_size_file is not provided.
+# ------------------------------------------------------------------------------
+[samtools]
+
+# Absolute path to the compiled bedtools binary.
+bin = "/Users/vili4418/sv/samtools-1.21/samtools"
