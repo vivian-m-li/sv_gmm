@@ -17,6 +17,7 @@ from src.utils.model_helper import (
     get_insert_size_lookup,
     reciprocal_overlap,
 )
+from src.utils.types import InsertSizeDistribution
 
 from src.model.gmm_trial import gmm_trial
 
@@ -165,7 +166,7 @@ def generate_and_write_reads(
     sv_lookup: pd.DataFrame,
     generated_svs: dict,
     sample_ids: set,
-    insert_size_lookup: dict,
+    insert_size_lookup: dict[str, InsertSizeDistribution],
 ) -> None:
     """
     Generates synthetic read pairs for each SV and writes them to files in the same format as stix output.
@@ -197,9 +198,7 @@ def generate_and_write_reads(
             n_pairs = random.randint(2, 30)
 
             mode_start, mode_end = svs[mode]
-            insert_size = insert_size_lookup[
-                insert_size_lookup["sample_id"] == sample
-            ]["mean_insert_size"].values[0]
+            insert_size = insert_size_lookup[sample].mean
             pairs = generate_mapped_pairs_for_sv(
                 mode_start, mode_end, insert_size, n_pairs
             )
@@ -241,8 +240,8 @@ def generate(cfg: dict, n_svs: int) -> None:
             os.path.join(input_dir, cfg["input_files"]["sample_id_file"])
         )
     )
-    insert_size_lookup = pd.read_csv(
-        os.path.join(input_dir, cfg["input_files"]["insert_size_file"])
+    insert_size_lookup = get_insert_size_lookup(
+        input_dir, cfg["input_files"]["insert_size_file"]
     )
 
     sv_lookup, generated_svs = generate_and_write_deletions(input_dir, n_svs)

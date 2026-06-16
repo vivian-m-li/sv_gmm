@@ -17,6 +17,7 @@ from src.utils.model_helper import (
     giggle_format,
 )
 from src.utils.timeout import break_after
+from src.utils.types import InsertSizeDistribution
 from src.utils.write_sv_output import (
     get_raw_data,
     init_sv_stat_row,
@@ -33,7 +34,7 @@ def run_split_trial(
     row: dict,
     cfg: dict,
     population_size: int,
-    insert_size_lookup: dict[str, int],
+    insert_size_lookup: dict[str, InsertSizeDistribution],
 ):
     sv_id = row["id"]
     input_dir = cfg["paths"]["input_dir"]
@@ -98,7 +99,7 @@ def run_split_wrapper(
     row: dict,
     cfg: dict,
     population_size: int,
-    insert_size_lookup: dict[str, int],
+    insert_size_lookup: dict[str, InsertSizeDistribution],
 ):
     try:
         run_split_trial(row, cfg, population_size, insert_size_lookup)
@@ -137,7 +138,8 @@ def download_stix_data_inner(row: pd.Series, cfg: dict):
 def download_stix_data(svs: pd.DataFrame, cfg: dict):
     """Download stix data for all SVs before SPLIT."""
     partial_outputs_dir = os.path.join(
-        cfg["paths"]["stix_output_dir"], "partial_outputs",
+        cfg["paths"]["stix_output_dir"],
+        "partial_outputs",
     )
     os.makedirs(partial_outputs_dir, exist_ok=True)
 
@@ -165,12 +167,17 @@ def get_processed_svs(svs: pd.DataFrame, cfg: dict):
 
 @break_after(hours=84, minutes=00)
 def split_all(
-    cfg: dict, sample_ids: set[str], insert_size_lookup: dict[str, int], svs: pd.DataFrame | None = None
+    cfg: dict,
+    sample_ids: set[str],
+    insert_size_lookup: dict[str, InsertSizeDistribution],
+    svs: pd.DataFrame | None = None,
 ):
     input_dir = cfg["paths"]["input_dir"]
     if svs is None:
         sv_lookup_file = cfg["input_files"]["sv_lookup_file"]
-        svs = pd.read_csv(os.path.join(input_dir, sv_lookup_file), low_memory=False)
+        svs = pd.read_csv(
+            os.path.join(input_dir, sv_lookup_file), low_memory=False
+        )
     population_size = len(sample_ids)
 
     download_stix_data(svs, cfg)

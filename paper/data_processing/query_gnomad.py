@@ -13,6 +13,7 @@ from src.utils.model_helper import giggle_format
 from model.gmm_trial import process_data
 from src.utils.constants import CHR_LENGTHS
 from src.utils.helper import stix_output_to_df
+from src.utils.types import InsertSizeDistribution
 
 # for human genome assembly GRCh37, https://www.ncbi.nlm.nih.gov/grc/human/data?asm=GRCh37
 URL = "https://gnomad.broadinstitute.org/api/"
@@ -93,7 +94,8 @@ def get_num_samples(row_index: int, row, chr: str, lookup: dict[int, int]):
     if not reads.empty:
         # set default sample size
         insert_size_lookup = {
-            sample_id: 450 for sample_id in reads["sample_id"].unique()
+            sample_id: InsertSizeDistribution(mean=450, sd=100)
+            for sample_id in reads["sample_id"].unique()
         }
         points, _ = process_data(
             reads, L=row.pos, R=row.end, insert_size_lookup=insert_size_lookup

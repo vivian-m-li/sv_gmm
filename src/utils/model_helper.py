@@ -10,7 +10,7 @@ import pysam
 
 from src.utils.constants import CHR_LENGTHS
 from src.utils.helper import get_sample_ids
-from src.utils.types import StixQueryRegion
+from src.utils.types import StixQueryRegion, InsertSizeDistribution
 
 
 # ------------------------------
@@ -156,7 +156,7 @@ def get_insert_size_lookup(
     filename: str | None,
     default_insert_size: int | None,
     sample_ids: set[str],
-) -> dict[str, int]:
+) -> dict[str, InsertSizeDistribution]:
     """Returns a dictionary mapping sample IDs to their mean insert sizes from sequencing high-coverage short-reads."""
     insert_size_file = os.path.join(dir, filename)
     if filename is None:
@@ -171,11 +171,17 @@ def get_insert_size_lookup(
 
     insert_size_df = pd.read_csv(
         insert_size_file,
-        dtype={"sample_id": str, "mean_insert_size": float},
+        dtype={
+            "sample_id": str,
+            "mean_insert_size": float,
+            "insert_size_sd": float,
+        },
     )
     return {
-        sample_id: int(mean_insert_size)
-        for sample_id, mean_insert_size in insert_size_df.values
+        row["sample_id"]: InsertSizeDistribution(
+            mean=int(row["mean_insert_size"]), sd=row["insert_size_sd"]
+        )
+        for _, row in insert_size_df.iterrows()
     }
 
 

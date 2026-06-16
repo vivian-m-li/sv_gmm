@@ -21,6 +21,7 @@ from src.utils.model_helper import (
     get_insert_size_lookup,
     f1_score,
 )
+from src.utils.types import InsertSizeDistribution
 from src.utils.write_sv_output import (
     get_raw_data,
     init_sv_stat_row,
@@ -78,7 +79,7 @@ def run_dirichlet_inner(
     cfg: dict,
     output_dir: str,
     sample_ids: set[str],
-    insert_size_lookup: dict[str, int],
+    insert_size_lookup: dict[str, InsertSizeDistribution],
     q: float,
     r: float,
     epsilon: float,
@@ -153,7 +154,7 @@ def run_dirichlet_wrapper(
     cfg: dict,
     output_dir: str,
     sample_ids: set[str],
-    insert_size_lookup: dict[str, int],
+    insert_size_lookup: dict[str, InsertSizeDistribution],
     q: float,
     r: float,
     epsilon: float,
@@ -186,7 +187,7 @@ def run_calibration_test(
     r: float,
     epsilon: float,
     sample_ids: set[str],
-    insert_size_lookup: dict[str, int],
+    insert_size_lookup: dict[str, InsertSizeDistribution],
     mult_q: bool,
 ):
     """
@@ -294,7 +295,7 @@ def snap_to_grid(value: float, min_val: float, step: float) -> float:
 def run_calibration_bayesian_opt(
     sv_df: pd.DataFrame,
     sample_ids: set[str],
-    insert_size_lookup: dict[str, int],
+    insert_size_lookup: dict[str, InsertSizeDistribution],
     cfg: dict,
     mult_q: bool,
     *,
@@ -482,7 +483,7 @@ def run_calibration_bayesian_opt(
 def run_calibration_grid_search(
     sv_df: pd.DataFrame,
     sample_ids: set[str],
-    insert_size_lookup: dict[str, int],
+    insert_size_lookup: dict[str, InsertSizeDistribution],
     cfg: dict,
     mult_q: bool,
     *,

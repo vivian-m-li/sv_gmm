@@ -13,6 +13,12 @@ class StixQueryRegion:
 
 
 @dataclass
+class InsertSizeDistribution:
+    mean: int
+    sd: float
+
+
+@dataclass
 class GaussianDistribution1D:
     mu: list[float]  # means for a 2D GMM
     vr: list[float]  # variances
@@ -88,6 +94,7 @@ class Evidence:
     end: int
     paired_ends: list[list[float]]
     mean_insert_size: int
+    insert_size_sd: float
     mode_probabilities: list[float] = field(
         default_factory=list
     )  # probability of belonging to each mode. Length should match the number of modes in the GMM
