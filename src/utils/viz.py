@@ -35,7 +35,7 @@ from src.utils.helper import (
     get_most_common_split_df,
     get_svlen,
 )
-from src.utils.model_helper import calc_af
+from src.utils.model_helper import calc_af, get_insert_size_lookup
 from src.utils.types import Evidence, SVStat
 
 REFERENCE_FILE = "hs37d5.fa.gz"
@@ -425,18 +425,9 @@ def plot_2d_coords(
     repulsion: bool = False,
 ):
     if insert_size_lookup is None and insert_size_file is not None:
-        insert_sizes_df = pd.read_csv(insert_size_file)
-    else:
-        insert_sizes_df = pd.DataFrame(
-            columns=["sample_id", "mean_insert_size"]
-        )
-        if insert_size_lookup is None:
-            insert_size_lookup = {}
-        for sample_id, mean_insert_size in insert_size_lookup.items():
-            insert_sizes_df.loc[len(insert_sizes_df)] = [
-                sample_id,
-                mean_insert_size,
-            ]
+        insert_size_lookup = get_insert_size_lookup("", insert_size_file)
+    elif insert_size_lookup is None:
+        insert_size_lookup = {}
     for i, mode in enumerate(evidence_by_mode):
         x = []
         num_evidence = []
@@ -456,12 +447,11 @@ def plot_2d_coords(
 
             scatter_colors.append(COLORS[i])
 
-            try:
-                mean_insert_size = insert_sizes_df[
-                    insert_sizes_df["sample_id"] == evidence.sample.id
-                ]["mean_insert_size"].values[0]
-            except IndexError:
-                mean_insert_size = 450  # to handle synthetic data
+            mean_insert_size = (
+                insert_size_lookup[evidence.sample.id].mean
+                if evidence.sample.id in insert_size_lookup
+                else 450
+            )
 
             if mean_insert_size == 0:
                 mean_insert_size = 450  # default value

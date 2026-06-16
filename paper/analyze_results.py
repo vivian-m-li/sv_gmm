@@ -5,9 +5,11 @@ import subprocess
 import numpy as np
 import pandas as pd
 
+from src.model.membership import check_group_membership
 from src.utils.config_loader import load_config
 from src.utils.constants import NONREF_GTS
 from src.utils.helper import get_sample_ids
+from src.utils.model_helper import get_insert_size_lookup
 
 
 def merge_dfs(dir: str):
@@ -182,9 +184,50 @@ def compare_sv_intersections(dir):
     # not_split: mean intersections per sv: 1.51, median: 1.0
 
 
+def get_group_memberships(out_dir: str):
+    results = pd.read_csv("output/results/most_common_split.csv")
+    sample_ids = get_sample_ids("data/1kg/sample_ids.txt")
+    insert_size_lookup = get_insert_size_lookup(
+        "data/1kg", "insert_sizes.csv", 450, sample_ids
+    )
+
+    df = pd.DataFrame(
+        columns=[
+            "id",
+            "cluster_idx",
+            "n_members",
+            "n_non_members",
+            "sd_threshold",
+        ]
+    )
+    for df_idx, sv_row in results.iterrows():
+        modes = ast.literal_eval(sv_row["modes"])
+        for i, mode in enumerate(modes):
+            membership = check_group_membership(
+                (sv_row["chr"], mode["start"], mode["end"]),
+                mode["sample_ids"],
+                insert_size_lookup,
+                threshold=2.0,
+            )
+            n_members = sum(membership.values())
+            n_non_members = len(membership) - n_members
+            df.loc[df_idx] = [
+                sv_row["id"],
+                i + 1,
+                n_members,
+                n_non_members,
+                2.0,
+            ]
+        print(f"Processed {df_idx + 1}/{results.shape[0]} SVs", end="\r")
+
+    file = "membership.csv"
+    df.to_csv(os.path.join(out_dir, file), index=False)
+
+
 if __name__ == "__main__":
     dir = "output/results"
     # merge_dfs(dir)
     # print_split_distribution(dir)
     # compare_all_svs(dir)
-    compare_sv_intersections(dir)
+    # compare_sv_intersections(dir)
+    get_group_memberships(dir)

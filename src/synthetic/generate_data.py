@@ -8,13 +8,17 @@ from pathlib import Path
 
 from src.model.dirichlet import run_dirichlet
 from src.utils.helper import stix_output_to_df
+from src.utils.model_helper import get_insert_size_lookup
+from src.utils.types import InsertSizeDistribution
 
 
 # -----------------------------------------
 # Generate data for GATK SVCluster pipeline
 # -----------------------------------------
 def data_to_vcf(
-    evidence, insert_size_lookup: dict[str, int], vcf_filename: str
+    evidence,
+    insert_size_lookup: dict[str, InsertSizeDistribution],
+    vcf_filename: str,
 ):
     """
     Writes the synthetic data to a VCF file to be used for the GATK SVCluster pipeline.
@@ -23,7 +27,7 @@ def data_to_vcf(
     """
     reads_df = pd.DataFrame(columns=["sample_id", "L", "R", "mean_insert_size"])
     for sample_id, values in evidence.items():
-        mean_insert_size = insert_size_lookup[sample_id]
+        mean_insert_size = insert_size_lookup[sample_id].mean
         for read_L, read_R in zip(values[::2], values[1::2]):
             reads_df.loc[len(reads_df)] = [
                 sample_id,
@@ -356,9 +360,7 @@ def generate_and_split_sample_reads(
     weights = generate_weights(num_svs) if p is None else p
     modes = assign_modes(weights, samples)
 
-    insert_size_df = pd.read_csv(
-        insert_size_file, dtype={"mean_insert_size": int}
-    )
+    insert_size_distribution = get_insert_size_lookup("", insert_size_file)
 
     # for each sample, generate random evidence
     reads = stix_output_to_df("", write_empty_file=True)
@@ -369,7 +371,9 @@ def generate_and_split_sample_reads(
         mode_start, mode_end = svs[mode]
 
         # sample a per-sample mean insert size from your table
-        insert_size = int(insert_size_df["mean_insert_size"].sample().values[0])
+        insert_size = random.choice(
+            insert_size_distribution["mean_insert_size"].tolist()
+        )
         insert_size_lookup[sample] = insert_size
 
         pairs = generate_mapped_pairs_for_sv(

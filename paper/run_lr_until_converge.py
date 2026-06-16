@@ -12,13 +12,13 @@ from paper.data_processing.download_long_read_evidence import (
 from src.model.dirichlet import run_dirichlet
 from src.utils.helper import get_deletions_df, stix_output_to_df
 from src.utils.timeout import break_after
+from src.utils.types import InsertSizeDistribution
 from src.utils.write_sv_output import (
     init_sv_stat_row,
     write_sv_stats,
     write_posterior_distributions,
     concat_multi_processed_sv_files,
 )
-
 
 FILE_DIR = "long_reads/processed_svs_converge"
 SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
@@ -35,7 +35,10 @@ def run_lr_dirichlet_wrapper(
     sv_id = row["id"]
 
     # don't need to remove insert size for long reads
-    insert_size_lookup = {sample_id: 0 for sample_id in sample_set}
+    insert_size_lookup = {
+        sample_id: InsertSizeDistribution(mean=0, sd=0)
+        for sample_id in sample_set
+    }
 
     # filter for sample IDs that have the SV allele (not homozygous reference)
     filtered_sample_ids = []

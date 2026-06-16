@@ -7,7 +7,12 @@ from bokeh.models import HoverTool, ColumnDataSource, NumeralTickFormatter
 
 from src.model.gmm import gmm
 from src.utils.model_helper import reciprocal_overlap
-from src.utils.types import Evidence, Sample, EstimatedGMM
+from src.utils.types import (
+    Evidence,
+    Sample,
+    EstimatedGMM,
+    InsertSizeDistribution,
+)
 from src.utils.viz import plot_2d_coords_fig
 
 
@@ -153,7 +158,7 @@ def filter_and_plot_sequences_bokeh(
     file_name: str | None,
     L: int,
     R: int,
-    insert_size_lookup: dict[str, int],
+    insert_size_lookup: dict[str, InsertSizeDistribution],
     sig: int = 50,
     min_pairs: int = 2,  # minimum number of paired end reads for a sample needed to keep the sample
     plot_bokeh: bool,
@@ -244,7 +249,8 @@ def filter_and_plot_sequences_bokeh(
                     start=mean_l,
                     end=mean_r,
                     paired_ends=paired_ends,
-                    mean_insert_size=insert_size_lookup[sample_id],
+                    mean_insert_size=insert_size_lookup[sample_id].mean,
+                    insert_size_sd=insert_size_lookup[sample_id].sd,
                 )
 
                 # if more than 2 pieces of evidence (paired read_length-r ends), then there is an SV here for this sample
@@ -276,7 +282,8 @@ def filter_and_plot_sequences_bokeh(
                     start=mean_l,
                     end=mean_r,
                     paired_ends=paired_ends,
-                    mean_insert_size=insert_size_lookup[sample_id],
+                    mean_insert_size=insert_size_lookup[sample_id].mean,
+                    insert_size_sd=insert_size_lookup[sample_id].sd,
                 )
 
                 if plot_bokeh:
@@ -486,7 +493,7 @@ def get_intercepts(
     file_name: str | None,
     L: int,
     R: int,
-    insert_size_lookup: dict[str, int],
+    insert_size_lookup: dict[str, InsertSizeDistribution],
     plot_bokeh: bool = False,
     min_pairs: int = 2,
 ) -> tuple[np.ndarray[tuple[float, int]], list[Evidence]]:
@@ -537,7 +544,7 @@ def process_squiggle_data(
     *,
     L: int,
     R: int,
-    insert_size_lookup: dict[str, int],
+    insert_size_lookup: dict[str, InsertSizeDistribution],
     min_pairs: int = 2,  # minimum number of paired end reads for a sample needed to keep the sample
     plot_bokeh: bool = False,  # deprecated
     file_name: str | None,  # deprecated - used for plotting
@@ -570,7 +577,7 @@ def process_squiggle_data(
             # here, the intercept is just the length of the segment between the paired-end reads
             # subtract the insert size to get the length of the supposed deletion.
             b = (
-                mean_r - mean_l - insert_size_lookup[sample_id]
+                mean_r - mean_l - insert_size_lookup[sample_id].mean
             )  # R - L (including read length)
             sv_evidence.append(
                 Evidence(
@@ -579,7 +586,8 @@ def process_squiggle_data(
                     start=mean_l,
                     end=mean_r,
                     paired_ends=paired_ends,
-                    mean_insert_size=insert_size_lookup[sample_id],
+                    mean_insert_size=insert_size_lookup[sample_id].mean,
+                    insert_size_sd=insert_size_lookup[sample_id].sd,
                 )
             )
             # scale this by the SV coordinates so that the points are closer together
@@ -593,7 +601,7 @@ def process_data(
     *,
     L: int,
     R: int,
-    insert_size_lookup: dict[str, int],
+    insert_size_lookup: dict[str, InsertSizeDistribution],
     min_pairs: int = 2,  # minimum number of paired end reads for a sample needed to keep the sample
 ):
     """
@@ -603,7 +611,7 @@ def process_data(
     Returns a list of points to cluster and a list of Evidence objects for the samples that passed filtering.
     """
     # filter out reads that don't share enough reciprocal overlap with the SV region
-    # TODO: this should be replaced with additional filtering criteria
+    # this is not being done right now because we should be able to rely on STIX to return only relevant reads
     reads["r"] = reads.apply(
         lambda row: reciprocal_overlap((row["l_end"], row["r_start"]), (L, R)),
         axis=1,
@@ -650,7 +658,8 @@ def process_data(
                 end=med_r,
                 svlen=svlen,
                 paired_ends=paired_ends,
-                mean_insert_size=insert_size_lookup[sample_id],
+                mean_insert_size=insert_size_lookup[sample_id].mean,
+                insert_size_sd=insert_size_lookup[sample_id].sd,
             )
         )
         # scale this by the SV coordinates so that the points are closer together
@@ -666,7 +675,7 @@ def gmm_trial(
     chr: str,
     L: int,  # sv start
     R: int,  # sv stop
-    insert_size_lookup: dict[str, int],
+    insert_size_lookup: dict[str, InsertSizeDistribution],
     init: str = "kmeans++",
     repulsion: bool = False,
     r_threshold: float = 0.8,

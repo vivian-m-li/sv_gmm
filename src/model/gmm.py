@@ -547,9 +547,9 @@ def assign_values_to_modes(
 
 def select_model(x: np.ndarray, model_results: dict):
     """
-    Selects the optimal GMM model based on the AIC scores. Checks that each
-    model is valid by verifying that all clusters have at least one data point
-    assigned to them.
+    Selects the optimal GMM model based on the log-likelihood scores. Checks
+    that each model is valid by verifying that all clusters have at least one
+    data point assigned to them.
     """
     best_model = None
     for i, model in enumerate(model_results.values()):
