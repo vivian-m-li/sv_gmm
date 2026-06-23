@@ -18,13 +18,17 @@ def concat_mean_insert_sizes(output_dir: str, filename: str):
     for i, file in enumerate(files):
         sample_id = file.strip(".txt")
         with open(os.path.join(output_dir, file)) as f:
-            mean_insert_size = int(float(f.readlines()[0].strip("\n")))
-            insert_size_sd = int(float(f.readlines()[1].strip("\n")))
-            df.loc[i] = [sample_id, mean_insert_size, insert_size_sd]
+            try:
+                line = f.readlines()[0].strip("\n").split(", ")
+                mean_insert_size = int(float(line[0]))
+                insert_size_sd = int(float(line[1]))
+                df.loc[i] = [sample_id, mean_insert_size, insert_size_sd]
+            except Exception:
+                print(file)
     df.to_csv(filename, index=False)
 
 
-@break_after(hours=5, minutes=55)
+@break_after(hours=12)
 def get_insert_sizes(
     cfg,
     samples_file: str,
@@ -70,7 +74,7 @@ def get_insert_sizes(
         )
 
         end = time.time()
-        print(f"{sample_id} - time to get mean insert size={end - start}", flush=True)
+        print(f"{sample_id} - time to get mean insert size={end - start:.2f}", flush=True)
 
     concat_mean_insert_sizes(
         insert_files_dir,

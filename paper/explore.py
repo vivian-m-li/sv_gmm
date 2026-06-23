@@ -11,14 +11,13 @@ def check_kmeans_centers():
     filename = "output/results/1_mode_svs.csv"
     svs = pd.read_csv(filename)
 
-    L_shifts = []
-    R_shifts = []
-    for _, row in svs.iterrows():
-        sample_ids = get_sample_ids("data/1kg/sample_ids.txt")
-        insert_size_lookup = get_insert_size_lookup(
-            "data/1kg", "insert_sizes.csv", 450, sample_ids
-        )
+    sample_ids = get_sample_ids("data/1kg/sample_ids.txt")
+    insert_size_lookup = get_insert_size_lookup(
+        "data/1kg", "insert_sizes.csv", 450, sample_ids
+    )
 
+    shifts = pd.DataFrame(columns=["id", "L_shift", "R_shift", "len_shift", "n_samples"])
+    for i, row in svs.iterrows():
         chr = str(row["chr"])
         L = row["start"]
         R = row["stop"]
@@ -29,7 +28,7 @@ def check_kmeans_centers():
         reads_file = f"output/stix_output/{stix_output_file}"
         reads = stix_output_to_df(reads_file)
 
-        x = process_data(
+        x, _ = process_data(
             reads,
             L=row["start"],
             R=row["stop"],
@@ -41,16 +40,13 @@ def check_kmeans_centers():
         mu = kmeans.cluster_centers_  # (length, L)
 
         L_shift = mu[0][1]
-        R_shift = (mu[0][0] + mu[0][1]) - R
-        L_shifts.append(L_shift)
-        R_shifts.append(R_shift)
+        cluster_L = L + L_shift
+        len_shift = mu[0][0] + (R - L)
+        R_shift = (cluster_L + len_shift) - R
+        shifts.loc[i] = [row["id"], L_shift, R_shift, len_shift, reads["sample_id"].nunique()]
+        print(f"Processed {i}/{len(svs)} SVs...", end="\r", flush=True)
 
-    L_shifts = np.array(L_shifts)
-    R_shifts = np.array(R_shifts)
-
-    print(f"Average L shift={np.mean(L_shifts)}, stdev={np.std(L_shifts)}")
-    print(f"Average R shift={np.mean(R_shifts)}, stdev={np.std(R_shifts)}")
-
+    shifts.to_csv("output/results/1_mode_shifts.csv", index=False)
 
 if __name__ == "__main__":
     check_kmeans_centers()
