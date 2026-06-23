@@ -1,5 +1,6 @@
 import multiprocessing
 import os
+import shutil
 import subprocess
 
 import pandas as pd
@@ -57,8 +58,12 @@ def get_bam_files_sv(
 
     for _, row in df.iterrows():
         output_file = os.path.join(file_dir, f"{row['sample_id']}.bam")
+        if os.path.exists(output_file):
+            continue
+
+        print(f"Downloading bam file for {row['sample_id']}")
         subprocess.run(
-            ["bash", "../../src/data/bash/read_cram_file.sh"]
+            ["bash", "src/data/bash/read_cram_file.sh"]
             + [
                 row["cram_file"],
                 region,
@@ -91,7 +96,7 @@ def get_bam_files(sv_id: str, cfg: dict):
     for _, row in df.iterrows():
         output_file = f"{file_dir}/{row['sample_id']}.bam"
         subprocess.run(
-            ["bash", "../../src/data/bash/read_cram_file.sh"]
+            ["bash", "src/data/bash/read_cram_file.sh"]
             + [
                 row["cram_file"],
                 region,
@@ -131,7 +136,55 @@ def get_all_bam_files():
             os.remove(file)
 
 
-def samplot_viz():
+def samplot_viz(
+    *,
+    sv_id: str,
+    input_dir: str,
+    out_dir: str,
+    lookup: pd.DataFrame | None = None,
+    sample_ids: list | None = None,
+) -> None:
+    if lookup is None:
+        cfg = load_config()
+        lookup = get_sv_lookup(cfg["paths"]["input_dir"])
+    row = lookup[lookup["id"] == sv_id].iloc[0]
+
+    os.makedirs(out_dir, exist_ok=True)
+
+    if sample_ids is not None:
+        temp_dir = os.path.join(input_dir, "temp")
+        os.makedirs(temp_dir, exist_ok=True)
+
+        for sample_id in sample_ids:
+            for ext in ["bam", "bam.bai"]:
+                shutil.copyfile(
+                    os.path.join(input_dir, f"{sample_id}.{ext}"),
+                    os.path.join(temp_dir, f"{sample_id}.{ext}"),
+                )
+        bam_files_dir = temp_dir
+    else:
+        bam_files_dir = input_dir
+
+    subprocess.run(
+        ["bash", "src/utils/bash/samplot_viz.sh"]
+        + [  # noqa: W503
+            sv_id,
+            str(row["chr"]),
+            str(row["start"]),
+            str(row["stop"]),
+            bam_files_dir,
+            out_dir,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    print("Samplot file saved to", os.path.join(out_dir, f"{sv_id}.png"))
+
+    if sample_ids is not None:
+        shutil.rmtree(temp_dir)
+
+
+def samplot_viz_all_svs():
     """Use samplot to visualize each bam file for all SVs with 2+ modes. Make sure to activate the conda env for samplot to work."""
     filename = "data/long_reads/sv_bam_files.txt"
     fiji_root = "vili4418@fiji.colorado.edu:/scratch/Users/vili4418/data/long_reads/bam_files/"
@@ -155,19 +208,11 @@ def samplot_viz():
                 continue
 
             # use samplot to visualize each bam file
-            row = lookup[lookup["id"] == sv_id].iloc[0]
-            subprocess.run(
-                ["bash", "../../src/utils/bash/samplot_viz.sh"]
-                + [  # noqa
-                    sv_id,
-                    row["chr"],
-                    str(row["start"]),
-                    str(row["stop"]),
-                    "data/long_reads/bam_files",
-                    "data/long_reads/samplot_viz",
-                ],
-                capture_output=True,
-                text=True,
+            samplot_viz(
+                sv_id=sv_id,
+                bam_files_dir=os.path.join("data/long_reads/bam_files", sv_id),
+                out_dir="data/long_reads/samplot_viz",
+                lookup=lookup,
             )
 
             # remove the downloaded bam files to save space
@@ -178,12 +223,15 @@ def samplot_viz():
 
 
 if __name__ == "__main__":
-    # get_all_bam_files()
-    # samplot_viz()
     get_bam_files_sv(
         sv_id="HGSV_245267",
         sample_sv_lookup_path="data/long_reads/sample_sv_lookup.csv",
         sample_files_path="data/long_reads/long_read_samples.csv",
         out_dir="output/bam_files",
         filter_ref_samples=True,
+    )
+    samplot_viz(
+        sv_id="HGSV_245267",
+        input_dir="output/bam_files/HGSV_245267",
+        out_dir="output/samplot_viz",
     )

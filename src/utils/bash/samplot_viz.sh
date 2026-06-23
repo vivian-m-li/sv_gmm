@@ -6,9 +6,8 @@ chr=$2
 left=$3
 right=$4
 
-in_dir=$5
+bams=$5
 out_dir=$6
-bams="${dout}/${in_dir}/${sv_id}"
 
 zoom_mult=1
 cd $bams

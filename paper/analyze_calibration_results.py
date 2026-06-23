@@ -415,7 +415,7 @@ def copy_viz_files():
                         str(row["chr"]),
                         str(row["start"]),
                         str(row["stop"]),
-                        bam_file_dir,
+                        os.path.join(bam_file_dir, sv_id),
                         samplot_sv_dir,
                     ],
                     stdout=subprocess.DEVNULL,

@@ -110,7 +110,7 @@ def get_bam_file(
         indexed_output_file
     ):
         subprocess.run(
-            ["bash", "bash/read_cram_file.sh"]
+            ["bash", "src/data/bash/read_cram_file.sh"]
             + [
                 cram_file,
                 region,

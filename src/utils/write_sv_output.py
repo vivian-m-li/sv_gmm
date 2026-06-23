@@ -19,7 +19,6 @@ from src.utils.helper import (
     get_most_common_split_df,
     get_sample_mode_probabilities,
     get_sv_lookup,
-    get_sv_chr,
     get_sample_ids,
     get_svlen,
     df_to_bed,
@@ -856,19 +855,6 @@ def get_overlapping_clustered_svs():
 
     # there are 22 overlapping SVs (>= 0.7 reciprocal overlap)
     print(new_overlaps.shape[0], new_overlaps)
-
-
-def write_samplot_files():
-    """Write samplot images for all SVs with 2+ modes."""
-    sv_ids = os.listdir("long_reads/bam_files")
-    for sv_id in sv_ids:
-        chr, start, stop = get_sv_chr(sv_id)
-        subprocess.run(
-            ["bash", "src/utils/bash/samplot_viz.sh"]
-            + [sv_id, chr, str(start), str(stop)],
-            capture_output=True,
-            text=True,
-        )
 
 
 def write_post_processed_files(
