@@ -23,4 +23,6 @@ scp "${temp_output_dir}/${sample_id}.txt" "$output_dir"
 #       mean = sum / count; 
 #       stddev = sqrt((sum_sq / count) - (mean^2)); 
 #       print mean, stddev; 
-#   }' > "${sample_id}_u.txt"
+#   }' > "${sample_id}.txt"
+
+# "$samtools_exec" view -q 5 -f 2 "$input_file" | tail -n +100000 | head -100000 | awk 'function abs(x) { return x < 0 ? -x : x } { print abs($9) }' > "${sample_id}.txt"

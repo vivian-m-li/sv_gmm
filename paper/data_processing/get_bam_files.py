@@ -4,28 +4,77 @@ import subprocess
 
 import pandas as pd
 
+from src.utils.config_loader import load_config
 from src.utils.helper import get_sv_chr, get_sv_lookup
 
 
-def get_bam_files_region(region: str):
-    """Standalone function to get BAM files for all samples in a given region (assuming the region does not correspond with a known SV)."""
-    df = pd.read_csv("data/long_reads/sample_sv_lookup.csv")
-    long_read_samples = pd.read_csv("data/long_reads/long_read_samples.csv")
-    df = df.merge(long_read_samples, on="sample_id")
-    file_dir = f"calibration/bam_files/{region}"
-    if not os.path.exists(file_dir):
-        os.mkdir(file_dir)
+def get_bam_files_sv(
+    *,
+    sample_sv_lookup_path: str,
+    sample_files_path: str,
+    out_dir: str,
+    sv_id: str | None = None,
+    region: str | None = None,
+    sample_ids: list | None = None,
+    filter_ref_samples: bool = False,
+    cfg: dict | None = None,
+):
+    """Standalone function to get BAM files for all samples in a given SV or region of the genome."""
+    assert sv_id is not None or region is not None
+
+    if cfg is None:
+        cfg = load_config()
+
+    sample_sv_lookup = pd.read_csv(sample_sv_lookup_path)
+    samples = pd.read_csv(sample_files_path)
+    df = sample_sv_lookup.merge(samples, on="sample_id")
+    if sample_ids is not None:
+        df = df[df["sample_id"].isin(sample_ids)]
+
+    all_sample_ids = df["sample_id"].unique()
+
+    if sv_id is not None:
+        file_dir = os.path.join(out_dir, sv_id)
+        lookup = pd.read_csv(
+            os.path.join(
+                cfg["paths"]["input_dir"], cfg["input_files"]["sv_lookup_file"]
+            )
+        )
+        row = lookup[lookup["id"] == sv_id]
+        region = f"chr{row['chr'].values[0]}:{row['start'].values[0]}-{row['stop'].values[0]}"
+
+        if filter_ref_samples:
+            ref_samples = [
+                sample_id
+                for sample_id in all_sample_ids
+                if row[sample_id].values[0] == "(0, 0)"
+            ]
+            df = df[~df["sample_id"].isin(ref_samples)]
+    else:
+        file_dir = os.path.join(out_dir, region)
+
+    os.makedirs(file_dir, exist_ok=True)
+
     for _, row in df.iterrows():
-        output_file = f"{file_dir}/{row['sample_id']}.bam"
+        output_file = os.path.join(file_dir, f"{row['sample_id']}.bam")
         subprocess.run(
-            ["bash", "../../src/data/bash/get_cigar.sh"]
-            + [row["cram_file"], region, output_file],
+            ["bash", "../../src/data/bash/read_cram_file.sh"]
+            + [
+                row["cram_file"],
+                region,
+                output_file,
+                cfg["samtools"]["bin"],
+                os.path.join(
+                    cfg["paths"]["input_dir"],
+                    cfg["input_files"]["reference_genome_file"],
+                ),
+            ],
             capture_output=True,
             text=True,
         )
 
 
-def get_bam_files(sv_id: str):
+def get_bam_files(sv_id: str, cfg: dict):
     """Get BAM files for all samples that have the given SV."""
     # get samples with the given sv_id
     df = pd.read_csv("data/long_reads/sample_sv_lookup.csv")
@@ -42,8 +91,17 @@ def get_bam_files(sv_id: str):
     for _, row in df.iterrows():
         output_file = f"{file_dir}/{row['sample_id']}.bam"
         subprocess.run(
-            ["bash", "../../src/data/bash/get_cigar.sh"]
-            + [row["cram_file"], region, output_file],
+            ["bash", "../../src/data/bash/read_cram_file.sh"]
+            + [
+                row["cram_file"],
+                region,
+                output_file,
+                cfg["samtools"]["bin"],
+                os.path.join(
+                    cfg["paths"]["input_dir"],
+                    cfg["input_files"]["reference_genome_file"],
+                ),
+            ],
             capture_output=True,
             text=True,
         )
@@ -51,6 +109,8 @@ def get_bam_files(sv_id: str):
 
 def get_all_bam_files():
     """Get BAM files for all samples/SV regions for SVs with 2+ modes."""
+    cfg = load_config()
+
     df = pd.read_csv("1kg/svs_n_modes.csv")
     df = df[df["num_modes"] > 1]
     sv_ids = df["sv_id"].unique()
@@ -59,7 +119,7 @@ def get_all_bam_files():
         p = multiprocessing.Pool(4)
         args = []
         for sv_id in sv_ids:
-            args.append((sv_id,))
+            args.append((sv_id, cfg))
         p.starmap(get_bam_files, args)
         p.close()
         p.join()
@@ -119,4 +179,11 @@ def samplot_viz():
 
 if __name__ == "__main__":
     # get_all_bam_files()
-    samplot_viz()
+    # samplot_viz()
+    get_bam_files_sv(
+        sv_id="HGSV_245267",
+        sample_sv_lookup_path="data/long_reads/sample_sv_lookup.csv",
+        sample_files_path="data/long_reads/long_read_samples.csv",
+        out_dir="output/bam_files",
+        filter_ref_samples=True,
+    )

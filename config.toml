@@ -73,6 +73,9 @@ insert_size_file = "insert_sizes.csv"
 # Ancestry file with required columns "Sample name" and "Superpopulation code"
 ancestry_file = "ancestry.tsv"
 
+# Reference genome file
+reference_genome_file = "hg38.fa"
+
 # use these paths when running scripts.calibrate_model
 # sv_lookup_file = "deletions.csv"
 # sample_id_file = "lr_sample_ids.txt"

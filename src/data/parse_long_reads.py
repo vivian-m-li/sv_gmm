@@ -10,6 +10,7 @@ from collections import defaultdict
 import pandas as pd
 import pysam
 
+from src.utils.config_loader import load_config
 from src.utils.helper import get_sv_lookup, get_most_common_split_df
 from src.utils.model_helper import reciprocal_overlap
 
@@ -89,6 +90,7 @@ def write_samples_to_redo():
 
 
 def get_bam_file(
+    cfg: dict,
     sv_id: str,
     sample_id: str,
     *,
@@ -108,7 +110,17 @@ def get_bam_file(
         indexed_output_file
     ):
         subprocess.run(
-            ["bash", "bash/get_cigar.sh"] + [cram_file, region, output_file],
+            ["bash", "bash/read_cram_file.sh"]
+            + [
+                cram_file,
+                region,
+                output_file,
+                cfg["samtools"]["bin"],
+                os.path.join(
+                    cfg["paths"]["input_dir"],
+                    cfg["input_files"]["reference_genome_file"],
+                ),
+            ],
             capture_output=True,
             text=True,
         )
@@ -326,6 +338,7 @@ def write_all_long_read_evidence():
 
 
 def get_long_read_svs(
+    cfg: dict,
     sv_id: str,
     samples: list[str],
     *,
@@ -359,6 +372,7 @@ def get_long_read_svs(
 
         # get the bam file for this region from the cram
         output_file = get_bam_file(
+            cfg,
             sv_id,
             sample_id,
             region=region,
@@ -377,7 +391,7 @@ def get_long_read_svs(
     return deletions
 
 
-def get_all_long_reads():
+def get_all_long_reads(cfg: dict):
     """Writes long read evidence for each SV."""
 
     # get SVs that were clustered into 1, 2 or 3 modes with low/medium/high confidence
@@ -408,7 +422,7 @@ def get_all_long_reads():
     )
     for _, row in df.iterrows():
         sv_id = row["id"]
-        deletions = get_long_read_svs(sv_id, all_sample_ids)
+        deletions = get_long_read_svs(cfg, sv_id, all_sample_ids)
         sample_ids = list(deletions.keys())
 
         modes = ast.literal_eval(row["modes"])
@@ -446,8 +460,10 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    cfg = load_config()
+
     if args.id is None and args.s is None:
-        get_all_long_reads()
+        get_all_long_reads(cfg)
     else:
         if args.id is None:
             raise ValueError("SV ID is required")
@@ -455,6 +471,7 @@ if __name__ == "__main__":
             raise ValueError("Sample ID is required")
 
         get_long_read_svs(
+            cfg,
             args.id,
             [args.s],
             tolerance=args.t,
