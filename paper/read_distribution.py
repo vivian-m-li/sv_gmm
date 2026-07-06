@@ -1,0 +1,203 @@
+import os
+
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from src.utils.config_loader import load_config
+from src.utils.helper import get_sample_ids, stix_output_to_df
+from src.utils.model_helper import giggle_format
+from src.utils.write_sv_output import get_raw_data
+
+COLORS = matplotlib.colormaps["tab10"].colors
+
+AXES = {
+    "l_diff": "Start diff (l_start - sv_start)",
+    "r_diff": "End diff (r_end - sv_end)",
+    "fragment_size": "Fragment Size (r_end - l_start)",
+    "insert_size": "Insert Size (r_end - l_start - sv_len)",
+}
+
+
+def plot_read_distribution(sv_id: str, reads: np.ndarray, x: str, y: str):
+    plt.figure()
+    plt.scatter(
+        reads[:, 0],
+        reads[:, 1],
+        alpha=0.6,
+    )
+
+    plt.title(f"Read distribution for SV {sv_id}")
+    plt.xlabel(AXES[x])
+    plt.ylabel(AXES[y])
+    plt.savefig(f"output/plots/outer_bounds/{sv_id}_{x}_{y}.png")
+    # plt.show()
+
+
+def plot_sample_summary_read_distribution(
+    sample_id: str, sv_id: str, sample_reads: pd.DataFrame, x: str, y: str
+):
+    plt.figure()
+    plt.scatter(
+        sample_reads[x],
+        sample_reads[y],
+        alpha=0.6,
+    )
+    plt.scatter(
+        sample_reads[x].median(),
+        sample_reads[y].median(),
+        color="red",
+        label="Median",
+    )
+
+    plt.title(f"Read distribution for sample {sample_id} and SV {sv_id}")
+    plt.xlabel(AXES[x])
+    plt.ylabel(AXES[y])
+    plt.show()
+
+
+def get_read_distribution(
+    sv_id: str,
+    *,
+    x: str,
+    y: str,
+    plot: bool = False,
+    sample_summary: bool = False,
+    lookup: pd.DataFrame | None = None,
+):
+    """
+    Gets the distribution of reads for each sample for a given SV.
+    Hard-coded file paths.
+    """
+    if lookup is None:
+        lookup = pd.read_csv("data/1kg/1kg.subset.csv", low_memory=False)
+    row = lookup[lookup["id"] == sv_id].iloc[0]
+
+    print(
+        f"{sv_id}: {row['chr']}:{row['start']}-{row['stop']}, svlen={row['svlen']}"
+    )
+
+    # get all nonref samples
+    sample_ids = get_sample_ids("data/1kg/sample_ids.txt")
+    nonref_samples = [
+        sample_id for sample_id in sample_ids if row[sample_id] != "(0, 0)"
+    ]
+
+    # filter reads to only nonref samples
+    chr, start, stop = row["chr"], row["start"], row["stop"]
+    reads = stix_output_to_df(
+        os.path.join(
+            "output/stix_output",
+            f"{giggle_format(chr, start)}_{giggle_format(chr, stop)}.txt",
+        )
+    )
+    reads = reads[reads["sample_id"].isin(nonref_samples)]
+    reads["l_diff"] = reads["l_start"] - start
+    reads["r_diff"] = reads["r_end"] - stop
+    reads["fragment_len"] = reads["r_end"] - reads["l_start"]
+    reads["insert_size"] = reads["fragment_len"] - (stop - start)
+
+    read_ends = []
+    if sample_summary:
+        # within-sample distribution
+        for i, sample_id in enumerate(reads["sample_id"].unique()):
+            sample_reads = reads[reads["sample_id"] == sample_id]
+            read_ends.append(
+                [
+                    sample_reads[x].median(),
+                    sample_reads[y].median(),
+                ]
+            )
+            if i == 0 and plot:
+                plot_sample_summary_read_distribution(
+                    sample_id, sv_id, sample_reads, x, y
+                )
+            elif not plot:
+                print(f"Sample {sample_id}:")
+                print(
+                    f"{AXES[x]}: mean={np.mean(sample_reads[x]):.2f}, std={np.std(sample_reads[x]):.2f}"
+                )
+                print(
+                    f"{AXES[y]}: mean={np.mean(sample_reads[y]):.2f}, std={np.std(sample_reads[y]):.2f}"
+                )
+    else:
+        read_ends = reads[[x, y]].values
+
+    # between-sample read medians distribution
+    read_ends = np.array(read_ends)
+    print(
+        f"{AXES[x]}: mean={np.mean(read_ends[:, 0]):.2f}, std={np.std(read_ends[:, 0]):.2f}"
+    )
+    print(
+        f"{AXES[y]}: mean={np.mean(read_ends[:, 1]):.2f}, std={np.std(read_ends[:, 1]):.2f}"
+    )
+
+    if plot:
+        plot_read_distribution(sv_id, read_ends, x, y)
+
+
+def plot_nearby_svs(cfg: dict, svs: str):
+    input_dir = cfg["paths"]["input_dir"]
+    sv_lookup_file = cfg["paths"]["sv_lookup_file"]
+    deletions = pd.read_csv(
+        os.path.join(input_dir, sv_lookup_file), low_memory=False
+    )
+
+    plt.figure()
+    for i, sv_id in svs:
+        row = deletions[deletions["id"] == sv_id].iloc[0]
+        reads, _ = get_raw_data(row, cfg, filter_reference_samples=True)
+        l_r_points = []
+        for sample_id in reads["sample_id"].unique():
+            sample_reads = reads[reads["sample_id"] == sample_id]
+            l_r_points.append(
+                [
+                    sample_reads["l_start"].median() - row["start"],
+                    sample_reads["r_end"].median() - row["stop"],
+                ]
+            )
+        l_r_points = np.array(l_r_points)
+
+        plt.scatter(
+            l_r_points[:, 0], l_r_points[:, 1], alpha=0.6, color=COLORS[i]
+        )
+        plt.axvline(x=0, color="gray", linestyle="--", label="SV start")
+        plt.axhline(y=0, color="gray", linestyle="--", label="SV end")
+
+        plt.title(f"Read distribution for SV {sv_id}")
+        plt.xlabel("Start diff (l_start - sv_start)")
+        plt.ylabel("End diff (r_end - sv_end)")
+        plt.show()
+
+
+if __name__ == "__main__":
+    cfg = load_config()
+
+    # example SVs
+    # 1 mode: HGSV_15262, HGSV_143868, HGSV_39753, HGSV_204881, HGSV_226693, HGSV_5515, HGSV_218106, HGSV_89
+    # 2 modes: HGSV_54541, HGSV_149774, HGSV_245658, HGSV_68297, HGSV_220750, HGSV_161412
+    lookup = pd.read_csv("data/1kg/1kg.subset.csv", low_memory=False)
+    for sv_id in [
+        "HGSV_15262",
+        "HGSV_143868",
+        "HGSV_39753",
+        "HGSV_204881",
+        "HGSV_226693",
+        "HGSV_5515",
+        "HGSV_218106",
+        "HGSV_89",
+        "HGSV_54541",
+        "HGSV_149774",
+        "HGSV_245658",
+        "HGSV_220750",
+        "HGSV_161412",
+    ]:
+        get_read_distribution(
+            sv_id,
+            x="insert_size",
+            y="r_diff",
+            plot=True,
+            sample_summary=False,
+            lookup=lookup,
+        )

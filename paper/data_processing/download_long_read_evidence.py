@@ -273,12 +273,12 @@ def download_sample_evidence(
 
     # download the cram file and the indexed cram file
     output_file = os.path.join(
-        SCRATCH_DIR, sample_row["cram_file"].split("/")[-1]
+        SCRATCH_DIR, sample_row["file_url"].split("/")[-1]
     )
     if not os.path.exists(output_file):
         download_start = time.time()
         subprocess.run(
-            ["wget", "-O", output_file, sample_row["cram_file"]],
+            ["wget", "-O", output_file, sample_row["file"]],
             capture_output=True,
             text=True,
         )
@@ -296,7 +296,7 @@ def download_sample_evidence(
                 "wget",
                 "-O",
                 indexed_file,
-                sample_row["indexed_cram_file"],
+                sample_row["indexed_file"],
             ],
             capture_output=True,
             text=True,
@@ -332,9 +332,7 @@ def download_sample_evidence_http(
         pool = mp.Pool(4)
         args = []
         for sv_id in sv_ids:
-            args.append(
-                (sv_id, sample_row["sample_id"], sample_row["cram_file"])
-            )
+            args.append((sv_id, sample_row["sample_id"], sample_row["file"]))
         pool.starmap(process_sample_evidence_inner, args)
         pool.close()
         pool.join()
@@ -447,13 +445,11 @@ def download_long_read_cram(sample_row: pd.Series):
     print(f"Processing sample {sample_id}", flush=True)
 
     # download the cram file and the indexed cram file
-    output_file = os.path.join(
-        SCRATCH_DIR, sample_row["cram_file"].split("/")[-1]
-    )
+    output_file = os.path.join(SCRATCH_DIR, sample_row["file"].split("/")[-1])
     if not os.path.exists(output_file):
         download_start = time.time()
         subprocess.run(
-            ["wget", "-O", output_file, sample_row["cram_file"]],
+            ["wget", "-O", output_file, sample_row["file"]],
             capture_output=True,
             text=True,
         )
@@ -471,7 +467,7 @@ def download_long_read_cram(sample_row: pd.Series):
                 "wget",
                 "-O",
                 indexed_file,
-                sample_row["indexed_cram_file"],
+                sample_row["indexed_file"],
             ],
             capture_output=True,
             text=True,

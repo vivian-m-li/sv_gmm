@@ -25,7 +25,7 @@ def parse_long_read_samples():
     """Parse available 1kg long read samples from the online data. Saves the available sample IDs and the link to their cram files."""
     file = "long_reads/raw_1kg_ont_vienna_hg38.txt"
     root = "https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1KG_ONT_VIENNA/hg38"
-    df = pd.DataFrame(columns=["sample_id", "cram_file", "indexed_cram_file"])
+    df = pd.DataFrame(columns=["sample_id", "file", "indexed_file"])
     with open(file, "r") as f:
         soup = BeautifulSoup(f, "html.parser")
         table = soup.find("table")
@@ -41,7 +41,7 @@ def parse_long_read_samples():
                         if ".crai" in col.text:
                             df.loc[
                                 df["sample_id"] == sample_id,
-                                "indexed_cram_file",
+                                "indexed_file",
                             ] = file_name
                         else:
                             df.loc[len(df)] = [sample_id, file_name, ""]
@@ -368,7 +368,7 @@ def get_long_read_svs(
         if row.empty:
             print(f"Sample {sample_id} not found in long reads")
             continue
-        cram_file = row["cram_file"].values[0]
+        cram_file = row["file"].values[0]
 
         # get the bam file for this region from the cram
         output_file = get_bam_file(

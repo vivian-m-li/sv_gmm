@@ -65,7 +65,7 @@ def get_bam_files_sv(
         subprocess.run(
             ["bash", "src/data/bash/read_cram_file.sh"]
             + [
-                row["cram_file"],
+                row["file"],
                 region,
                 output_file,
                 cfg["samtools"]["bin"],
@@ -98,7 +98,7 @@ def get_bam_files(sv_id: str, cfg: dict):
         subprocess.run(
             ["bash", "src/data/bash/read_cram_file.sh"]
             + [
-                row["cram_file"],
+                row["file"],
                 region,
                 output_file,
                 cfg["samtools"]["bin"],
@@ -232,6 +232,6 @@ if __name__ == "__main__":
     )
     samplot_viz(
         sv_id="HGSV_245267",
-        input_dir="output/bam_files/HGSV_245267",
+        input_dir="output/high_cov_bam_files/HGSV_245267",
         out_dir="output/samplot_viz",
     )

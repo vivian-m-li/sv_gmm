@@ -155,7 +155,7 @@ def get_insert_size_lookup(
     dir: str,
     filename: str | None,
     default_insert_size: int | None,
-    sample_ids: set[str],
+    sample_ids: set[str] | None,
 ) -> dict[str, InsertSizeDistribution]:
     """Returns a dictionary mapping sample IDs to their mean insert sizes from sequencing high-coverage short-reads."""
     insert_size_file = os.path.join(dir, filename)
@@ -165,6 +165,11 @@ def get_insert_size_lookup(
                 "Setting the default insert size to 450bp for all samples. To specify a different default insert size, set the default_insert_size parameter in the config file."
             )
             default_insert_size = 450
+
+        if sample_ids is None:
+            raise ValueError(
+                "Sample IDs must be provided if no insert size file is provided."
+            )
         insert_size_file = write_default_insert_sizes(
             dir, sample_ids, default_insert_size
         )
