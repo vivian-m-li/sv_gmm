@@ -20,6 +20,38 @@ AXES = {
 }
 
 
+def get_nonref_reads(sv_id: str, lookup: pd.DataFrame | None = None):
+    if lookup is None:
+        lookup = pd.read_csv("data/1kg/1kg.subset.csv", low_memory=False)
+    row = lookup[lookup["id"] == sv_id].iloc[0]
+
+    print(
+        f"{sv_id}: {row['chr']}:{row['start']}-{row['stop']}, svlen={row['svlen']}"
+    )
+
+    # get all nonref samples
+    sample_ids = get_sample_ids("data/1kg/sample_ids.txt")
+    nonref_samples = [
+        sample_id for sample_id in sample_ids if row[sample_id] != "(0, 0)"
+    ]
+
+    # filter reads to only nonref samples
+    chr, start, stop = row["chr"], row["start"], row["stop"]
+    reads = stix_output_to_df(
+        os.path.join(
+            "output/stix_output",
+            f"{giggle_format(chr, start)}_{giggle_format(chr, stop)}.txt",
+        )
+    )
+    reads = reads[reads["sample_id"].isin(nonref_samples)]
+    reads["l_diff"] = reads["l_start"] - start
+    reads["r_diff"] = reads["r_end"] - stop
+    reads["fragment_len"] = reads["r_end"] - reads["l_start"]
+    reads["insert_size"] = reads["fragment_len"] - (stop - start)
+
+    return reads, (chr, start, stop)
+
+
 def plot_read_distribution(sv_id: str, reads: np.ndarray, x: str, y: str):
     plt.figure()
     plt.scatter(
@@ -32,7 +64,22 @@ def plot_read_distribution(sv_id: str, reads: np.ndarray, x: str, y: str):
     plt.xlabel(AXES[x])
     plt.ylabel(AXES[y])
     plt.savefig(f"output/plots/outer_bounds/{sv_id}_{x}_{y}.png")
-    # plt.show()
+    plt.show()
+
+
+def plot_1d_read_distribution(sv_id: str, reads: np.ndarray, x: str):
+    plt.figure()
+    plt.hist(
+        reads,
+        bins=30,
+        alpha=0.6,
+    )
+
+    plt.title(f"Distribution for SV {sv_id}")
+    plt.xlabel(AXES[x])
+    plt.ylabel("Count")
+    plt.show()
+    plt.savefig(f"output/plots/outer_bounds/{sv_id}_{x}.png")
 
 
 def plot_sample_summary_read_distribution(
@@ -63,6 +110,7 @@ def get_read_distribution(
     x: str,
     y: str,
     plot: bool = False,
+    plot_1d: bool = False,
     sample_summary: bool = False,
     lookup: pd.DataFrame | None = None,
 ):
@@ -70,33 +118,7 @@ def get_read_distribution(
     Gets the distribution of reads for each sample for a given SV.
     Hard-coded file paths.
     """
-    if lookup is None:
-        lookup = pd.read_csv("data/1kg/1kg.subset.csv", low_memory=False)
-    row = lookup[lookup["id"] == sv_id].iloc[0]
-
-    print(
-        f"{sv_id}: {row['chr']}:{row['start']}-{row['stop']}, svlen={row['svlen']}"
-    )
-
-    # get all nonref samples
-    sample_ids = get_sample_ids("data/1kg/sample_ids.txt")
-    nonref_samples = [
-        sample_id for sample_id in sample_ids if row[sample_id] != "(0, 0)"
-    ]
-
-    # filter reads to only nonref samples
-    chr, start, stop = row["chr"], row["start"], row["stop"]
-    reads = stix_output_to_df(
-        os.path.join(
-            "output/stix_output",
-            f"{giggle_format(chr, start)}_{giggle_format(chr, stop)}.txt",
-        )
-    )
-    reads = reads[reads["sample_id"].isin(nonref_samples)]
-    reads["l_diff"] = reads["l_start"] - start
-    reads["r_diff"] = reads["r_end"] - stop
-    reads["fragment_len"] = reads["r_end"] - reads["l_start"]
-    reads["insert_size"] = reads["fragment_len"] - (stop - start)
+    reads, _ = get_nonref_reads(sv_id, lookup=lookup)
 
     read_ends = []
     if sample_summary:
@@ -136,6 +158,10 @@ def get_read_distribution(
     if plot:
         plot_read_distribution(sv_id, read_ends, x, y)
 
+    if plot_1d:
+        plot_1d_read_distribution(sv_id, read_ends[:, 0], x)
+        plot_1d_read_distribution(sv_id, read_ends[:, 1], y)
+
 
 def plot_nearby_svs(cfg: dict, svs: str):
     input_dir = cfg["paths"]["input_dir"]
@@ -171,6 +197,81 @@ def plot_nearby_svs(cfg: dict, svs: str):
         plt.show()
 
 
+def analyze_read_types(
+    sv_id: str,
+    *,
+    plot: bool = False,
+    sample_summary: bool = False,
+    lookup: pd.DataFrame | None = None,
+):
+    """
+    Analyzes the distribution of read types (split vs paired) for a given SV.
+    """
+    reads, pos = get_nonref_reads(sv_id, lookup=lookup)
+    reads["l_start_diff"] = reads["l_start"] - pos[1]
+    reads["l_end_diff"] = reads["l_end"] - pos[1]
+    reads["r_start_diff"] = reads["r_start"] - pos[2]
+    reads["r_end_diff"] = reads["r_end"] - pos[2]
+
+    total_samples = reads["sample_id"].nunique()
+
+    if plot:
+        fig, axs = plt.subplots(1, 2)
+        for read_type, color in zip(["split", "paired"], ["blue", "red"]):
+            reads_subset = reads[reads["type"] == read_type]
+            if reads_subset.empty:
+                continue
+
+            for i, col in enumerate(["l_end", "r_start"]):
+                values = []
+                if sample_summary:
+                    for sample_id in reads["sample_id"].unique():
+                        sample_reads = reads_subset[
+                            reads_subset["sample_id"] == sample_id
+                        ]
+                        values.append(sample_reads[col].median())
+                else:
+                    values = reads_subset[col]
+
+                axs[i].hist(
+                    values,
+                    bins=30,
+                    alpha=0.6,
+                    label=read_type,
+                    color=color,
+                )
+
+        axs[0].axvline(x=pos[1], color="gray", linestyle="--")
+        axs[1].axvline(x=pos[2], color="gray", linestyle="--")
+        axs[1].set_yticks([])
+
+        plt.text(0.5, 0.1, "Read position")
+        axs[0].set_ylabel("Count")
+        plt.suptitle(f"Split vs PE Reads for SV {sv_id}")
+        plt.legend()
+        plt.show()
+    else:
+        for read_type in ["split", "paired"]:
+            reads_subset = reads[reads["type"] == read_type]
+            print(
+                f"{reads_subset.shape[0]} {read_type} reads, {reads_subset['sample_id'].nunique()}/{total_samples} samples"
+            )
+            for col in [
+                "l_start_diff",
+                "l_end_diff",
+                "r_start_diff",
+                "r_end_diff",
+            ]:
+                print(
+                    "{}: mean={:.2f}, std={:.2f}".format(
+                        col,
+                        np.mean(reads_subset[col]),
+                        np.std(reads_subset[col]),
+                    )
+                )
+        print("\n")
+
+
 if __name__ == "__main__":
     cfg = load_config()
 
@@ -193,11 +294,9 @@ if __name__ == "__main__":
         "HGSV_220750",
         "HGSV_161412",
     ]:
-        get_read_distribution(
+        analyze_read_types(
             sv_id,
-            x="insert_size",
-            y="r_diff",
             plot=True,
-            sample_summary=False,
+            sample_summary=True,
             lookup=lookup,
         )
