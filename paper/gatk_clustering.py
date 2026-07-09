@@ -145,6 +145,8 @@ def gatk_cluster_reads(case, r, svs, weights, n_samples, gatk_alg, results):
     generate_and_split_sample_reads(
         1,
         svs,
+        input_dir="data/1kg",
+        insert_size_file="insert_sizes.csv",
         n_samples=n_samples,
         p=weights,
         run_split=False,

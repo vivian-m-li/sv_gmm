@@ -206,8 +206,8 @@ def run_dirichlet(
 
     if display_output:
         # get the file name of the plot
-        plot_file = kwargs["plot_file"]
-        print(f"\nSaving plot to {plot_file}\n")
+        plot_file = kwargs.get("plot_file", None)
+
         # show the last L-len plot
         fig, ax = plt.subplots(figsize=(6, 4))
         plot_2d_coords(
@@ -221,14 +221,17 @@ def run_dirichlet(
             size_by="",
             show_mode_stats=True,
             show_1d_distributions=True,
+            insert_size_lookup=kwargs.get("insert_size_lookup", None),
             insert_size_file=insert_size_file,
             init=kwargs.get("init", "kmeans++"),
             repulsion=kwargs.get("repulsion", False),
         )
         plt.tight_layout()
-        plt.savefig(f"{plot_file}.png", dpi=200)
 
-        # animate_dirichlet_heatmap(alphas)
-        # animate_dirichlet(posterior_distributions)
+        if plot_file is not None:
+            print(f"\nSaving plot to {plot_file}\n")
+            plt.savefig(f"{plot_file}.png", dpi=200)
+        else:
+            plt.show()
 
     return gmm_results, alphas, posterior_distributions

@@ -154,8 +154,8 @@ def write_default_insert_sizes(
 def get_insert_size_lookup(
     dir: str,
     filename: str | None,
-    default_insert_size: int | None,
-    sample_ids: set[str] | None,
+    default_insert_size: int | None = None,
+    sample_ids: set[str] | None = None,
 ) -> dict[str, InsertSizeDistribution]:
     """Returns a dictionary mapping sample IDs to their mean insert sizes from sequencing high-coverage short-reads."""
     insert_size_file = os.path.join(dir, filename)

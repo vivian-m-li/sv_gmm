@@ -43,9 +43,8 @@ def run_split(case, r, svs, weights, n_samples, cfg, model_params, results):
     gmm_result, evidence_by_mode = generate_and_split_sample_reads(
         1,
         svs,
-        insert_size_file=os.path.join(
-            cfg["paths"]["input_dir"], cfg["input_files"]["insert_size_file"]
-        ),
+        input_dir=cfg["paths"]["input_dir"],
+        insert_size_file=cfg["input_files"]["insert_size_file"],
         model_params=model_params,
         n_samples=n_samples,
         p=weights,

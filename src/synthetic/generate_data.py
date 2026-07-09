@@ -294,8 +294,8 @@ def generate_mapped_pairs_for_sv(
     mode_end: int,
     insert_mean: int,
     n_pairs: int = 10,
-    fragment_length_sd: int = 30,
-    read_jitter: int = 40,
+    fragment_length_sd: int = 108,
+    read_jitter: int = 5,
 ):
     """
     Return a list of tuples (l_start, l_end, r_start, r_end) representing
@@ -313,22 +313,21 @@ def generate_mapped_pairs_for_sv(
 
         # generate the fragment length from a normal distribution
         fragment_length = int(
-            max(50, min(600, random.gauss(insert_mean, fragment_length_sd)))
+            max(10, min(900, random.gauss(insert_mean, fragment_length_sd)))
         )
 
-        # split the fragment randomly to get the left and right ends
-        left_fragment_length = random.randint(1, fragment_length - 1)
+        # split the fragment into left and right fragments
+        # the split point is sampled from a normal distribution so that most splits are near the middle of the fragment
+        split_point = random.gauss(0.5, 0.1)
+        left_fragment_length = int(fragment_length * split_point)
         right_fragment_length = fragment_length - left_fragment_length
 
-        # add jitter to the left and right ends
-        left_jitter_amount = random.gauss(0, read_jitter)
-        right_jitter_amount = random.gauss(0, read_jitter)
-
+        # each pair's inner bounds are the same as the variant breakpoints with +- 5bp
         left_start = mode_start - left_fragment_length
-        left_end = mode_start - left_jitter_amount
+        left_end = mode_start + random.randint(-read_jitter, read_jitter)
 
         right_end = mode_end + right_fragment_length
-        right_start = mode_end + right_jitter_amount
+        right_start = mode_end + random.randint(-read_jitter, read_jitter)
 
         pairs.append((left_start, left_end, right_start, right_end))
 
@@ -339,6 +338,7 @@ def generate_and_split_sample_reads(
     chr: int,  # chromosome number (does not support X/Y), as a str
     svs: list[tuple[int, int]],  # list of (start, stop) for each SV
     *,
+    input_dir: str,
     insert_size_file: str,
     model_params: dict,
     n_samples: int | None = None,
@@ -360,7 +360,9 @@ def generate_and_split_sample_reads(
     weights = generate_weights(num_svs) if p is None else p
     modes = assign_modes(weights, samples)
 
-    insert_size_distribution = get_insert_size_lookup("", insert_size_file)
+    insert_sizes = get_insert_size_lookup(input_dir, insert_size_file)
+    insert_size_distribution = [sample.mean for sample in insert_sizes.values()]
+    insert_size_sds = [sample.sd for sample in insert_sizes.values()]
 
     # for each sample, generate random evidence
     reads = stix_output_to_df("", write_empty_file=True)
@@ -371,10 +373,10 @@ def generate_and_split_sample_reads(
         mode_start, mode_end = svs[mode]
 
         # sample a per-sample mean insert size from your table
-        insert_size = random.choice(
-            insert_size_distribution["mean_insert_size"].tolist()
+        insert_size = random.choice(insert_size_distribution)
+        insert_size_lookup[sample] = InsertSizeDistribution(
+            mean=insert_size, sd=random.choice(insert_size_sds)
         )
-        insert_size_lookup[sample] = insert_size
 
         pairs = generate_mapped_pairs_for_sv(
             mode_start=mode_start,
@@ -392,7 +394,7 @@ def generate_and_split_sample_reads(
                 1,
                 pair[2],
                 pair[3],
-                "paired",
+                "split",
             ]
             evidence[sample].extend([pair[1], pair[2]])  # l_end, r_start
 
@@ -404,8 +406,8 @@ def generate_and_split_sample_reads(
     if plot_reads:
         plt.figure()
         plt.scatter(
-            reads["l_end"].tolist(),
-            reads["r_start"].tolist(),
+            reads["l_start"].tolist(),
+            reads["r_end"].tolist(),
             color="blue",
             alpha=0.6,
         )
