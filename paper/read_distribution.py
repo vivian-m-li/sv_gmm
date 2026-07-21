@@ -206,7 +206,7 @@ def analyze_read_types(
     sv_id: str,
     *,
     plot: bool = False,
-    sample_summary: bool = False,
+    sample_summary: str | None = None,  # options are median or inner
     lookup: pd.DataFrame | None = None,
 ):
     """
@@ -222,14 +222,20 @@ def analyze_read_types(
             if reads_subset.empty:
                 continue
 
-            for i, col in enumerate(["l_start", "r_end"]):
+            for i, col in enumerate(["l_end", "r_start"]):
                 values = []
-                if sample_summary:
+                if sample_summary is not None:
                     for sample_id in reads["sample_id"].unique():
                         sample_reads = reads_subset[
                             reads_subset["sample_id"] == sample_id
                         ]
-                        values.append(sample_reads[col].median())
+                        if sample_summary == "median":
+                            values.append(sample_reads[col].median())
+                        elif sample_summary == "inner":
+                            if i == 0:
+                                values.append(sample_reads[col].max())
+                            elif i == 1:
+                                values.append(sample_reads[col].min())
                 else:
                     values = reads_subset[col]
 
@@ -250,7 +256,7 @@ def analyze_read_types(
         plt.suptitle(f"Split vs PE Reads for SV {sv_id}")
         plt.legend()
         plt.savefig(
-            f"output/plots/read_distribution_outer_bounds/read_types/{sv_id}_{'median' if sample_summary else 'all'}.png"
+            f"output/plots/read_distribution_inner_bounds/read_types/{sv_id}_{'all' if sample_summary is None else sample_summary}.png"
         )
         plt.close(fig)
     else:
@@ -371,6 +377,177 @@ def analyze_query_region(
     plt.close(fig)
 
 
+def analyze_sample_reads(
+    sv_id: str, *, read_type: str = "paired", lookup: pd.DataFrame | None = None
+):
+    reads, pos = get_nonref_reads(sv_id, lookup=lookup)
+    _, start, stop = pos
+
+    pe_reads = reads[reads["type"] == read_type]
+    # how many PE reads do we need to get an accurate estimate of the breakpoint region?
+    diff_by_n_reads = pd.DataFrame(
+        columns=["n_reads", "l_diff", "r_diff", "fragment_len_diff"]
+    )
+    for sample_id in pe_reads["sample_id"].unique():
+        sample_reads = pe_reads[pe_reads["sample_id"] == sample_id]
+        read_l = sample_reads["l_end"].max()
+        read_r = sample_reads["r_start"].min()
+        diff_by_n_reads.loc[len(diff_by_n_reads)] = [
+            sample_reads.shape[0],
+            abs(read_l - start),
+            abs(read_r - stop),
+            abs(read_r - read_l - (stop - start)),
+        ]
+
+    fig, axs = plt.subplots(1, 4, figsize=(12, 4))
+
+    axs[0].hist(diff_by_n_reads["n_reads"], bins=30, alpha=0.6)
+    axs[0].set_xlabel(f"Number of {read_type} reads")
+    axs[0].set_ylabel("Count")
+
+    for i, col in enumerate(["l_diff", "r_diff", "fragment_len_diff"]):
+        ax = axs[i + 1]
+        ax.scatter(
+            diff_by_n_reads["n_reads"],
+            diff_by_n_reads[col],
+            alpha=0.6,
+        )
+        ax.set_xlabel(f"Number of {read_type} reads")
+        ax.set_ylabel(col)
+
+    plt.suptitle(f"{read_type.upper()} read distribution for SV {sv_id}")
+    plt.tight_layout()
+    plt.savefig(
+        f"output/plots/read_distribution_inner_bounds/{read_type}_reads/{sv_id}.png"
+    )
+    plt.close(fig)
+
+
+def analyze_split_pe_reads_per_sample(
+    sv_id: str, lookup: pd.DataFrame | None = None
+):
+    reads, _ = get_nonref_reads(sv_id, lookup=lookup)
+
+    fig, axs = plt.subplots(1, 2, figsize=(8, 4))
+    for sample_id in reads["sample_id"].unique():
+        sample_reads = reads[reads["sample_id"] == sample_id]
+        split_reads = sample_reads[sample_reads["type"] == "split"]
+        pe_reads = sample_reads[sample_reads["type"] == "paired"]
+
+        if split_reads.shape[0] > 0 and pe_reads.shape[0] > 0:
+            axs[0].scatter(
+                split_reads["l_end"].max(),
+                pe_reads["l_end"].max(),
+                alpha=0.6,
+                color=COLORS[0],
+            )
+            axs[1].scatter(
+                split_reads["r_start"].min(),
+                pe_reads["r_start"].min(),
+                alpha=0.6,
+                color=COLORS[1],
+            )
+
+    axs[0].set_xlabel("Split reads l_end")
+    axs[0].set_ylabel("PE reads l_end")
+    axs[1].set_xlabel("Split reads r_start")
+    axs[1].set_ylabel("PE reads r_start")
+
+    for ax in axs:
+        # draw y=x line
+        ax.plot(
+            [
+                min(ax.get_xlim()[0], ax.get_ylim()[0]),
+                max(ax.get_xlim()[1], ax.get_ylim()[1]),
+            ],
+            [
+                min(ax.get_xlim()[0], ax.get_ylim()[0]),
+                max(ax.get_xlim()[1], ax.get_ylim()[1]),
+            ],
+            color="gray",
+            linestyle="--",
+        )
+
+    plt.suptitle(f"Split vs PE Reads per Sample for SV {sv_id}")
+    plt.tight_layout()
+    plt.savefig(
+        f"output/plots/read_distribution_inner_bounds/split_vs_pe_reads_per_sample/{sv_id}.png"
+    )
+    plt.close(fig)
+
+
+def read_preprocessing(
+    sv_id: str,
+    *,
+    split_read_threshold: int = 2,
+    pe_read_threshold: int = 3,
+    lookup: pd.DataFrame | None = None,
+):
+    reads, pos = get_nonref_reads(sv_id, lookup=lookup)
+    _, start, stop = pos
+
+    fig = plt.figure()
+    n_samples_skipped = 0
+    n_split = 0
+    n_pe = 0
+    n_pe_plus = 0
+
+    for sample in reads["sample_id"].unique():
+        sample_reads = reads[reads["sample_id"] == sample]
+        split_reads = sample_reads[sample_reads["type"] == "split"]
+        pe_reads = sample_reads[sample_reads["type"] == "paired"]
+
+        if len(split_reads) >= split_read_threshold:
+            read_l = split_reads["l_end"].max()
+            read_r = split_reads["r_start"].min()
+            plt.scatter(
+                read_l,
+                read_r,
+                color=COLORS[0],
+                alpha=0.6,
+            )
+            n_split += 1
+        elif len(pe_reads) >= pe_read_threshold:
+            read_l = pe_reads["l_end"].max()
+            read_r = pe_reads["r_start"].min()
+            plt.scatter(
+                read_l,
+                read_r,
+                color=COLORS[1],
+                alpha=0.6,
+            )
+            n_pe += 1
+        else:
+            n_samples_skipped += 1
+            continue
+
+    print(f"Skipped {n_samples_skipped}/{reads['sample_id'].nunique()} samples")
+    print(
+        f"{n_split} split reads, {n_pe} paired reads, {n_pe_plus} paired+ reads"
+    )
+
+    plt.xlabel("L")
+    plt.ylabel("R")
+    plt.title(
+        f"Summary read distribution for SV {sv_id}\n{n_split} split reads, {n_pe} paired reads, {n_pe_plus} paired+ reads"
+    )
+
+    plt.axvline(start, color="gray", linestyle="--")
+    plt.axhline(stop, color="gray", linestyle="--")
+
+    # add dummy scatter plots for legend
+    plt.scatter([], [], color=COLORS[0], label="Split reads")
+    plt.scatter([], [], color=COLORS[1], label="Paired reads")
+    plt.scatter([], [], color=COLORS[2], label="Paired+ reads")
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(
+        f"output/plots/read_distribution_inner_bounds/combined_reads/{sv_id}.png"
+    )
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     cfg = load_config()
 
@@ -393,27 +570,4 @@ if __name__ == "__main__":
         "HGSV_220750",
         "HGSV_161412",
     ]:
-        analyze_read_types(
-            sv_id,
-            plot=True,
-            sample_summary=False,
-            lookup=lookup,
-        )
-        analyze_read_types(
-            sv_id,
-            plot=True,
-            sample_summary=True,
-            lookup=lookup,
-        )
-        analyze_query_region(
-            cfg,
-            sv_id,
-            sample_summary=False,
-            lookup=lookup,
-        )
-        analyze_query_region(
-            cfg,
-            sv_id,
-            sample_summary=True,
-            lookup=lookup,
-        )
+        analyze_split_pe_reads_per_sample(sv_id, lookup=lookup)
