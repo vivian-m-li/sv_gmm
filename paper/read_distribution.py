@@ -20,7 +20,12 @@ AXES = {
 }
 
 
-def get_nonref_reads(sv_id: str, lookup: pd.DataFrame | None = None):
+def get_nonref_reads(
+    sv_id: str,
+    lookup: pd.DataFrame | None = None,
+    *,
+    stix_output_dir: str = "output/stix_output",
+):
     if lookup is None:
         lookup = pd.read_csv("data/1kg/1kg.subset.csv", low_memory=False)
     row = lookup[lookup["id"] == sv_id].iloc[0]
@@ -39,7 +44,7 @@ def get_nonref_reads(sv_id: str, lookup: pd.DataFrame | None = None):
     chr, start, stop = row["chr"], row["start"], row["stop"]
     reads = stix_output_to_df(
         os.path.join(
-            "output/stix_output",
+            stix_output_dir,
             f"{giggle_format(chr, start)}_{giggle_format(chr, stop)}.txt",
         )
     )
@@ -208,11 +213,6 @@ def analyze_read_types(
     Analyzes the distribution of read types (split vs paired) for a given SV.
     """
     reads, pos = get_nonref_reads(sv_id, lookup=lookup)
-    reads["l_start_diff"] = reads["l_start"] - pos[1]
-    reads["l_end_diff"] = reads["l_end"] - pos[1]
-    reads["r_start_diff"] = reads["r_start"] - pos[2]
-    reads["r_end_diff"] = reads["r_end"] - pos[2]
-
     total_samples = reads["sample_id"].nunique()
 
     if plot:
@@ -222,7 +222,7 @@ def analyze_read_types(
             if reads_subset.empty:
                 continue
 
-            for i, col in enumerate(["l_end", "r_start"]):
+            for i, col in enumerate(["l_start", "r_end"]):
                 values = []
                 if sample_summary:
                     for sample_id in reads["sample_id"].unique():
@@ -249,8 +249,15 @@ def analyze_read_types(
         axs[0].set_ylabel("Count")
         plt.suptitle(f"Split vs PE Reads for SV {sv_id}")
         plt.legend()
-        plt.show()
+        plt.savefig(
+            f"output/plots/read_distribution_outer_bounds/read_types/{sv_id}_{'median' if sample_summary else 'all'}.png"
+        )
+        plt.close(fig)
     else:
+        reads["l_start_diff"] = reads["l_start"] - pos[1]
+        reads["l_end_diff"] = reads["l_end"] - pos[1]
+        reads["r_start_diff"] = reads["r_start"] - pos[2]
+        reads["r_end_diff"] = reads["r_end"] - pos[2]
         for read_type in ["split", "paired"]:
             reads_subset = reads[reads["type"] == read_type]
             print(
@@ -272,13 +279,105 @@ def analyze_read_types(
         print("\n")
 
 
+def analyze_query_region(
+    cfg: dict,
+    sv_id: str,
+    *,
+    download_reads: bool = False,
+    sample_summary: bool = False,
+    lookup: pd.DataFrame | None = None,
+):
+    if lookup is None:
+        lookup = pd.read_csv("data/1kg/1kg.subset.csv", low_memory=False)
+    row = lookup[lookup["id"] == sv_id].iloc[0]
+    start, stop = row["start"], row["stop"]
+
+    stix_output_dir = "output/query_region_analysis/"
+    fig, axs = plt.subplots(5, 2, figsize=(6, 8))
+    q_vals = [0.6, 0.7, 0.8, 0.9, 1.0]
+    min_l = np.inf
+    max_r = -np.inf
+    for i, q in enumerate(q_vals):
+        print(f"Query region: {q}")
+
+        output_dir = os.path.join(stix_output_dir, f"stix_output_{q}")
+        if download_reads:
+            os.makedirs(output_dir, exist_ok=True)
+
+            temp_cfg = cfg.copy()
+            temp_cfg["paths"]["stix_output_dir"] = output_dir
+            get_raw_data(
+                row, temp_cfg, read_overlap=q, filter_reference_samples=True
+            )
+
+        reads, _ = get_nonref_reads(
+            sv_id, lookup=lookup, stix_output_dir=output_dir
+        )
+        print(
+            f"{reads.shape[0]} total reads, {reads['sample_id'].nunique()} unique samples for query region {q}"
+        )
+
+        for read_type, color in zip(["split", "paired"], ["blue", "red"]):
+            reads_subset = reads[reads["type"] == read_type]
+            if reads_subset.empty:
+                continue
+
+            for j, col in enumerate(["l_start", "r_end"]):
+                values = []
+                if sample_summary:
+                    for sample_id in reads["sample_id"].unique():
+                        sample_reads = reads_subset[
+                            reads_subset["sample_id"] == sample_id
+                        ]
+                        values.append(sample_reads[col].median())
+                else:
+                    values = reads_subset[col]
+
+                if j == 0:
+                    min_l = min(min_l, min(values))
+                elif j == 1:
+                    max_r = max(max_r, max(values))
+
+                axs[i][j].hist(
+                    values,
+                    bins=30,
+                    alpha=0.6,
+                    label=read_type,
+                    color=color,
+                )
+
+            axs[i][0].axvline(x=start, color="gray", linestyle="--")
+            axs[i][1].axvline(x=stop, color="gray", linestyle="--")
+            axs[i][1].set_yticks([])
+
+            axs[i][0].set_ylabel(f"q={q}")
+
+    # set all x-limits to the same range
+    buffer = (stop - start) * 0.02
+    for i in range(len(q_vals)):
+        axs[i][0].set_xlim(min_l, start + buffer)
+        axs[i][1].set_xlim(stop - buffer, max_r)
+
+    plt.suptitle(f"Split vs PE Reads for Varying Query Regions for SV {sv_id}")
+    fig.text(0.45, 0.01, "Read position", fontsize=12)
+    fig.text(0.01, 0.5, "Count", rotation=90, fontsize=12)
+    axs[0][1].legend()
+    plt.subplots_adjust(
+        left=0.15, bottom=0.09, right=0.95, top=0.925, wspace=0.05, hspace=0.48
+    )
+    plt.savefig(
+        f"output/plots/read_distribution_outer_bounds/query_region/{sv_id}_{'median' if sample_summary else 'all'}.png"
+    )
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     cfg = load_config()
 
     # example SVs
     # 1 mode: HGSV_15262, HGSV_143868, HGSV_39753, HGSV_204881, HGSV_226693, HGSV_5515, HGSV_218106, HGSV_89
     # 2 modes: HGSV_54541, HGSV_149774, HGSV_245658, HGSV_68297, HGSV_220750, HGSV_161412
-    lookup = pd.read_csv("data/1kg/1kg.subset.csv", low_memory=False)
+    lookup = pd.read_csv("data/1kg/1kg.subset.plotting.csv", low_memory=False)
     for sv_id in [
         "HGSV_15262",
         "HGSV_143868",
@@ -297,6 +396,24 @@ if __name__ == "__main__":
         analyze_read_types(
             sv_id,
             plot=True,
+            sample_summary=False,
+            lookup=lookup,
+        )
+        analyze_read_types(
+            sv_id,
+            plot=True,
+            sample_summary=True,
+            lookup=lookup,
+        )
+        analyze_query_region(
+            cfg,
+            sv_id,
+            sample_summary=False,
+            lookup=lookup,
+        )
+        analyze_query_region(
+            cfg,
+            sv_id,
             sample_summary=True,
             lookup=lookup,
         )
