@@ -6,7 +6,6 @@ from bokeh.plotting import figure, output_file, save
 from bokeh.models import HoverTool, ColumnDataSource, NumeralTickFormatter
 
 from src.model.gmm import gmm
-from src.utils.model_helper import reciprocal_overlap
 from src.utils.types import (
     Evidence,
     Sample,
@@ -160,7 +159,7 @@ def filter_and_plot_sequences_bokeh(
     R: int,
     insert_size_lookup: dict[str, InsertSizeDistribution],
     sig: int = 50,
-    min_pairs: int = 2,  # minimum number of paired end reads for a sample needed to keep the sample
+    min_pairs: int = 3,  # minimum number of paired end reads for a sample needed to keep the sample
     plot_bokeh: bool,
 ) -> tuple[np.ndarray[np.ndarray[float]], list[Evidence]]:
     """
@@ -495,7 +494,7 @@ def get_intercepts(
     R: int,
     insert_size_lookup: dict[str, InsertSizeDistribution],
     plot_bokeh: bool = False,
-    min_pairs: int = 2,
+    min_pairs: int = 3,
 ) -> tuple[np.ndarray[tuple[float, int]], list[Evidence]]:
     """
     DEPRECATED: use process_data instead
@@ -545,7 +544,7 @@ def process_squiggle_data(
     L: int,
     R: int,
     insert_size_lookup: dict[str, InsertSizeDistribution],
-    min_pairs: int = 2,  # minimum number of paired end reads for a sample needed to keep the sample
+    min_pairs: int = 3,  # minimum number of paired end reads for a sample needed to keep the sample
     plot_bokeh: bool = False,  # deprecated
     file_name: str | None,  # deprecated - used for plotting
 ):
@@ -602,7 +601,9 @@ def process_data(
     L: int,
     R: int,
     insert_size_lookup: dict[str, InsertSizeDistribution],
-    min_pairs: int = 2,  # minimum number of paired end reads for a sample needed to keep the sample
+    min_split: int = 2,  # minimum number of split reads for a sample needed to keep the sample
+    min_pairs: int = 3,  # minimum number of paired reads for a sample needed to keep the sample
+    sample_summary: bool = True,  # whether to use the median reads for each sample or to use all reads for each sample
 ):
     """
     Processes and filters samples and paired-end reads to be used in clustering.
@@ -610,15 +611,6 @@ def process_data(
     Samples are filtered out if too few paired-end reads are present (< min_pairs). Long reads require fewer reads to support an SV.
     Returns a list of points to cluster and a list of Evidence objects for the samples that passed filtering.
     """
-    # filter out reads that don't share enough reciprocal overlap with the SV region
-    # this is not being done right now because we should be able to rely on STIX to return only relevant reads
-    reads["r"] = reads.apply(
-        lambda row: reciprocal_overlap((row["l_end"], row["r_start"]), (L, R)),
-        axis=1,
-    )
-    # this filtering doesn't take into account the sequenced distance between L and R
-    # reads = reads[reads["r"] >= 0.5]
-
     # list of evidence to keep after filtering
     sv_evidence = []
 
@@ -628,43 +620,64 @@ def process_data(
     # reads: DataFrame with columns: sample_id, left, right, type
     # group reads by sample id
     for sample_id, group in reads.groupby("sample_id"):
-        if group.shape[0] < min_pairs:
-            continue  # skip samples with too few reads
+        sample_reads = group.copy()
+        split_reads = sample_reads[sample_reads["type"] == "split"]
+        paired_reads = sample_reads[sample_reads["type"] == "paired"]
+
+        if split_reads.shape[0] >= min_split:
+            sample_reads = split_reads.copy()
+        elif paired_reads.shape[0] >= min_pairs:
+            sample_reads = paired_reads.copy()
+        else:
+            continue  # skip this sample if it doesn't have enough reads
 
         # take the innermost bounds of the reads
-        ls = group["l_end"].tolist()
-        rs = group["r_start"].tolist()
+        ls = sample_reads["l_end"].tolist()
+        rs = sample_reads["r_start"].tolist()
         paired_ends = [[l, r] for l, r in zip(ls, rs)]  # noqaE741
-
-        # duplicate rows where the type is "split" to weight them more heavily
-        ls_split = group[group["type"] == "split"]["l_end"].tolist()
-        ls += ls_split
-        rs_split = group[group["type"] == "split"]["r_start"].tolist()
-        rs += rs_split
 
         # we should be able to rely on STIX to return only relevant reads
         # taking the mean of the coordinates will average out noise in the reads
-        med_l = int(np.median(ls))
-        med_r = int(np.median(rs))
+        if sample_summary:
+            max_l = int(max(ls))
+            min_r = int(min(rs))
 
-        # don't subtract insert size anymore; this is already taken into account in the read coordinates
-        # TODO: are we subtracting insert size somewhere else? we don't actually need to cluster with the insert size taken into account, since the axes values are arbitrary. need to make sure plotting takes this into account though.
-        svlen = med_r - med_l
+            # this is actually svlen + fragment size
+            svlen = min_r - max_l
 
-        sv_evidence.append(
-            Evidence(
-                sample=Sample(id=sample_id),
-                start=med_l,
-                end=med_r,
-                svlen=svlen,
-                paired_ends=paired_ends,
-                mean_insert_size=insert_size_lookup[sample_id].mean,
-                insert_size_sd=insert_size_lookup[sample_id].sd,
+            sv_evidence.append(
+                Evidence(
+                    sample=Sample(id=sample_id),
+                    start=max_l,
+                    end=min_r,
+                    svlen=svlen,
+                    paired_ends=paired_ends,
+                    mean_insert_size=insert_size_lookup[sample_id].mean,
+                    insert_size_sd=insert_size_lookup[sample_id].sd,
+                )
             )
-        )
-        # scale this by the SV coordinates so that the points are closer together
+            # scale this by the SV coordinates so that the points are closer together
 
-        points.append((svlen - (R - L), med_l - L))  # (length, L-coordinate)
+            # (insert_size, L-shift)
+            points.append((svlen - (R - L), max_l - L))
+
+        else:
+            # loop through all reads for the sample and add them to points
+            for read_l, read_r in zip(ls, rs):
+                read_len = read_r - read_l
+
+                points.append([read_len - (R - L), read_l - L])
+                sv_evidence.append(
+                    Evidence(
+                        sample=Sample(id=sample_id),
+                        start=read_l,
+                        end=read_r,
+                        svlen=read_len,
+                        paired_ends=paired_ends,
+                        mean_insert_size=insert_size_lookup[sample_id].mean,
+                        insert_size_sd=insert_size_lookup[sample_id].sd,
+                    )
+                )
 
     return np.array(points), sv_evidence
 
@@ -681,7 +694,8 @@ def gmm_trial(
     r_threshold: float = 0.8,
     repulsion_stepsize: float = 10.0,
     model_comparison_func: str = "aic",
-    min_pairs: int = 2,
+    min_split: int = 2,
+    min_pairs: int = 3,
     synthetic_data: bool = False,
     gmm_model: str = "2d",  # 1d_len, 1d_L, 2d
     stem: str = "1kg",
@@ -696,7 +710,9 @@ def gmm_trial(
         L=L,
         R=R,
         insert_size_lookup=insert_size_lookup,
+        min_split=min_split,
         min_pairs=min_pairs,
+        sample_summary=True,
     )
 
     if len(points) == 0:
@@ -726,6 +742,7 @@ def gmm_trial(
         )  # mutates sv_evidence with ancestry data and homo/heterozygous for each sample
 
     evidence_by_mode = get_evidence_by_mode(gmm_result, sv_evidence)
+
     if plot:
         plot_2d_coords_fig(
             evidence_by_mode,
@@ -733,14 +750,15 @@ def gmm_trial(
             L=L,
             R=R,
             axis1="L",
-            axis2="Length",
+            axis2="R",
             add_error_bars=False,
             size_by="",
-            show_mode_stats=True,
+            show_mode_stats=False,
             show_1d_distributions=True,
             insert_size_lookup=insert_size_lookup,
             init="kmeans++",
             repulsion=repulsion,
+            scale_axes=False,
         )
         # plot_single_sv(
         #     evidence_by_mode,

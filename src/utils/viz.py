@@ -423,9 +423,15 @@ def plot_2d_coords(
     insert_size_file: str | None = None,
     init: str = "kmeans++",
     repulsion: bool = False,
+    scale_axes: bool = False,  # whether to scale the axes values by the SV coordinates/length
 ):
     if insert_size_lookup is None and insert_size_file is not None:
-        insert_size_lookup = get_insert_size_lookup("", insert_size_file)
+        sample_ids = [
+            evidence.sample.id for mode in evidence_by_mode for evidence in mode
+        ]
+        insert_size_lookup = get_insert_size_lookup(
+            "", insert_size_file, None, sample_ids
+        )
     elif insert_size_lookup is None:
         insert_size_lookup = {}
     for i, mode in enumerate(evidence_by_mode):
@@ -438,9 +444,30 @@ def plot_2d_coords(
         scatter_labels = []
         scatter_sizes = []
         for evidence in mode:
-            ax1_vals = [GMM_AXES[axis1](x) for x in evidence.paired_ends]
-            ax2_vals = [GMM_AXES[axis2](x) for x in evidence.paired_ends]
-            x.append([np.median(ax1_vals), np.median(ax2_vals)])
+            ax1_vals = [
+                GMM_AXES[axis1](x, L, R, scale_axes)
+                for x in evidence.paired_ends
+            ]
+            ax2_vals = [
+                GMM_AXES[axis2](x, L, R, scale_axes)
+                for x in evidence.paired_ends
+            ]
+
+            if axis1 == "L":
+                ax1_val = np.max(ax1_vals)
+            elif axis1 == "R":
+                ax1_val = np.min(ax1_vals)
+            elif axis1 == "Length":
+                ax1_val = np.min(ax1_vals)
+
+            if axis2 == "L":
+                ax2_val = np.max(ax2_vals)
+            elif axis2 == "R":
+                ax2_val = np.min(ax2_vals)
+            elif axis2 == "Length":
+                ax2_val = np.min(ax2_vals)
+
+            x.append([ax1_val, ax2_val])
             num_evidence.append(len(evidence.paired_ends))
             sem_ax1.append(sem(ax1_vals))
             sem_ax2.append(sem(ax2_vals))
@@ -462,7 +489,7 @@ def plot_2d_coords(
             elif size_by == "insert_size":
                 scatter_sizes.append(mean_insert_size)
             else:
-                scatter_sizes.append(100)
+                scatter_sizes.append(5)
 
         x = np.array(x)
         num_evidence = np.array(num_evidence)
