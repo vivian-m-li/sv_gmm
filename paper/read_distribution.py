@@ -437,6 +437,39 @@ def analyze_query_region(
     plt.close(fig)
 
 
+def slop_vs_query_region(
+    cfg: dict,
+    sv_id: str,
+    *,
+    download_reads: bool = False,
+    lookup: pd.DataFrame | None = None,
+):
+    if lookup is None:
+        lookup = pd.read_csv("data/1kg/1kg.subset.csv", low_memory=False)
+    row = lookup[lookup["id"] == sv_id].iloc[0]
+
+    stix_output_dir = "output/query_region_analysis/"
+    q_vals = [0.6, 0.7, 0.8, 0.9, 1.0]
+    s_vals = [100, 200, 300, 400, 500]
+    for s in s_vals:
+        for q in enumerate(q_vals):
+            print(f"Query region: {q}")
+
+            output_dir = os.path.join(stix_output_dir, f"stix_output_s{s}_q{q}")
+            if download_reads:
+                os.makedirs(output_dir, exist_ok=True)
+
+                temp_cfg = cfg.copy()
+                temp_cfg["paths"]["stix_output_dir"] = output_dir
+                get_raw_data(
+                    row,
+                    temp_cfg,
+                    read_overlap=q,
+                    slop=s,
+                    filter_reference_samples=True,
+                )
+
+
 def analyze_sample_reads(
     sv_id: str, *, read_type: str = "paired", lookup: pd.DataFrame | None = None
 ):

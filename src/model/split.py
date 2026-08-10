@@ -38,6 +38,7 @@ def split_sv(
     stix_file_dir: str = "stix_output",
     # query/model parameters
     read_overlap: float = 1.0,
+    slop: int = 500,
     r_threshold: float | None = None,
     repulsion_stepsize: float | None = None,
     init: str | None = None,
@@ -120,6 +121,7 @@ def split_sv(
             stix_database,
             num_stix_shards,
             parallel,
+            slop,
         )
     else:
         if print_messages:

@@ -12,6 +12,7 @@ def query_stix(
     database_path: str,
     num_shards: int,
     parallel: bool = False,
+    slop: int = 500,
 ):
     """
     Runs a bash query file to query STIX for all the read (paired-end and split
@@ -46,6 +47,7 @@ def query_stix(
             str(num_shards),
             stix_output_file,
             stix_bin,
+            slop,
         ],
         capture_output=True,
         text=True,
