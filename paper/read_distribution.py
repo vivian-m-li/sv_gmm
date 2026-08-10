@@ -13,6 +13,8 @@ from src.utils.write_sv_output import get_raw_data
 COLORS = matplotlib.colormaps["tab10"].colors
 
 AXES = {
+    "l_end": "L",
+    "r_start": "R",
     "l_diff": "Start diff (l_start - sv_start)",
     "r_diff": "End diff (r_end - sv_end)",
     "fragment_size": "Fragment Size (r_end - l_start)",
@@ -69,6 +71,63 @@ def plot_read_distribution(sv_id: str, reads: np.ndarray, x: str, y: str):
     plt.xlabel(AXES[x])
     plt.ylabel(AXES[y])
     plt.savefig(f"output/plots/outer_bounds/{sv_id}_{x}_{y}.png")
+    plt.show()
+
+
+def plot_read_distribution_by_type(
+    sv_id: str,
+    reads: pd.DataFrame,
+    x: str,
+    y: str,
+    sample_summary: bool,
+):
+    summary_reads = pd.DataFrame(columns=["sample_id", x, y, "type"])
+    if sample_summary:
+        for sample_id in reads["sample_id"].unique():
+            sample_reads = reads[reads["sample_id"] == sample_id]
+            split_reads = sample_reads[sample_reads["type"] == "split"]
+            paired_reads = sample_reads[sample_reads["type"] == "paired"]
+            if split_reads.shape[0] > 1:
+                summary_reads.loc[len(summary_reads)] = [
+                    sample_id,
+                    split_reads[x].max(),
+                    split_reads[y].min(),
+                    "split",
+                ]
+            elif paired_reads.shape[0] > 1:
+                summary_reads.loc[len(summary_reads)] = [
+                    sample_id,
+                    paired_reads[x].max(),
+                    paired_reads[y].min(),
+                    "paired",
+                ]
+        print(
+            f"{reads['sample_id'].nunique() - summary_reads['sample_id'].nunique()} samples omitted, {summary_reads['sample_id'].nunique()} samples remaining"
+        )
+        print(
+            f"{summary_reads[summary_reads["type"] == 'split'].shape[0]} split reads, {summary_reads[summary_reads["type"] == 'paired'].shape[0]} paired reads"
+        )
+    else:
+        summary_reads = reads.copy()
+
+    plt.figure()
+    for read_type, color in zip(["paired", "split"], ["red", "blue"]):
+        reads_subset = summary_reads[summary_reads["type"] == read_type]
+        if reads_subset.empty:
+            continue
+
+        plt.scatter(
+            reads_subset[x],
+            reads_subset[y],
+            alpha=0.6,
+            label=read_type,
+            color=color,
+        )
+
+    plt.title(f"Read distribution for SV {sv_id}")
+    plt.xlabel(AXES[x])
+    plt.ylabel(AXES[y])
+    plt.legend()
     plt.show()
 
 
@@ -162,6 +221,7 @@ def get_read_distribution(
 
     if plot:
         plot_read_distribution(sv_id, read_ends, x, y)
+        # plot_read_distribution_by_type(sv_id, reads, x, y, sample_summary=True)
 
     if plot_1d:
         plot_1d_read_distribution(sv_id, read_ends[:, 0], x)
@@ -570,4 +630,10 @@ if __name__ == "__main__":
         "HGSV_220750",
         "HGSV_161412",
     ]:
-        analyze_split_pe_reads_per_sample(sv_id, lookup=lookup)
+        get_read_distribution(
+            sv_id,
+            x="l_end",
+            y="r_start",
+            plot=True,
+            lookup=lookup,
+        )
