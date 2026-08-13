@@ -27,14 +27,16 @@ def get_nonref_reads(
     lookup: pd.DataFrame | None = None,
     *,
     stix_output_dir: str = "output/stix_output",
+    verbose: bool = True,
 ):
     if lookup is None:
         lookup = pd.read_csv("data/1kg/1kg.subset.csv", low_memory=False)
     row = lookup[lookup["id"] == sv_id].iloc[0]
 
-    print(
-        f"{sv_id}: {row['chr']}:{row['start']}-{row['stop']}, svlen={row['svlen']}"
-    )
+    if verbose:
+        print(
+            f"{sv_id}: {row['chr']}:{row['start']}-{row['stop']}, svlen={row['svlen']}"
+        )
 
     # get all nonref samples
     sample_ids = get_sample_ids("data/1kg/sample_ids.txt")
@@ -432,7 +434,7 @@ def analyze_query_region(
         left=0.15, bottom=0.09, right=0.95, top=0.925, wspace=0.05, hspace=0.48
     )
     plt.savefig(
-        f"output/plots/read_distribution_outer_bounds/query_region/{sv_id}_{'median' if sample_summary else 'all'}.png"
+        f"output/plots/query_region/{sv_id}_{'median' if sample_summary else 'all'}.png"
     )
     plt.close(fig)
 
@@ -442,19 +444,27 @@ def slop_vs_query_region(
     sv_id: str,
     *,
     download_reads: bool = False,
+    sample_summary: bool = False,
+    plot: bool = False,
     lookup: pd.DataFrame | None = None,
 ):
     if lookup is None:
         lookup = pd.read_csv("data/1kg/1kg.subset.csv", low_memory=False)
     row = lookup[lookup["id"] == sv_id].iloc[0]
+    start, stop = row["start"], row["stop"]
 
     stix_output_dir = "output/query_region_analysis/"
-    q_vals = [0.6, 0.7, 0.8, 0.9, 1.0]
-    s_vals = [100, 200, 300, 400, 500]
-    for s in s_vals:
-        for q in enumerate(q_vals):
-            print(f"Query region: {q}")
+    if plot:
+        fig, axs = plt.subplots(10, 10, figsize=(14, 9))
+        min_l = np.inf
+        max_r = -np.inf
+        max_y = -np.inf
 
+    q_vals = np.arange(0.6, 1.01, 0.1)
+    s_vals = np.arange(100, 1001, 100)
+    for i, s in enumerate(s_vals[::-1]):
+        for j, q in enumerate(q_vals):
+            q = round(q, 1)
             output_dir = os.path.join(stix_output_dir, f"stix_output_s{s}_q{q}")
             if download_reads:
                 os.makedirs(output_dir, exist_ok=True)
@@ -468,6 +478,123 @@ def slop_vs_query_region(
                     slop=s,
                     filter_reference_samples=True,
                 )
+
+            reads, _ = get_nonref_reads(
+                sv_id, lookup=lookup, stix_output_dir=output_dir, verbose=False
+            )
+            if not plot:
+                continue
+
+            for read_type, color in zip(["split", "paired"], ["blue", "red"]):
+                reads_subset = reads[reads["type"] == read_type]
+                if reads_subset.empty:
+                    continue
+
+                for k, col in enumerate(["l_end", "r_start"]):
+                    values = []
+                    if sample_summary:
+                        for sample_id in reads["sample_id"].unique():
+                            sample_reads = reads_subset[
+                                reads_subset["sample_id"] == sample_id
+                            ]
+                            values.append(sample_reads[col].median())
+                    else:
+                        values = reads_subset[col]
+
+                    if k == 0:
+                        min_l = min(min_l, min(values))
+                    elif k == 1:
+                        max_r = max(max_r, max(values))
+
+                    col = j * 2 + k
+                    axs[i][col].hist(
+                        values,
+                        bins=15,
+                        alpha=0.6,
+                        label=read_type,
+                        color=color,
+                    )
+
+                    max_y = max(max_y, axs[i][col].get_ylim()[1])
+
+                    if k == 0:
+                        text_col = j * 2 if read_type == "split" else j * 2 + 1
+                        text = f"{len(values)}\n{read_type}\n{'samples' if sample_summary else 'reads'}"
+                        axs[i][text_col].text(
+                            0.05 if read_type == "split" else 0.95,
+                            0.95,
+                            text,
+                            transform=axs[i][text_col].transAxes,
+                            fontsize=8,
+                            verticalalignment="top",
+                            horizontalalignment=(
+                                "left" if read_type == "split" else "right"
+                            ),
+                        )
+
+            axs[i][j * 2].axvline(
+                x=start, color="gray", linestyle="--", linewidth=0.5
+            )
+            axs[i][j * 2 + 1].axvline(
+                x=stop, color="gray", linestyle="--", linewidth=0.5
+            )
+
+            axs[i][j * 2].set_xticks([])
+            axs[i][j * 2 + 1].set_xticks([])
+            axs[i][j * 2 + 1].set_yticks([])
+            if j != 0:
+                axs[i][j * 2].set_yticks([])
+
+            if j == 0:
+                axs[i][j * 2].set_ylabel(f"s={s}")
+            if i == 0:
+                axs[i][j * 2].text(
+                    0.85,
+                    1.25,
+                    f"q={q}",
+                    transform=axs[i][j * 2].transAxes,
+                    verticalalignment="top",
+                    horizontalalignment="left",
+                )
+
+            # add light gray background to columns where q is odd
+            if j % 2 == 1:
+                axs[i][j * 2].set_facecolor("#f0f0f0")
+                axs[i][j * 2 + 1].set_facecolor("#f0f0f0")
+
+    if not plot:
+        return
+
+    # set all x-limits and y-limits to the same range
+    buffer = (stop - start) * 0.02
+    for i in range(len(s_vals)):
+        for j in range(len(q_vals)):
+            axs[i][j * 2].set_xlim(min_l, start + buffer)
+            axs[i][j * 2 + 1].set_xlim(stop - buffer, max_r)
+            axs[i][j * 2].set_ylim(0, max_y)
+            axs[i][j * 2 + 1].set_ylim(0, max_y)
+
+    plt.suptitle(
+        f"Split vs PE Reads for Varying Slop and Query Regions for SV {sv_id}"
+    )
+    fig.text(0.45, 0.01, "Read position", fontsize=12)
+    fig.text(0.01, 0.5, "Count", rotation=90, fontsize=12)
+    axs[0][len(q_vals) * 2 - 1].legend(
+        loc="upper right", bbox_to_anchor=(1.95, 1.1)
+    )
+
+    plt.subplots_adjust(
+        left=0.075,
+        bottom=0.04,
+        right=0.925,
+        top=0.925,
+        wspace=0.09,
+        hspace=0.115,
+    )
+    plt.savefig(
+        f"output/plots/slop_query_region/{sv_id}_{'median' if sample_summary else 'all'}.png"
+    )
+    plt.close(fig)
 
 
 def analyze_sample_reads(
@@ -663,10 +790,12 @@ if __name__ == "__main__":
         "HGSV_220750",
         "HGSV_161412",
     ]:
-        get_read_distribution(
-            sv_id,
-            x="l_end",
-            y="r_start",
-            plot=True,
-            lookup=lookup,
-        )
+        for sample_summary in [False, True]:
+            slop_vs_query_region(
+                cfg,
+                sv_id,
+                plot=True,
+                download_reads=False,
+                sample_summary=sample_summary,
+                lookup=lookup,
+            )

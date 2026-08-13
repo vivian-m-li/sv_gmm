@@ -3,7 +3,7 @@ import os
 import sys
 
 from src.data.query_stix import query_stix
-from model.gmm_trial import gmm_trial
+from src.model.gmm_trial import gmm_trial
 from src.model.dirichlet import run_dirichlet
 from src.utils.helper import (
     stix_output_to_df,
