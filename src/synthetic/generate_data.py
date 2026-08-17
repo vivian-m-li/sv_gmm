@@ -333,8 +333,8 @@ def generate_mapped_pairs_for_sv(
             )
 
             # split point between left and right reads
-            # this may not be introducing enough noise because the gap can be split anywhere
-            split_point = random.gauss(0.5, 0.1)
+            # it's more likely that the read is split near either end rather than in the middle (simulate this with a betavariate distribution)
+            split_point = random.betavariate(0.5, 0.5)
             left_gap = int(insert_size * split_point)
             right_gap = insert_size - left_gap
 
@@ -444,9 +444,7 @@ def generate_and_split_sample_reads(
             ]
             evidence[sample].extend([pair[1], pair[2]])  # l_end, r_start
 
-    # TODO: the pairs will need to be put through the data pre-processing pipeline before we can run the clustering
-
-    # pass synthetic data through SV analysis pipeline
+    # set L and R to the median of the SV coordinates, which is a reasonable estimate if we don't know the true SV coordinates used to generate the data
     L = np.median([start for start, _ in svs])
     R = np.median([stop for _, stop in svs])
     evidence = {key: np.array(value) for key, value in evidence.items()}
@@ -508,6 +506,7 @@ def generate_and_split_sample_reads(
     if vcf_filename:
         data_to_vcf(evidence, insert_size_lookup, vcf_filename)
 
+    # pass synthetic data through SV analysis pipeline
     if run_split:
         gmm_results, _, _ = run_dirichlet(
             reads,
