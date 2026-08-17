@@ -482,6 +482,8 @@ def slop_vs_query_region(
             reads, _ = get_nonref_reads(
                 sv_id, lookup=lookup, stix_output_dir=output_dir, verbose=False
             )
+            reads["l_end_diff"] = reads["l_end"] - start
+            reads["r_start_diff"] = reads["r_start"] - stop
             if not plot:
                 continue
 
@@ -490,14 +492,17 @@ def slop_vs_query_region(
                 if reads_subset.empty:
                     continue
 
-                for k, col in enumerate(["l_end", "r_start"]):
+                for k, col in enumerate(["l_end_diff", "r_start_diff"]):
                     values = []
                     if sample_summary:
                         for sample_id in reads["sample_id"].unique():
                             sample_reads = reads_subset[
                                 reads_subset["sample_id"] == sample_id
                             ]
-                            values.append(sample_reads[col].median())
+                            if col == "l_end_diff":
+                                values.append(sample_reads[col].max())
+                            elif col == "r_start_diff":
+                                values.append(sample_reads[col].min())
                     else:
                         values = reads_subset[col]
 
@@ -533,14 +538,15 @@ def slop_vs_query_region(
                         )
 
             axs[i][j * 2].axvline(
-                x=start, color="gray", linestyle="--", linewidth=0.5
+                x=0, color="gray", linestyle="--", linewidth=0.5
             )
             axs[i][j * 2 + 1].axvline(
-                x=stop, color="gray", linestyle="--", linewidth=0.5
+                x=0, color="gray", linestyle="--", linewidth=0.5
             )
 
-            axs[i][j * 2].set_xticks([])
-            axs[i][j * 2 + 1].set_xticks([])
+            if i != len(s_vals) - 1:
+                axs[i][j * 2].set_xticks([])
+                axs[i][j * 2 + 1].set_xticks([])
             axs[i][j * 2 + 1].set_yticks([])
             if j != 0:
                 axs[i][j * 2].set_yticks([])
@@ -566,18 +572,20 @@ def slop_vs_query_region(
         return
 
     # set all x-limits and y-limits to the same range
-    buffer = (stop - start) * 0.02
+    buffer = (stop - start) * 0.01
     for i in range(len(s_vals)):
         for j in range(len(q_vals)):
-            axs[i][j * 2].set_xlim(min_l, start + buffer)
-            axs[i][j * 2 + 1].set_xlim(stop - buffer, max_r)
+            axs[i][j * 2].set_xlim(min_l, buffer)
+            axs[i][j * 2 + 1].set_xlim(-buffer, max_r)
             axs[i][j * 2].set_ylim(0, max_y)
             axs[i][j * 2 + 1].set_ylim(0, max_y)
 
     plt.suptitle(
-        f"Split vs PE Reads for Varying Slop and Query Regions for SV {sv_id}"
+        f"Split vs PE Reads for Varying Slop and Query Regions for SV {sv_id} (svlen={stop - start})"
     )
-    fig.text(0.45, 0.01, "Read position", fontsize=12)
+    fig.text(
+        0.45, 0.01, "Read position (relative to l_end, r_start)", fontsize=12
+    )
     fig.text(0.01, 0.5, "Count", rotation=90, fontsize=12)
     axs[0][len(q_vals) * 2 - 1].legend(
         loc="upper right", bbox_to_anchor=(1.95, 1.1)
@@ -585,14 +593,14 @@ def slop_vs_query_region(
 
     plt.subplots_adjust(
         left=0.075,
-        bottom=0.04,
+        bottom=0.055,
         right=0.925,
         top=0.925,
         wspace=0.09,
         hspace=0.115,
     )
     plt.savefig(
-        f"output/plots/slop_query_region/{sv_id}_{'median' if sample_summary else 'all'}.png"
+        f"output/plots/slop_query_region/{sv_id}_{'inner' if sample_summary else 'all'}.png"
     )
     plt.close(fig)
 
