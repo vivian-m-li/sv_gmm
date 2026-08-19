@@ -1,5 +1,7 @@
-import numpy as np
 from dataclasses import dataclass, field
+from typing import Literal
+
+import numpy as np
 
 
 @dataclass
@@ -92,9 +94,10 @@ class Evidence:
     svlen: float
     start: int  # median L-coordinate
     end: int
-    paired_ends: list[list[float]]
+    reads: list[list[float]]
     mean_insert_size: int
     insert_size_sd: float
+    evidence_type: Literal["split", "paired"]
     mode_probabilities: list[float] = field(
         default_factory=list
     )  # probability of belonging to each mode. Length should match the number of modes in the GMM

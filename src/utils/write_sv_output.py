@@ -224,16 +224,12 @@ def write_sv_stats(
         starts = []
         ends = []
         for evidence in mode:
-            med_l = np.median(
-                [paired_end[0] for paired_end in evidence.paired_ends]
-            )
-            med_r = np.median(
-                [paired_end[1] for paired_end in evidence.paired_ends]
-            )
+            med_l = np.median([paired_end[0] for paired_end in evidence.reads])
+            med_r = np.median([paired_end[1] for paired_end in evidence.reads])
             med_length = np.median(
                 [
                     paired_end[1] - paired_end[0] - evidence.mean_insert_size
-                    for paired_end in evidence.paired_ends
+                    for paired_end in evidence.reads
                 ]
             )
             lengths.append(med_length)

@@ -100,12 +100,12 @@ def plot_evidence_by_mode(
 
         # plots all evidence for each sample
         for evidence in mode:
-            max_l = max([paired_end[0] for paired_end in evidence.paired_ends])
-            min_r = min([paired_end[1] for paired_end in evidence.paired_ends])
+            max_l = max([paired_end[0] for paired_end in evidence.reads])
+            min_r = min([paired_end[1] for paired_end in evidence.reads])
             all_paired_ends.extend([max_l, min_r])
             max_max_l = max(max_l, max_max_l)
             min_min_r = min(min_r, min_min_r)
-            all_mode_paired_ends.extend(evidence.paired_ends)
+            all_mode_paired_ends.extend(evidence.reads)
             population_counter[evidence.sample.superpopulation] += 1
 
         population_data.append(population_counter)
@@ -147,12 +147,8 @@ def plot_evidence_by_mode(
             y_positions.append(y)
 
             # plot only the max L coordinate and min R coordinate (closest values to the actual SV, which is not sequenced)
-            mean_l = np.mean(
-                [paired_end[0] for paired_end in evidence.paired_ends]
-            )
-            mean_r = np.mean(
-                [paired_end[1] for paired_end in evidence.paired_ends]
-            )
+            mean_l = np.mean([paired_end[0] for paired_end in evidence.reads])
+            mean_r = np.mean([paired_end[1] for paired_end in evidence.reads])
             bax.plot(
                 [mean_l, mean_r],
                 [y, y],
@@ -292,12 +288,8 @@ def plot_sequence(
         lefts = []
         rights = []
         for evidence in mode:
-            lefts.append(
-                max([paired_end[0] for paired_end in evidence.paired_ends])
-            )
-            rights.append(
-                min([paired_end[1] for paired_end in evidence.paired_ends])
-            )
+            lefts.append(max([paired_end[0] for paired_end in evidence.reads]))
+            rights.append(min([paired_end[1] for paired_end in evidence.reads]))
         all_paired_ends = lefts + rights
         max_left = max(lefts)
         min_right = min(rights)
@@ -361,7 +353,7 @@ def plot_sv_lengths(evidence_by_mode: list[list[Evidence]]):
             # TODO: recalculate the lengths with individual insert sizes
             lengths = [
                 max(paired_end) - min(paired_end) - 450
-                for paired_end in evidence.paired_ends
+                for paired_end in evidence.reads
             ]
             all_lengths.append(np.mean(lengths))
 
@@ -445,12 +437,10 @@ def plot_2d_coords(
         scatter_sizes = []
         for evidence in mode:
             ax1_vals = [
-                GMM_AXES[axis1](x, L, R, scale_axes)
-                for x in evidence.paired_ends
+                GMM_AXES[axis1](x, L, R, scale_axes) for x in evidence.reads
             ]
             ax2_vals = [
-                GMM_AXES[axis2](x, L, R, scale_axes)
-                for x in evidence.paired_ends
+                GMM_AXES[axis2](x, L, R, scale_axes) for x in evidence.reads
             ]
 
             if axis1 == "L":
@@ -468,7 +458,7 @@ def plot_2d_coords(
                 ax2_val = np.min(ax2_vals)
 
             x.append([ax1_val, ax2_val])
-            num_evidence.append(len(evidence.paired_ends))
+            num_evidence.append(len(evidence.reads))
             sem_ax1.append(sem(ax1_vals))
             sem_ax2.append(sem(ax2_vals))
 
@@ -899,8 +889,8 @@ def plot_removed_evidence(sv_evidence: list[Evidence], L: int, R: int):
     evidence_sorted = {0: [], 1: [], 2: [], 3: []}
     for evidence in sv_evidence:
         y = add_noise(evidence.removed)
-        evidence_sorted[evidence.removed].extend(evidence.paired_ends)
-        for paired_end in evidence.paired_ends:
+        evidence_sorted[evidence.removed].extend(evidence.reads)
+        for paired_end in evidence.reads:
             plt.plot(
                 [paired_end[0], paired_end[1]],
                 [y, y],

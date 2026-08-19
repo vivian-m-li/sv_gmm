@@ -216,7 +216,7 @@ def run_dirichlet(
             L=L,
             R=R,
             axis1="L",
-            axis2="Length",
+            axis2="R",
             add_error_bars=False,
             size_by="",
             show_mode_stats=True,
