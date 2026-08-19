@@ -621,65 +621,121 @@ def process_data(
     # group reads by sample id
     for sample_id, group in reads.groupby("sample_id"):
         sample_reads = group.copy()
-        split_reads = sample_reads[sample_reads["type"] == "split"]
-        paired_reads = sample_reads[sample_reads["type"] == "paired"]
 
-        if split_reads.shape[0] >= min_split:
-            sample_reads = split_reads.copy()
-        elif paired_reads.shape[0] >= min_pairs:
-            sample_reads = paired_reads.copy()
-        else:
-            continue  # skip this sample if it doesn't have enough reads
-
-        # take the innermost bounds of the reads
-        ls = sample_reads["l_end"].tolist()
-        rs = sample_reads["r_start"].tolist()
-        paired_ends = [[l, r] for l, r in zip(ls, rs)]  # noqaE741
-
-        # we should be able to rely on STIX to return only relevant reads
-        # taking the mean of the coordinates will average out noise in the reads
-        if sample_summary:
-            max_l = int(max(ls))
-            min_r = int(min(rs))
-
-            # this is actually svlen + fragment size
-            svlen = min_r - max_l
-
-            sv_evidence.append(
-                Evidence(
-                    sample=Sample(id=sample_id),
-                    start=max_l,
-                    end=min_r,
-                    svlen=svlen,
-                    paired_ends=paired_ends,
-                    mean_insert_size=insert_size_lookup[sample_id].mean,
-                    insert_size_sd=insert_size_lookup[sample_id].sd,
-                )
-            )
-            # scale this by the SV coordinates so that the points are closer together
-
-            # (insert_size, L-shift)
-            points.append((svlen - (R - L), max_l - L))
-
-        else:
+        if not sample_summary:
             # loop through all reads for the sample and add them to points
-            for read_l, read_r in zip(ls, rs):
+            for _, row in sample_reads.iterrows():
+                read_l = int(row["l_end"])
+                read_r = int(row["r_start"])
                 read_len = read_r - read_l
 
-                points.append([read_len - (R - L), read_l - L])
+                points.append([read_l - L, read_r - R])
                 sv_evidence.append(
                     Evidence(
                         sample=Sample(id=sample_id),
                         start=read_l,
                         end=read_r,
                         svlen=read_len,
-                        paired_ends=paired_ends,
+                        reads=sample_reads[
+                            ["l_end", "r_start"]
+                        ].values.tolist(),
                         mean_insert_size=insert_size_lookup[sample_id].mean,
                         insert_size_sd=insert_size_lookup[sample_id].sd,
+                        evidence_type=row["type"],
                     )
                 )
+            continue
 
-    return np.array(points), sv_evidence
+        split_reads = sample_reads[sample_reads["type"] == "split"]
+        paired_reads = sample_reads[sample_reads["type"] == "paired"]
+        sample_insert_size = insert_size_lookup[sample_id]
+        evidence_type = None
+
+        # use split reads if there are enough of them
+        if split_reads.shape[0] >= min_split:
+            sample_reads = split_reads.copy()
+            evidence_type = "split"
+
+        # if not, we can check if the split reads are consistent with the paired reads and use the split read if consistent, since it's a stronger signal than the paired reads
+        elif split_reads.shape[0] > 0 and paired_reads.shape[0] > 0:
+            # check if the split reads are consistent with the paired reads
+            split_l = max(split_reads["l_end"].tolist())
+            split_r = min(split_reads["r_start"].tolist())
+            paired_l = max(paired_reads["l_end"].tolist())
+            paired_r = min(paired_reads["r_start"].tolist())
+
+            # check if the split read falls within the plausible range of the paired reads for the sample
+            insert_size_sd = insert_size_lookup[sample_id].sd
+
+            # add a buffer of 10 to the left side of the range to account for noise in the reads
+            l_range = (paired_l - 10, paired_l + insert_size_sd)
+            r_range = (paired_r - insert_size_sd, paired_r + 10)
+
+            if (
+                split_l >= l_range[0]
+                and split_l <= l_range[1]
+                and split_r >= r_range[0]
+                and split_r <= r_range[1]
+            ):
+                sample_reads = split_reads.copy()
+                evidence_type = "split"
+
+        # if there are no split reads, we can use the paired reads if there are enough of them
+        if evidence_type is None:
+            # only keep the paired reads that are within 1 SD (based on insert size SD) of the median coordinate
+            sample_reads = paired_reads.copy()
+            med_l = np.median(sample_reads["l_end"])
+            med_r = np.median(sample_reads["r_start"])
+            l_range = (
+                med_l - sample_insert_size.sd,
+                med_l + sample_insert_size.sd,
+            )
+            r_range = (
+                med_r - sample_insert_size.sd,
+                med_r + sample_insert_size.sd,
+            )
+            sample_reads = sample_reads[
+                (sample_reads["l_end"] >= l_range[0])
+                & (sample_reads["l_end"] <= l_range[1])
+                & (sample_reads["r_start"] >= r_range[0])
+                & (sample_reads["r_start"] <= r_range[1])
+            ]
+            if sample_reads.shape[0] >= min_pairs:
+                evidence_type = "paired"
+            # skip this sample since it doesn't have enough evidence and its split reads don't agree with its paired reads
+            else:
+                continue
+
+        # take the innermost bounds of the reads
+        ls = sample_reads["l_end"].tolist()
+        rs = sample_reads["r_start"].tolist()
+        sample_read_coords = sample_reads[["l_end", "r_start"]].values.tolist()
+
+        # we should be able to rely on STIX to return only relevant reads
+        # taking the mean of the coordinates will average out noise in the reads
+        max_l = int(max(ls))
+        min_r = int(min(rs))
+
+        # this is actually svlen + fragment size
+        svlen = min_r - max_l
+
+        sv_evidence.append(
+            Evidence(
+                sample=Sample(id=sample_id),
+                start=max_l,
+                end=min_r,
+                svlen=svlen,
+                reads=sample_read_coords,
+                mean_insert_size=sample_insert_size.mean,
+                insert_size_sd=sample_insert_size.sd,
+                evidence_type=evidence_type,
+            )
+        )
+
+        # scale this by the SV coordinates so that the points are closer together
+        points.append([max_l - L, min_r - R])  # L shift, R shift
+
+    return points, sv_evidence
 
 
 def gmm_trial(
@@ -746,7 +802,8 @@ def gmm_trial(
     if plot:
         plot_2d_coords_fig(
             evidence_by_mode,
-            plot_file,
+            None,
+            # plot_file,
             L=L,
             R=R,
             axis1="L",
