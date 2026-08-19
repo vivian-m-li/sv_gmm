@@ -5,9 +5,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from src.model.gmm_trial import process_data
 from src.utils.config_loader import load_config
 from src.utils.helper import get_sample_ids, stix_output_to_df
-from src.utils.model_helper import giggle_format
+from src.utils.model_helper import giggle_format, get_insert_size_lookup
 from src.utils.write_sv_output import get_raw_data
 
 COLORS = matplotlib.colormaps["tab10"].colors
@@ -776,6 +777,62 @@ def read_preprocessing(
     plt.close(fig)
 
 
+def plot_sample_vs_all_reads(sv_id: str, *, lookup: pd.DataFrame | None = None):
+    reads, pos = get_nonref_reads(sv_id, lookup=lookup)
+    _, start, stop = pos
+
+    sample_ids = get_sample_ids("data/1kg/sample_ids.txt")
+    insert_size_lookup = get_insert_size_lookup(
+        "data/1kg", "insert_sizes.csv", 450, sample_ids
+    )
+
+    plt.figure()
+    sample_summary_types = set()
+    for i, sample_id in enumerate(reads["sample_id"].unique()):
+        sample_reads = reads[reads["sample_id"] == sample_id]
+        # this should return 0 or 1 points for the sample
+        points, evidence = process_data(
+            sample_reads, L=start, R=stop, insert_size_lookup=insert_size_lookup
+        )
+
+        if len(points) == 0:
+            continue
+
+        evidence_type = evidence[0].evidence_type
+
+        # plot all reads
+        plt.scatter(
+            sample_reads["l_end"] - start,
+            sample_reads["r_start"] - stop,
+            alpha=0.6,
+            color="blue",
+            s=10,
+            label="All reads" if i == 0 else None,
+        )
+        # plot sample summary
+        plt.scatter(
+            points[0][0],
+            points[0][1],
+            color="gold" if evidence_type == "split" else "red",
+            s=10,
+            zorder=10 if evidence_type == "split" else 5,
+            label=(
+                f"Sample summary ({evidence_type})"
+                if evidence_type not in sample_summary_types
+                else None
+            ),
+        )
+        sample_summary_types.add(evidence_type)
+
+    plt.xlabel("read_L - L")
+    plt.ylabel("read_R - R")
+    plt.legend()
+    plt.title(f"Summary vs All Reads for {sv_id}")
+    plt.savefig(
+        f"output/plots/data_preprocessing/{sv_id}_sample_vs_all_reads.png"
+    )
+
+
 if __name__ == "__main__":
     cfg = load_config()
 
@@ -798,12 +855,4 @@ if __name__ == "__main__":
         "HGSV_220750",
         "HGSV_161412",
     ]:
-        for sample_summary in [False, True]:
-            slop_vs_query_region(
-                cfg,
-                sv_id,
-                plot=True,
-                download_reads=False,
-                sample_summary=sample_summary,
-                lookup=lookup,
-            )
+        plot_sample_vs_all_reads(sv_id, lookup=lookup)
