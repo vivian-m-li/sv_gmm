@@ -121,19 +121,23 @@ def model_penalty(
     return penalty
 
 
-def regularize_covariance(cov: list[np.ndarray]) -> np.ndarray:
+def regularize_covariance(cov: list[np.ndarray], x: np.ndarray) -> np.ndarray:
     """Symmetrizes the covariance matrix and adds jitter to the diagonal until it is positive definite."""
+    # scale the jitter based on the variance of the data to avoid over-regularizing small datasets
+    data_scale = np.mean(np.var(x, axis=0))
+    base_jitter = max(data_scale * 1e-8, 1e-12)
+
     regularized_cov = []
     for mode_cov in cov:
         dim = mode_cov.shape[0]
 
         # NaN/Inf can't be fixed by jitter — fall back to identity immediately
         if not np.all(np.isfinite(mode_cov)):
-            regularized_cov.append(np.eye(dim))
+            regularized_cov.append(np.eye(dim) * base_jitter)
             continue
 
         c = (mode_cov + mode_cov.T) / 2  # enforce symmetry
-        jitter = 1e-6
+        jitter = base_jitter
         for i in range(11):
             try:
                 np.linalg.cholesky(c)  # cheapest SPD check
@@ -146,7 +150,7 @@ def regularize_covariance(cov: list[np.ndarray]) -> np.ndarray:
                     c = np.eye(dim) * (
                         variance
                         if np.isfinite(variance) and variance > 0
-                        else 1.0
+                        else base_jitter
                     )
                 else:
                     c = c + np.eye(c.shape[0]) * jitter
@@ -166,7 +170,7 @@ def calc_log_likelihood(
 ) -> float:
     """Calculates the log-likelihood of the data fitting the GMM."""
     num_modes = len(mu)
-    regularized_cov = regularize_covariance(cov)
+    regularized_cov = regularize_covariance(cov, x)
 
     logL = 0.0
     for i in range(len(x)):
@@ -254,14 +258,24 @@ def score_model(
         for j in range(i + 1, num_modes):
             # for now, ignore the insert size distance since this would disqualify SVs that are similar size but a sizeable distance apart
             # insert_size_dist = gmm_result.mu[i][0] - gmm_result.mu[j][0]
-            l_coord_dist = gmm_result.mu[i][1] - gmm_result.mu[j][1]
-            r_coord_dist = (gmm_result.mu[i][0] + gmm_result.mu[i][1]) - (
-                gmm_result.mu[j][0] + gmm_result.mu[j][1]
+            l_coord_dist = abs(gmm_result.mu[i][0] - gmm_result.mu[j][0])
+            r_coord_dist = abs(gmm_result.mu[i][1] - gmm_result.mu[j][1])
+            len_diff = abs(
+                (gmm_result.mu[i][1] - gmm_result.mu[i][0])
+                - (gmm_result.mu[j][1] - gmm_result.mu[j][0])
             )
 
-            if not (abs(l_coord_dist) >= 100 or abs(r_coord_dist) >= 100):
-                is_valid = False
+            passes = 0
+            if abs(l_coord_dist) >= 100:
+                passes += 1
+            if abs(r_coord_dist) >= 100:
+                passes += 1
+            if len_diff >= 150:
+                passes += 1
 
+            if passes < 2:
+                is_valid = False
+                break
     return score, is_valid
 
 
@@ -378,7 +392,7 @@ def calc_responsibility(
     Returns a matrix of size (number of samples) x (number of modes) where each entry represents the probability that a proint belongs to a particular mode.
     If reassign_small_values is True, then we reassign points with a very small responsibility to the nearest cluster based on distance. This forces each point to contribute to the parameter estimates of at least one cluster.
     """
-    regularized_cov = regularize_covariance(cov)
+    regularized_cov = regularize_covariance(cov, x)
     num_modes = len(mu)
 
     # compute log(p[k] * pdf_k(x_i)) for every point/mode in one shot, in log-space
@@ -423,7 +437,6 @@ def calc_responsibility(
         # replace any remaining nans (ambiguous points not reassigned) with uniform
         nan_rows = np.where(np.any(np.isnan(gz), axis=1))[0]
         gz[nan_rows, :] = 1.0 / num_modes
-
     return gz
 
 
@@ -582,7 +595,7 @@ def select_model(x: np.ndarray, model_results: dict):
     data point assigned to them.
     """
     best_model = None
-    for i, model in enumerate(model_results.values()):
+    for i, model in model_results.items():
         if not model["valid"]:
             continue
 
@@ -591,6 +604,8 @@ def select_model(x: np.ndarray, model_results: dict):
             x, len(x), last_iter.mu, last_iter.cov, last_iter.p
         )
         assignments = np.argmax(gz, axis=1)
+
+        # this checks that each cluster has at least one data point assigned to it
         if len(set(assignments)) != len(last_iter.mu):
             continue
 
@@ -606,8 +621,8 @@ def select_model(x: np.ndarray, model_results: dict):
 def gmm(
     x: np.ndarray[tuple[float, int]],
     *,
-    L,
-    R,
+    L: int,
+    R: int,
     init: str = "kmeans++",
     repulsion: bool = False,
     r_threshold: float = 0.8,
