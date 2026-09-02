@@ -44,8 +44,7 @@ def run_split(
     svs: list,
     weights: list,
     n_samples: int,
-    include_split_reads: bool,
-    include_paired_reads: bool,
+    pct_split_reads: float,
     cfg: dict,
     model_params: dict,
     results: list,
@@ -59,8 +58,7 @@ def run_split(
         insert_size_file=cfg["input_files"]["insert_size_file"],
         model_params=model_params,
         n_samples=n_samples,
-        include_split_reads=include_split_reads,
-        include_paired_reads=include_paired_reads,
+        pct_split_reads=pct_split_reads,
         run_split=True,
         plot=False,
         plot_reads=False,
@@ -74,8 +72,7 @@ def run_split(
             svs,
             n_samples,
             weights,
-            include_split_reads,
-            include_paired_reads,
+            pct_split_reads,
             gmm_result,
             evidence_by_mode,
         ]
@@ -112,8 +109,7 @@ def write_csv(
     write_new_file: bool = False,
     fixed_n_samples: int | None = None,
     fixed_svlen: int | None = None,
-    include_split_reads: bool = True,
-    include_paired_reads: bool = True,
+    pct_split_reads: float | None = None,
 ):
     """Writes the results of the synthetic data tests to a CSV file."""
     file = os.path.join(
@@ -141,8 +137,7 @@ def write_csv(
             "num_samples",
             "svlen",
             "weights",
-            "split_reads",
-            "paired_reads",
+            "pct_split_reads",
         ]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
         if write_new_file:
@@ -155,8 +150,7 @@ def write_csv(
             svs,
             n_samples,
             weights,
-            include_split_reads,
-            include_paired_reads,
+            pct_split_reads,
             gmm_result,
             evidence_by_mode,
         ) in all_results:
@@ -184,8 +178,9 @@ def write_csv(
                     "num_samples": n_samples,
                     "svlen": fixed_svlen,
                     "weights": weights,
-                    "split_reads": include_split_reads,
-                    "paired_reads": include_paired_reads,
+                    "pct_split_reads": (
+                        -1 if pct_split_reads is None else pct_split_reads
+                    ),
                 }
             )
 
@@ -228,9 +223,6 @@ def split_synthetic_svs(
         results = manager.list()
         args = []
         for case, r, svs in data:
-            # TODO: in the future, test with and without split reads and paired reads, but for now just include both
-            include_split_reads = True
-            include_paired_reads = True
             if vary_weights:
                 weights = []
                 if len(svs) == 1:
@@ -248,22 +240,23 @@ def split_synthetic_svs(
             else:
                 weights = [[1.0 / len(svs) for _ in range(len(svs))]]
             for weight in weights:
-                # run each case 10 times and average at the end
-                for _ in range(10):
-                    args.append(
-                        (
-                            case,
-                            r,
-                            svs,
-                            weight,
-                            n_samples,
-                            include_split_reads,
-                            include_paired_reads,
-                            cfg,
-                            model_params,
-                            results,
+                for pct_split_reads in np.arange(0, 1.01, 0.1):
+                    pct_split_reads = round(pct_split_reads, 2)
+                    # run each case 10 times and average at the end
+                    for _ in range(10):
+                        args.append(
+                            (
+                                case,
+                                r,
+                                svs,
+                                weight,
+                                n_samples,
+                                pct_split_reads,
+                                cfg,
+                                model_params,
+                                results,
+                            )
                         )
-                    )
 
         p.starmap(run_split, args)
         p.close()
@@ -279,8 +272,7 @@ def split_synthetic_svs(
             write_new_file=False,
             fixed_n_samples=n_samples,
             fixed_svlen=svlen,
-            include_split_reads=include_split_reads,
-            include_paired_reads=include_paired_reads,
+            pct_split_reads=pct_split_reads,
         )
 
 

@@ -47,7 +47,7 @@ def query_stix(
             str(num_shards),
             stix_output_file,
             stix_bin,
-            slop,
+            str(slop),
         ],
         capture_output=True,
         text=True,

@@ -472,13 +472,20 @@ def slop_vs_query_region(
 
                 temp_cfg = cfg.copy()
                 temp_cfg["paths"]["stix_output_dir"] = output_dir
-                get_raw_data(
-                    row,
-                    temp_cfg,
-                    read_overlap=q,
-                    slop=s,
-                    filter_reference_samples=True,
-                )
+                if not os.path.exists(
+                    os.path.join(
+                        output_dir,
+                        f"{giggle_format(chr, start)}_{giggle_format(chr, stop)}.txt",
+                    )
+                ):
+                    print(f"sv id={sv_id}, query region={q}, slop={s}")
+                    get_raw_data(
+                        row,
+                        temp_cfg,
+                        read_overlap=q,
+                        slop=s,
+                        filter_reference_samples=True,
+                    )
 
             reads, _ = get_nonref_reads(
                 sv_id, lookup=lookup, stix_output_dir=output_dir, verbose=False

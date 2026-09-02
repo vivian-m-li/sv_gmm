@@ -385,6 +385,7 @@ def generate_and_split_sample_reads(
     p: list[float] | None = None,
     include_split_reads: bool = True,
     include_paired_reads: bool = True,
+    pct_split_reads: float | None = None,
     gmm_model: str = "2d",
     run_split: bool = True,
     plot: bool = False,
@@ -412,6 +413,14 @@ def generate_and_split_sample_reads(
     insert_size_distribution = [sample.mean for sample in insert_sizes.values()]
     insert_size_sds = [sample.sd for sample in insert_sizes.values()]
 
+    # if pct_split_reads is not None, divide the population into samples that have only split reads and samples that have only paired reads
+    split_samples = set()
+    paired_samples = set()
+    if pct_split_reads is not None:
+        n_split_samples = int(num_samples * pct_split_reads)
+        split_samples = set(random.sample(samples, n_split_samples))
+        paired_samples = set([s for s in samples if s not in split_samples])
+
     # for each sample, generate random evidence
     reads = stix_output_to_df("", write_empty_file=True)
     evidence = defaultdict(list)
@@ -426,13 +435,24 @@ def generate_and_split_sample_reads(
             mean=insert_size, sd=random.choice(insert_size_sds)
         )
 
+        sample_has_paired_reads = (
+            include_paired_reads
+            if pct_split_reads is None
+            else sample in paired_samples
+        )
+        sample_has_split_reads = (
+            include_split_reads
+            if pct_split_reads is None
+            else sample in split_samples
+        )
+
         pairs = generate_mapped_pairs_for_sv(
             mode_start=mode_start,
             mode_end=mode_end,
             insert_mean=insert_size,
             n_pairs=num_evidence,
-            include_paired_reads=include_paired_reads,
-            include_split_reads=include_split_reads,
+            include_paired_reads=sample_has_paired_reads,
+            include_split_reads=sample_has_split_reads,
         )
         for pair in pairs:
             reads.loc[len(reads)] = [
