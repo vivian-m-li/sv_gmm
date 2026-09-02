@@ -260,17 +260,13 @@ def score_model(
             # insert_size_dist = gmm_result.mu[i][0] - gmm_result.mu[j][0]
             l_coord_dist = abs(gmm_result.mu[i][0] - gmm_result.mu[j][0])
             r_coord_dist = abs(gmm_result.mu[i][1] - gmm_result.mu[j][1])
-            len_diff = abs(
-                (gmm_result.mu[i][1] - gmm_result.mu[i][0])
-                - (gmm_result.mu[j][1] - gmm_result.mu[j][0])
-            )
 
             passes = 0
             if abs(l_coord_dist) >= 100:
                 passes += 1
             if abs(r_coord_dist) >= 100:
                 passes += 1
-            if len_diff >= 150:
+            if np.sqrt(l_coord_dist**2 + r_coord_dist**2) >= 150:
                 passes += 1
 
             if passes < 2:

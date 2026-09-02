@@ -310,7 +310,7 @@ def generate_mapped_pairs_for_sv(
     """
     pairs = []
     if include_paired_reads and include_split_reads:
-        pct_split = random.uniform(0.1, 0.9)
+        pct_split = random.uniform(0, 1)
         n_split_pairs = int(n_pairs * pct_split)
     elif include_split_reads:
         n_split_pairs = n_pairs
@@ -327,30 +327,34 @@ def generate_mapped_pairs_for_sv(
             # left read length + right read length + deletion length + gap between reads = insert size
             # for paired end reads, the left and right reads are placed on either side of the deletion
             # the insert size is sampled from a normal distribution with mean insert_mean and sd fragment_length_sd
+            # here, we're using the insert size to encompass the entire fragment (including the reads and the deletion)
             # we vary the point at which the inner gap is split by the deletion and add a small jitter
             insert_size = int(
                 max(100, min(900, random.gauss(insert_mean, insert_sd)))
             )
 
             # split point between left and right reads
+
             # it's more likely that the read is split near either end rather than in the middle (simulate this with a betavariate distribution)
-            split_point = random.betavariate(0.5, 0.5)
+            # split_point = random.betavariate(0.8, 0.8)
+
+            # uniform distribution to decide where the deletion falls within the read
+            split_point = random.uniform(0.2, 0.8)
             left_gap = int(insert_size * split_point)
             right_gap = insert_size - left_gap
 
-            # the left read will start at the mode start minus the gap+read length+jitter
-            left_end = (
-                mode_start
-                - left_gap
-                + random.randint(-read_jitter, read_jitter)
-            )
-            left_start = left_end - read_length
+            # the left read will start at the mode start minus the gap
+            left_start = mode_start - left_gap
+            # the left end will be the left_start plus the read length OR the deletion left breakpoint, but we add a small jitter to simulate sequencing error
+            left_end = min(
+                left_start + read_length, mode_start
+            ) + random.randint(-read_jitter, read_jitter)
 
             # the right read will start at the mode end plus the gap+jitter
-            right_start = (
-                mode_end + right_gap + random.randint(-read_jitter, read_jitter)
-            )
-            right_end = right_start + read_length
+            right_end = mode_end + right_gap
+            right_start = max(
+                right_end - read_length, mode_end
+            ) + random.randint(-read_jitter, read_jitter)
 
         elif read_type == "split":
             # for split reads, either the left or right read is split across the breakpoint

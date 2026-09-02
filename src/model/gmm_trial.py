@@ -706,17 +706,14 @@ def process_data(
             else:
                 continue
 
-        # take the innermost bounds of the reads
+        # use the innermost bounds of the remaining split or paired reads
         ls = sample_reads["l_end"].tolist()
         rs = sample_reads["r_start"].tolist()
         sample_read_coords = sample_reads[["l_end", "r_start"]].values.tolist()
 
-        # we should be able to rely on STIX to return only relevant reads
-        # taking the mean of the coordinates will average out noise in the reads
+        # take the innermost bounds of all the sample's reads as the inferred SV coordinates for this sample
         max_l = int(max(ls))
         min_r = int(min(rs))
-
-        # this is actually svlen + fragment size
         svlen = min_r - max_l
 
         sv_evidence.append(
@@ -732,7 +729,7 @@ def process_data(
             )
         )
 
-        # scale this by the SV coordinates so that the points are closer together
+        # scale this by the SV coordinates so that the values are closer to 0 (for ease of interpretability)
         points.append([max_l - L, min_r - R])  # L shift, R shift
 
     return points, sv_evidence

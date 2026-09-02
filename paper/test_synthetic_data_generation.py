@@ -13,46 +13,31 @@ class SVLookup:
     clustered_coords: list[tuple[int, int]]
     svlen: int
     n_samples: int
-    n_clusters_expected: int
 
 
 test_sv_lookup = {
-    "HGSV_15262": SVLookup("HGSV_15262", [(199140920, 199144677)], 774, 772, 1),
-    "HGSV_143868": SVLookup("HGSV_143868", [(3168426, 3168623)], 2210, 73, 1),
-    "HGSV_39753": SVLookup("HGSV_39753", [(236446871, 236447567)], 1152, 87, 1),
-    "HGSV_204881": SVLookup("HGSV_204881", [(746193, 746683)], 2488, 2425, 1),
-    "HGSV_226693": SVLookup(
-        "HGSV_226693",
-        [(71179505, 71179822), (71179427, 71179909)],
-        2500,
-        2458,
-        2,
-    ),
-    "HGSV_5515": SVLookup("HGSV_5515", [(58278241, 58279150)], 2488, 2487, 1),
-    "HGSV_218106": SVLookup("HGSV_218106", [(56082821, 56095596)], 127, 126, 1),
-    "HGSV_89": SVLookup(
-        "HGSV_89", [(964504, 964937), (964467, 965008)], 2488, 274, 2
-    ),
+    "HGSV_15262": SVLookup("HGSV_15262", [(199140920, 199144677)], 3758, 772),
+    "HGSV_143868": SVLookup("HGSV_143868", [(3168426, 3168623)], 198, 72),
+    "HGSV_39753": SVLookup("HGSV_39753", [(236446871, 236447567)], 697, 87),
+    "HGSV_204881": SVLookup("HGSV_204881", [(746195, 746677)], 309, 2419),
+    "HGSV_226693": SVLookup("HGSV_226693", [(71179505, 71179822)], 318, 2458),
+    "HGSV_5515": SVLookup("HGSV_5515", [(58278241, 58279150)], 910, 2487),
+    "HGSV_218106": SVLookup("HGSV_218106", [(56082821, 56095596)], 12776, 126),
+    "HGSV_89": SVLookup("HGSV_89", [(964497, 964926)], 370, 247),
     "HGSV_54541": SVLookup(
-        "HGSV_54541",
-        [(173522939, 173524155), (173522635, 173524202)],
-        83,
-        72,
-        2,
+        "HGSV_54541", [(173522939, 173524148), (173522649, 173524190)], 1143, 69
     ),
-    "HGSV_149774": SVLookup("HGSV_149774", [(68570263, 68571638)], 25, 24, 1),
+    "HGSV_149774": SVLookup(
+        "HGSV_149774", [(68570275, 68571634), (68570116, 68571887)], 1290, 23
+    ),
     "HGSV_245658": SVLookup(
-        "HGSV_245658",
-        [(24660239, 24661204), (24659891, 24661496), (24660276, 24661218)],
-        382,
-        91,
-        3,
+        "HGSV_245658", [(24660235, 24661195), (24659897, 24661532)], 841, 87
     ),
     "HGSV_220750": SVLookup(
-        "HGSV_220750", [(82502735, 82505050), (82502449, 82505420)], 14, 13, 2
+        "HGSV_220750", [(82502735, 82505050), (82502449, 82505420)], 2316, 13
     ),
     "HGSV_161412": SVLookup(
-        "HGSV_161412", [(66536554, 66537777), (66536272, 66537614)], 28, 19, 2
+        "HGSV_161412", [(66536575, 66537783), (66536288, 66537614)], 1134, 19
     ),
 }
 
@@ -60,7 +45,7 @@ test_sv_lookup = {
 def test_synthetic_data_generation(cfg: dict):
     # svs = generate_sv_coordinates(case="C", svlen=1000, r=0.8)[0][2]
     for sv in test_sv_lookup.values():
-        print(f"\n{sv.sv_id}: n svs expected: {sv.n_clusters_expected}")
+        print(f"\n{sv.sv_id}: n svs expected: {len(sv.clustered_coords)}")
         generate_and_split_sample_reads(
             chr=1,
             svs=sv.clustered_coords,
@@ -70,7 +55,6 @@ def test_synthetic_data_generation(cfg: dict):
             n_samples=sv.n_samples,
             include_split_reads=True,
             include_paired_reads=True,
-            gmm_model="2d",
             run_split=True,
             plot=False,
             plot_reads=False,
