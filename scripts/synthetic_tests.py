@@ -38,16 +38,33 @@ def write_reciprocal_overlap(dir: str):
         df.to_csv(os.path.join(dir, file), index=False)
 
 
-def run_split(case, r, svs, weights, n_samples, cfg, model_params, results):
+def run_split(
+    case: str,
+    r: float,
+    svs: list,
+    weights: list,
+    n_samples: int,
+    include_split_reads: bool,
+    include_paired_reads: bool,
+    cfg: dict,
+    model_params: dict,
+    results: list,
+):
     """Generates synthetic data and runs the GMM on it. Appends the results to the multiprocessing-managed list to be written to a CSV later."""
     gmm_result, evidence_by_mode = generate_and_split_sample_reads(
-        1,
-        svs,
+        chr=1,
+        svs=svs,
+        p=weights,
         input_dir=cfg["paths"]["input_dir"],
         insert_size_file=cfg["input_files"]["insert_size_file"],
         model_params=model_params,
         n_samples=n_samples,
-        p=weights,
+        include_split_reads=include_split_reads,
+        include_paired_reads=include_paired_reads,
+        run_split=True,
+        plot=False,
+        plot_reads=False,
+        plot_sample_summary_reads=False,
     )
     results.append(
         [
@@ -57,6 +74,8 @@ def run_split(case, r, svs, weights, n_samples, cfg, model_params, results):
             svs,
             n_samples,
             weights,
+            include_split_reads,
+            include_paired_reads,
             gmm_result,
             evidence_by_mode,
         ]
@@ -93,6 +112,8 @@ def write_csv(
     write_new_file: bool = False,
     fixed_n_samples: int | None = None,
     fixed_svlen: int | None = None,
+    include_split_reads: bool = True,
+    include_paired_reads: bool = True,
 ):
     """Writes the results of the synthetic data tests to a CSV file."""
     file = os.path.join(
@@ -120,6 +141,8 @@ def write_csv(
             "num_samples",
             "svlen",
             "weights",
+            "split_reads",
+            "paired_reads",
         ]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
         if write_new_file:
@@ -132,6 +155,8 @@ def write_csv(
             svs,
             n_samples,
             weights,
+            include_split_reads,
+            include_paired_reads,
             gmm_result,
             evidence_by_mode,
         ) in all_results:
@@ -159,6 +184,8 @@ def write_csv(
                     "num_samples": n_samples,
                     "svlen": fixed_svlen,
                     "weights": weights,
+                    "split_reads": include_split_reads,
+                    "paired_reads": include_paired_reads,
                 }
             )
 
@@ -201,6 +228,9 @@ def split_synthetic_svs(
         results = manager.list()
         args = []
         for case, r, svs in data:
+            # TODO: in the future, test with and without split reads and paired reads, but for now just include both
+            include_split_reads = True
+            include_paired_reads = True
             if vary_weights:
                 weights = []
                 if len(svs) == 1:
@@ -227,6 +257,8 @@ def split_synthetic_svs(
                             svs,
                             weight,
                             n_samples,
+                            include_split_reads,
+                            include_paired_reads,
                             cfg,
                             model_params,
                             results,
@@ -247,6 +279,8 @@ def split_synthetic_svs(
             write_new_file=False,
             fixed_n_samples=n_samples,
             fixed_svlen=svlen,
+            include_split_reads=include_split_reads,
+            include_paired_reads=include_paired_reads,
         )
 
 
