@@ -157,7 +157,6 @@ def main():
     parser.add_argument(
         "--repulsion",
         type=bool,
-        default=False,
         nargs="?",
         const=True,
         help="Whether to apply a repulsive force between cluster centers during GMM clustering",

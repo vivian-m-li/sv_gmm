@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 
@@ -16,7 +15,9 @@ def check_kmeans_centers():
         "data/1kg", "insert_sizes.csv", 450, sample_ids
     )
 
-    shifts = pd.DataFrame(columns=["id", "L_shift", "R_shift", "len_shift", "n_samples"])
+    shifts = pd.DataFrame(
+        columns=["id", "L_shift", "R_shift", "len_shift", "n_samples"]
+    )
     for i, row in svs.iterrows():
         chr = str(row["chr"])
         L = row["start"]
@@ -43,10 +44,17 @@ def check_kmeans_centers():
         cluster_L = L + L_shift
         len_shift = mu[0][0] + (R - L)
         R_shift = (cluster_L + len_shift) - R
-        shifts.loc[i] = [row["id"], L_shift, R_shift, len_shift, reads["sample_id"].nunique()]
+        shifts.loc[i] = [
+            row["id"],
+            L_shift,
+            R_shift,
+            len_shift,
+            reads["sample_id"].nunique(),
+        ]
         print(f"Processed {i}/{len(svs)} SVs...", end="\r", flush=True)
 
     shifts.to_csv("output/results/1_mode_shifts.csv", index=False)
+
 
 if __name__ == "__main__":
     check_kmeans_centers()

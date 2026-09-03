@@ -38,16 +38,31 @@ def write_reciprocal_overlap(dir: str):
         df.to_csv(os.path.join(dir, file), index=False)
 
 
-def run_split(case, r, svs, weights, n_samples, cfg, model_params, results):
+def run_split(
+    case: str,
+    r: float,
+    svs: list,
+    weights: list,
+    n_samples: int,
+    pct_split_reads: float,
+    cfg: dict,
+    model_params: dict,
+    results: list,
+):
     """Generates synthetic data and runs the GMM on it. Appends the results to the multiprocessing-managed list to be written to a CSV later."""
     gmm_result, evidence_by_mode = generate_and_split_sample_reads(
-        1,
-        svs,
+        chr=1,
+        svs=svs,
+        p=weights,
         input_dir=cfg["paths"]["input_dir"],
         insert_size_file=cfg["input_files"]["insert_size_file"],
         model_params=model_params,
         n_samples=n_samples,
-        p=weights,
+        pct_split_reads=pct_split_reads,
+        run_split=True,
+        plot=False,
+        plot_reads=False,
+        plot_sample_summary_reads=False,
     )
     results.append(
         [
@@ -57,6 +72,7 @@ def run_split(case, r, svs, weights, n_samples, cfg, model_params, results):
             svs,
             n_samples,
             weights,
+            pct_split_reads,
             gmm_result,
             evidence_by_mode,
         ]
@@ -71,13 +87,11 @@ def get_len_L(evidence_by_mode: list[list[Evidence]]):
         lens = []
         starts = []
         for evidence in mode:
-            mean_l = np.mean(
-                [paired_end[0] for paired_end in evidence.paired_ends]
-            )
+            mean_l = np.mean([paired_end[0] for paired_end in evidence.reads])
             mean_length = np.mean(
                 [
                     paired_end[1] - paired_end[0] - evidence.mean_insert_size
-                    for paired_end in evidence.paired_ends
+                    for paired_end in evidence.reads
                 ]
             )
             starts.append(mean_l)
@@ -95,6 +109,7 @@ def write_csv(
     write_new_file: bool = False,
     fixed_n_samples: int | None = None,
     fixed_svlen: int | None = None,
+    pct_split_reads: float | None = None,
 ):
     """Writes the results of the synthetic data tests to a CSV file."""
     file = os.path.join(
@@ -122,6 +137,7 @@ def write_csv(
             "num_samples",
             "svlen",
             "weights",
+            "pct_split_reads",
         ]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
         if write_new_file:
@@ -134,6 +150,7 @@ def write_csv(
             svs,
             n_samples,
             weights,
+            pct_split_reads,
             gmm_result,
             evidence_by_mode,
         ) in all_results:
@@ -161,6 +178,9 @@ def write_csv(
                     "num_samples": n_samples,
                     "svlen": fixed_svlen,
                     "weights": weights,
+                    "pct_split_reads": (
+                        -1 if pct_split_reads is None else pct_split_reads
+                    ),
                 }
             )
 
@@ -220,20 +240,23 @@ def split_synthetic_svs(
             else:
                 weights = [[1.0 / len(svs) for _ in range(len(svs))]]
             for weight in weights:
-                # run each case 10 times and average at the end
-                for _ in range(10):
-                    args.append(
-                        (
-                            case,
-                            r,
-                            svs,
-                            weight,
-                            n_samples,
-                            cfg,
-                            model_params,
-                            results,
+                for pct_split_reads in np.arange(0, 1.01, 0.1):
+                    pct_split_reads = round(pct_split_reads, 2)
+                    # run each case 10 times and average at the end
+                    for _ in range(10):
+                        args.append(
+                            (
+                                case,
+                                r,
+                                svs,
+                                weight,
+                                n_samples,
+                                pct_split_reads,
+                                cfg,
+                                model_params,
+                                results,
+                            )
                         )
-                    )
 
         p.starmap(run_split, args)
         p.close()
@@ -249,6 +272,7 @@ def split_synthetic_svs(
             write_new_file=False,
             fixed_n_samples=n_samples,
             fixed_svlen=svlen,
+            pct_split_reads=pct_split_reads,
         )
 
 

@@ -5,14 +5,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from src.model.gmm_trial import process_data
 from src.utils.config_loader import load_config
 from src.utils.helper import get_sample_ids, stix_output_to_df
-from src.utils.model_helper import giggle_format
+from src.utils.model_helper import giggle_format, get_insert_size_lookup
 from src.utils.write_sv_output import get_raw_data
 
 COLORS = matplotlib.colormaps["tab10"].colors
 
 AXES = {
+    "l_end": "L",
+    "r_start": "R",
     "l_diff": "Start diff (l_start - sv_start)",
     "r_diff": "End diff (r_end - sv_end)",
     "fragment_size": "Fragment Size (r_end - l_start)",
@@ -25,14 +28,16 @@ def get_nonref_reads(
     lookup: pd.DataFrame | None = None,
     *,
     stix_output_dir: str = "output/stix_output",
+    verbose: bool = True,
 ):
     if lookup is None:
         lookup = pd.read_csv("data/1kg/1kg.subset.csv", low_memory=False)
     row = lookup[lookup["id"] == sv_id].iloc[0]
 
-    print(
-        f"{sv_id}: {row['chr']}:{row['start']}-{row['stop']}, svlen={row['svlen']}"
-    )
+    if verbose:
+        print(
+            f"{sv_id}: {row['chr']}:{row['start']}-{row['stop']}, svlen={row['svlen']}"
+        )
 
     # get all nonref samples
     sample_ids = get_sample_ids("data/1kg/sample_ids.txt")
@@ -69,6 +74,63 @@ def plot_read_distribution(sv_id: str, reads: np.ndarray, x: str, y: str):
     plt.xlabel(AXES[x])
     plt.ylabel(AXES[y])
     plt.savefig(f"output/plots/outer_bounds/{sv_id}_{x}_{y}.png")
+    plt.show()
+
+
+def plot_read_distribution_by_type(
+    sv_id: str,
+    reads: pd.DataFrame,
+    x: str,
+    y: str,
+    sample_summary: bool,
+):
+    summary_reads = pd.DataFrame(columns=["sample_id", x, y, "type"])
+    if sample_summary:
+        for sample_id in reads["sample_id"].unique():
+            sample_reads = reads[reads["sample_id"] == sample_id]
+            split_reads = sample_reads[sample_reads["type"] == "split"]
+            paired_reads = sample_reads[sample_reads["type"] == "paired"]
+            if split_reads.shape[0] > 1:
+                summary_reads.loc[len(summary_reads)] = [
+                    sample_id,
+                    split_reads[x].max(),
+                    split_reads[y].min(),
+                    "split",
+                ]
+            elif paired_reads.shape[0] > 1:
+                summary_reads.loc[len(summary_reads)] = [
+                    sample_id,
+                    paired_reads[x].max(),
+                    paired_reads[y].min(),
+                    "paired",
+                ]
+        print(
+            f"{reads['sample_id'].nunique() - summary_reads['sample_id'].nunique()} samples omitted, {summary_reads['sample_id'].nunique()} samples remaining"
+        )
+        print(
+            f"{summary_reads[summary_reads["type"] == 'split'].shape[0]} split reads, {summary_reads[summary_reads["type"] == 'paired'].shape[0]} paired reads"
+        )
+    else:
+        summary_reads = reads.copy()
+
+    plt.figure()
+    for read_type, color in zip(["paired", "split"], ["red", "blue"]):
+        reads_subset = summary_reads[summary_reads["type"] == read_type]
+        if reads_subset.empty:
+            continue
+
+        plt.scatter(
+            reads_subset[x],
+            reads_subset[y],
+            alpha=0.6,
+            label=read_type,
+            color=color,
+        )
+
+    plt.title(f"Read distribution for SV {sv_id}")
+    plt.xlabel(AXES[x])
+    plt.ylabel(AXES[y])
+    plt.legend()
     plt.show()
 
 
@@ -162,6 +224,7 @@ def get_read_distribution(
 
     if plot:
         plot_read_distribution(sv_id, read_ends, x, y)
+        # plot_read_distribution_by_type(sv_id, reads, x, y, sample_summary=True)
 
     if plot_1d:
         plot_1d_read_distribution(sv_id, read_ends[:, 0], x)
@@ -372,7 +435,180 @@ def analyze_query_region(
         left=0.15, bottom=0.09, right=0.95, top=0.925, wspace=0.05, hspace=0.48
     )
     plt.savefig(
-        f"output/plots/read_distribution_outer_bounds/query_region/{sv_id}_{'median' if sample_summary else 'all'}.png"
+        f"output/plots/query_region/{sv_id}_{'median' if sample_summary else 'all'}.png"
+    )
+    plt.close(fig)
+
+
+def slop_vs_query_region(
+    cfg: dict,
+    sv_id: str,
+    *,
+    download_reads: bool = False,
+    sample_summary: bool = False,
+    plot: bool = False,
+    lookup: pd.DataFrame | None = None,
+):
+    if lookup is None:
+        lookup = pd.read_csv("data/1kg/1kg.subset.csv", low_memory=False)
+    row = lookup[lookup["id"] == sv_id].iloc[0]
+    start, stop = row["start"], row["stop"]
+
+    stix_output_dir = "output/query_region_analysis/"
+    if plot:
+        fig, axs = plt.subplots(10, 10, figsize=(14, 9))
+        min_l = np.inf
+        max_r = -np.inf
+        max_y = -np.inf
+
+    q_vals = np.arange(0.6, 1.01, 0.1)
+    s_vals = np.arange(100, 1001, 100)
+    for i, s in enumerate(s_vals[::-1]):
+        for j, q in enumerate(q_vals):
+            q = round(q, 1)
+            output_dir = os.path.join(stix_output_dir, f"stix_output_s{s}_q{q}")
+            if download_reads:
+                os.makedirs(output_dir, exist_ok=True)
+
+                temp_cfg = cfg.copy()
+                temp_cfg["paths"]["stix_output_dir"] = output_dir
+                if not os.path.exists(
+                    os.path.join(
+                        output_dir,
+                        f"{giggle_format(chr, start)}_{giggle_format(chr, stop)}.txt",
+                    )
+                ):
+                    print(f"sv id={sv_id}, query region={q}, slop={s}")
+                    get_raw_data(
+                        row,
+                        temp_cfg,
+                        read_overlap=q,
+                        slop=s,
+                        filter_reference_samples=True,
+                    )
+
+            reads, _ = get_nonref_reads(
+                sv_id, lookup=lookup, stix_output_dir=output_dir, verbose=False
+            )
+            reads["l_end_diff"] = reads["l_end"] - start
+            reads["r_start_diff"] = reads["r_start"] - stop
+            if not plot:
+                continue
+
+            for read_type, color in zip(["split", "paired"], ["blue", "red"]):
+                reads_subset = reads[reads["type"] == read_type]
+                if reads_subset.empty:
+                    continue
+
+                for k, col in enumerate(["l_end_diff", "r_start_diff"]):
+                    values = []
+                    if sample_summary:
+                        for sample_id in reads["sample_id"].unique():
+                            sample_reads = reads_subset[
+                                reads_subset["sample_id"] == sample_id
+                            ]
+                            if col == "l_end_diff":
+                                values.append(sample_reads[col].max())
+                            elif col == "r_start_diff":
+                                values.append(sample_reads[col].min())
+                    else:
+                        values = reads_subset[col]
+
+                    if k == 0:
+                        min_l = min(min_l, min(values))
+                    elif k == 1:
+                        max_r = max(max_r, max(values))
+
+                    col = j * 2 + k
+                    axs[i][col].hist(
+                        values,
+                        bins=15,
+                        alpha=0.6,
+                        label=read_type,
+                        color=color,
+                    )
+
+                    max_y = max(max_y, axs[i][col].get_ylim()[1])
+
+                    if k == 0:
+                        text_col = j * 2 if read_type == "split" else j * 2 + 1
+                        text = f"{len(values)}\n{read_type}\n{'samples' if sample_summary else 'reads'}"
+                        axs[i][text_col].text(
+                            0.05 if read_type == "split" else 0.95,
+                            0.95,
+                            text,
+                            transform=axs[i][text_col].transAxes,
+                            fontsize=8,
+                            verticalalignment="top",
+                            horizontalalignment=(
+                                "left" if read_type == "split" else "right"
+                            ),
+                        )
+
+            axs[i][j * 2].axvline(
+                x=0, color="gray", linestyle="--", linewidth=0.5
+            )
+            axs[i][j * 2 + 1].axvline(
+                x=0, color="gray", linestyle="--", linewidth=0.5
+            )
+
+            if i != len(s_vals) - 1:
+                axs[i][j * 2].set_xticks([])
+                axs[i][j * 2 + 1].set_xticks([])
+            axs[i][j * 2 + 1].set_yticks([])
+            if j != 0:
+                axs[i][j * 2].set_yticks([])
+
+            if j == 0:
+                axs[i][j * 2].set_ylabel(f"s={s}")
+            if i == 0:
+                axs[i][j * 2].text(
+                    0.85,
+                    1.25,
+                    f"q={q}",
+                    transform=axs[i][j * 2].transAxes,
+                    verticalalignment="top",
+                    horizontalalignment="left",
+                )
+
+            # add light gray background to columns where q is odd
+            if j % 2 == 1:
+                axs[i][j * 2].set_facecolor("#f0f0f0")
+                axs[i][j * 2 + 1].set_facecolor("#f0f0f0")
+
+    if not plot:
+        return
+
+    # set all x-limits and y-limits to the same range
+    buffer = (stop - start) * 0.01
+    for i in range(len(s_vals)):
+        for j in range(len(q_vals)):
+            axs[i][j * 2].set_xlim(min_l, buffer)
+            axs[i][j * 2 + 1].set_xlim(-buffer, max_r)
+            axs[i][j * 2].set_ylim(0, max_y)
+            axs[i][j * 2 + 1].set_ylim(0, max_y)
+
+    plt.suptitle(
+        f"Split vs PE Reads for Varying Slop and Query Regions for SV {sv_id} (svlen={stop - start})"
+    )
+    fig.text(
+        0.45, 0.01, "Read position (relative to l_end, r_start)", fontsize=12
+    )
+    fig.text(0.01, 0.5, "Count", rotation=90, fontsize=12)
+    axs[0][len(q_vals) * 2 - 1].legend(
+        loc="upper right", bbox_to_anchor=(1.95, 1.1)
+    )
+
+    plt.subplots_adjust(
+        left=0.075,
+        bottom=0.055,
+        right=0.925,
+        top=0.925,
+        wspace=0.09,
+        hspace=0.115,
+    )
+    plt.savefig(
+        f"output/plots/slop_query_region/{sv_id}_{'inner' if sample_summary else 'all'}.png"
     )
     plt.close(fig)
 
@@ -548,6 +784,62 @@ def read_preprocessing(
     plt.close(fig)
 
 
+def plot_sample_vs_all_reads(sv_id: str, *, lookup: pd.DataFrame | None = None):
+    reads, pos = get_nonref_reads(sv_id, lookup=lookup)
+    _, start, stop = pos
+
+    sample_ids = get_sample_ids("data/1kg/sample_ids.txt")
+    insert_size_lookup = get_insert_size_lookup(
+        "data/1kg", "insert_sizes.csv", 450, sample_ids
+    )
+
+    plt.figure()
+    sample_summary_types = set()
+    for i, sample_id in enumerate(reads["sample_id"].unique()):
+        sample_reads = reads[reads["sample_id"] == sample_id]
+        # this should return 0 or 1 points for the sample
+        points, evidence = process_data(
+            sample_reads, L=start, R=stop, insert_size_lookup=insert_size_lookup
+        )
+
+        if len(points) == 0:
+            continue
+
+        evidence_type = evidence[0].evidence_type
+
+        # plot all reads
+        plt.scatter(
+            sample_reads["l_end"] - start,
+            sample_reads["r_start"] - stop,
+            alpha=0.6,
+            color="blue",
+            s=10,
+            label="All reads" if i == 0 else None,
+        )
+        # plot sample summary
+        plt.scatter(
+            points[0][0],
+            points[0][1],
+            color="gold" if evidence_type == "split" else "red",
+            s=10,
+            zorder=10 if evidence_type == "split" else 5,
+            label=(
+                f"Sample summary ({evidence_type})"
+                if evidence_type not in sample_summary_types
+                else None
+            ),
+        )
+        sample_summary_types.add(evidence_type)
+
+    plt.xlabel("read_L - L")
+    plt.ylabel("read_R - R")
+    plt.legend()
+    plt.title(f"Summary vs All Reads for {sv_id}")
+    plt.savefig(
+        f"output/plots/data_preprocessing/{sv_id}_sample_vs_all_reads.png"
+    )
+
+
 if __name__ == "__main__":
     cfg = load_config()
 
@@ -570,4 +862,4 @@ if __name__ == "__main__":
         "HGSV_220750",
         "HGSV_161412",
     ]:
-        analyze_split_pe_reads_per_sample(sv_id, lookup=lookup)
+        plot_sample_vs_all_reads(sv_id, lookup=lookup)

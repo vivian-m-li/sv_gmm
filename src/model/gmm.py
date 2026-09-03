@@ -121,19 +121,23 @@ def model_penalty(
     return penalty
 
 
-def regularize_covariance(cov: list[np.ndarray]) -> np.ndarray:
+def regularize_covariance(cov: list[np.ndarray], x: np.ndarray) -> np.ndarray:
     """Symmetrizes the covariance matrix and adds jitter to the diagonal until it is positive definite."""
+    # scale the jitter based on the variance of the data to avoid over-regularizing small datasets
+    data_scale = np.mean(np.var(x, axis=0))
+    base_jitter = max(data_scale * 1e-8, 1e-12)
+
     regularized_cov = []
     for mode_cov in cov:
         dim = mode_cov.shape[0]
 
         # NaN/Inf can't be fixed by jitter — fall back to identity immediately
         if not np.all(np.isfinite(mode_cov)):
-            regularized_cov.append(np.eye(dim))
+            regularized_cov.append(np.eye(dim) * base_jitter)
             continue
 
         c = (mode_cov + mode_cov.T) / 2  # enforce symmetry
-        jitter = 1e-6
+        jitter = base_jitter
         for i in range(11):
             try:
                 np.linalg.cholesky(c)  # cheapest SPD check
@@ -146,7 +150,7 @@ def regularize_covariance(cov: list[np.ndarray]) -> np.ndarray:
                     c = np.eye(dim) * (
                         variance
                         if np.isfinite(variance) and variance > 0
-                        else 1.0
+                        else base_jitter
                     )
                 else:
                     c = c + np.eye(c.shape[0]) * jitter
@@ -166,7 +170,7 @@ def calc_log_likelihood(
 ) -> float:
     """Calculates the log-likelihood of the data fitting the GMM."""
     num_modes = len(mu)
-    regularized_cov = regularize_covariance(cov)
+    regularized_cov = regularize_covariance(cov, x)
 
     logL = 0.0
     for i in range(len(x)):
@@ -226,22 +230,49 @@ def calc_icl(
     return icl
 
 
-def calc_model_score(
-    logL: float,
+def score_model(
+    gmm_result: GMM2D,
     num_modes: int,
-    num_samples: int,
+    x: np.ndarray,
     gz: np.ndarray,
     f: str = "aic",
 ) -> float:
     """Calculates the penalized log-likelihood using the specified model selection criterion."""
+    logL = gmm_result.logL
+    num_samples = len(x)
+
     if f == "aic":
-        return calc_aic(logL, num_modes)
+        score = calc_aic(logL, num_modes)
     elif f == "bic":
-        return calc_bic(logL, num_modes, num_samples)
+        score = calc_bic(logL, num_modes, num_samples)
     elif f == "icl":
-        return calc_icl(logL, num_modes, num_samples, gz)
+        score = calc_icl(logL, num_modes, num_samples, gz)
     else:
         raise ValueError(f"Invalid model selection criterion: {f}")
+
+    # check that cluster mus are at least 100 bp apart in either dimension
+    # if not, then this is not a valid model
+    # assumes that the mu values are in the format [insert_size, L-coordinate]
+    is_valid = True
+    for i in range(num_modes):
+        for j in range(i + 1, num_modes):
+            # for now, ignore the insert size distance since this would disqualify SVs that are similar size but a sizeable distance apart
+            # insert_size_dist = gmm_result.mu[i][0] - gmm_result.mu[j][0]
+            l_coord_dist = abs(gmm_result.mu[i][0] - gmm_result.mu[j][0])
+            r_coord_dist = abs(gmm_result.mu[i][1] - gmm_result.mu[j][1])
+
+            passes = 0
+            if abs(l_coord_dist) >= 100:
+                passes += 1
+            if abs(r_coord_dist) >= 100:
+                passes += 1
+            if np.sqrt(l_coord_dist**2 + r_coord_dist**2) >= 150:
+                passes += 1
+
+            if passes < 2:
+                is_valid = False
+                break
+    return score, is_valid
 
 
 def init_em_random(
@@ -311,7 +342,7 @@ def init_em(
 
     n = len(x)
     # force kmeans++ initialization if we only had 1 mode since we can easily calculate the mu and cov from the data without running EM
-    if num_modes == 1 or "kmeans++" in init:
+    if num_modes == 1 or "kmeans" in init:
         # initial conditions
         kmeans = KMeans(n_clusters=num_modes, init="k-means++")
 
@@ -357,40 +388,43 @@ def calc_responsibility(
     Returns a matrix of size (number of samples) x (number of modes) where each entry represents the probability that a proint belongs to a particular mode.
     If reassign_small_values is True, then we reassign points with a very small responsibility to the nearest cluster based on distance. This forces each point to contribute to the parameter estimates of at least one cluster.
     """
-    regularized_cov = regularize_covariance(cov)
+    regularized_cov = regularize_covariance(cov, x)
     num_modes = len(mu)
-    gz = np.zeros((n, num_modes))  # number of points by number of modes
 
-    # compute responsibility for all points
-    # calculate the probability that a point is from a gaussian using the mean, standard deviation, and weight of each gaussian
-    for i in range(len(x)):
-        densities = []
-        for k in range(num_modes):
-            try:
-                density_k = p[k] * multivariate_normal.pdf(
-                    x[i], mu[k], regularized_cov[k]
-                )
-            except np.linalg.LinAlgError:
-                density_k = 0.0
-            densities.append(density_k)
-        densities = np.array(densities)
+    # compute log(p[k] * pdf_k(x_i)) for every point/mode in one shot, in log-space
+    log_densities = np.full((n, num_modes), -np.inf)
+    for k in range(num_modes):
+        try:
+            log_densities[:, k] = np.log(p[k]) + multivariate_normal.logpdf(
+                x, mu[k], regularized_cov[k]
+            )
+        except np.linalg.LinAlgError:
+            # leave as -inf for this mode; other modes still valid
+            pass
 
-        total = densities.sum()
-        if np.any(np.isnan(densities)) or total <= 1e-10:
-            # point is ambiguous — defer to the next step if reassign_small_values, otherwise assign uniform responsibility
-            gz[i, :] = np.nan if reassign_small_values else (1.0 / num_modes)
-        else:
-            gz[i, :] = densities / total
+    # points where every mode gave -inf (truly degenerate) need special handling
+    # everything else gets normalized via logsumxp, which is numerically stable
+    # even when densities are extremely small or extremely different in scale
+    row_all_bad = np.all(np.isneginf(log_densities), axis=1)
+
+    log_norm = logsumexp(log_densities, axis=1, keepdims=True)
+    with np.errstate(invalid="ignore"):
+        gz = np.exp(log_densities - log_norm)
+
+    # for genuinely degenerate rows, logsumexp gives -inf - -inf = nan
+    if reassign_small_values:
+        # ambiguous points will be reassigned later
+        gz[row_all_bad, :] = np.nan
+    else:
+        # ambiguous points get uniform responsibility
+        gz[row_all_bad, :] = 1.0 / num_modes
 
     # for each cluster with no ownership over any points, assign the nearest point to that cluster
     if reassign_small_values:
         for k in range(num_modes):
             col = gz[:, k]
-            # a cluster is "empty" if its total responsibility is below threshold
             if np.nansum(col) <= RESPONSIBILITY_THRESHOLD:
-                distances = [
-                    np.linalg.norm(x[i] - mu[k]) for i in range(len(x))
-                ]
+                distances = np.linalg.norm(x - mu[k], axis=1)
                 nearest = np.argmin(distances)
                 # assign full responsibility to the nearest point for this cluster
                 gz[nearest, :] = 0.0
@@ -399,7 +433,6 @@ def calc_responsibility(
         # replace any remaining nans (ambiguous points not reassigned) with uniform
         nan_rows = np.where(np.any(np.isnan(gz), axis=1))[0]
         gz[nan_rows, :] = 1.0 / num_modes
-
     return gz
 
 
@@ -419,12 +452,6 @@ def em(
     """Performs one iteration of the expectation-maximization algorithm."""
     # Expectation step: calculate the posterior probabilities using previous parameters (Gaussian distributions)
     gz = calc_responsibility(x, n, mu, cov, p, reassign_small_values=True)
-
-    # Ensure that each point contributes to the responsibility matrix above some threshold
-    # this avoids math errors in the maximization step
-    gz[(gz < RESPONSIBILITY_THRESHOLD) | np.isnan(gz)] = (
-        RESPONSIBILITY_THRESHOLD
-    )
 
     # Maximization step: estimate gaussian parameters
     # Given the probability that each point belongs to particular gaussian, calculate the mean, variance, and weight of the gaussian
@@ -493,7 +520,7 @@ def run_em(
     all_params.append(GMM2D(mu, cov, p, logL[0]))
 
     # only need to estimate mean and covariance matrix if we have 1 mode
-    if num_modes == 1 or init == "kmeans++":
+    if num_modes == 1:
         return all_params, 1
 
     max_iterations = 30
@@ -531,10 +558,21 @@ def assign_values_to_modes(
     mu: np.ndarray,
     cov: list[np.ndarray],
     p: np.ndarray,
-) -> tuple[np.ndarray, tuple[list[np.ndarray], list[int]]]:
+) -> tuple[np.ndarray, tuple[list[np.ndarray], list[int]], list[list[int]]]:
     """Assigns each data point to a mode based on the highest responsibility value."""
     gz = calc_responsibility(x, len(x), mu, cov, p)
+
+    # assign each point to the mode with the highest responsibility value
     assignments = np.argmax(gz, axis=1)
+    outliers = []
+    for i in range(len(x)):
+        # if all modes have equal responsibility for a point, then we assign it to the closest mode based on distance to the mu value
+        if np.all(gz[i, :] == gz[i, 0]):
+            distances = [np.linalg.norm(x[i] - mu[k]) for k in range(num_modes)]
+            assignments[i] = np.argmin(distances)
+            outliers.append(x[i])
+
+    # group the data points by mode
     x_by_mode = [[] for _ in range(num_modes)]
     x_index_by_mode = [[] for _ in range(num_modes)]
     for i, mode in enumerate(assignments):
@@ -542,7 +580,8 @@ def assign_values_to_modes(
             x_by_mode[mode].append(x[i])
             x_index_by_mode[mode].append(i)
     x_by_mode = [np.array(data_points) for data_points in x_by_mode]
-    return gz, x_by_mode, x_index_by_mode
+
+    return gz, x_by_mode, x_index_by_mode, outliers
 
 
 def select_model(x: np.ndarray, model_results: dict):
@@ -552,7 +591,7 @@ def select_model(x: np.ndarray, model_results: dict):
     data point assigned to them.
     """
     best_model = None
-    for i, model in enumerate(model_results.values()):
+    for i, model in model_results.items():
         if not model["valid"]:
             continue
 
@@ -561,6 +600,8 @@ def select_model(x: np.ndarray, model_results: dict):
             x, len(x), last_iter.mu, last_iter.cov, last_iter.p
         )
         assignments = np.argmax(gz, axis=1)
+
+        # this checks that each cluster has at least one data point assigned to it
         if len(set(assignments)) != len(last_iter.mu):
             continue
 
@@ -576,8 +617,8 @@ def select_model(x: np.ndarray, model_results: dict):
 def gmm(
     x: np.ndarray[tuple[float, int]],
     *,
-    L,
-    R,
+    L: int,
+    R: int,
     init: str = "kmeans++",
     repulsion: bool = False,
     r_threshold: float = 0.8,
@@ -649,10 +690,10 @@ def gmm(
                 responsibility = calc_responsibility(
                     x, len(x), params[-1].mu, params[-1].cov, params[-1].p
                 )
-                model_score = calc_model_score(
-                    params[-1].logL,
+                model_score, valid = score_model(
+                    params[-1],
                     num_modes,
-                    len(x),
+                    x,
                     responsibility,
                     f=model_comparison_func,
                 )
@@ -667,7 +708,7 @@ def gmm(
                 }
 
             model_results[num_modes] = {
-                "valid": True,
+                "valid": valid,
                 "num_sv": num_modes,
                 "score": model_score,
                 "params": params,
@@ -679,8 +720,10 @@ def gmm(
     final_iter = best_model["params"][-1]
     num_sv = best_model["num_sv"]
 
-    responsibility, x_by_mode, x_index_by_mode = assign_values_to_modes(
-        x, num_sv, final_iter.mu, final_iter.cov, final_iter.p
+    responsibility, x_by_mode, x_index_by_mode, outliers = (
+        assign_values_to_modes(
+            x, num_sv, final_iter.mu, final_iter.cov, final_iter.p
+        )
     )
 
     return EstimatedGMM2D(
@@ -690,7 +733,7 @@ def gmm(
         num_modes=num_sv,
         logL=final_iter.logL,
         score=best_model["score"],
-        outliers=[],  # this has been deprecated
+        outliers=outliers,  # this isn't used anywhere downstream for now
         window_size=(min(x[:, 0]), max(x[:, 0])),
         x_by_mode=x_by_mode,
         x_index_by_mode=x_index_by_mode,

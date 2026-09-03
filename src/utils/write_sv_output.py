@@ -127,6 +127,7 @@ def get_raw_data(
     cfg: dict,
     *,
     read_overlap: float | None = None,
+    slop: int = 500,
     filter_reference_samples: bool = True,
     samples_to_keep: list[str] | None = None,
     print_messages: bool = True,
@@ -153,6 +154,7 @@ def get_raw_data(
         sample_id_file=cfg["input_files"]["sample_id_file"],
         stix_file_dir=cfg["paths"]["stix_output_dir"],
         read_overlap=read_overlap,
+        slop=slop,
         stix_bin=cfg["stix"]["bin"],
         stix_index=cfg["stix"]["index"],
         stix_database=cfg["stix"]["database"],
@@ -222,16 +224,12 @@ def write_sv_stats(
         starts = []
         ends = []
         for evidence in mode:
-            med_l = np.median(
-                [paired_end[0] for paired_end in evidence.paired_ends]
-            )
-            med_r = np.median(
-                [paired_end[1] for paired_end in evidence.paired_ends]
-            )
+            med_l = np.median([paired_end[0] for paired_end in evidence.reads])
+            med_r = np.median([paired_end[1] for paired_end in evidence.reads])
             med_length = np.median(
                 [
                     paired_end[1] - paired_end[0] - evidence.mean_insert_size
-                    for paired_end in evidence.paired_ends
+                    for paired_end in evidence.reads
                 ]
             )
             lengths.append(med_length)

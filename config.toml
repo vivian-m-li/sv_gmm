@@ -60,7 +60,7 @@ local_intermediate_output_dir = "output/results/processed_svs"
 
 # VCF or CSV file listing structural variants.
 # Supported formats: .vcf, .vcf.gz, .csv
-sv_lookup_file = "1kg.subset.csv"
+sv_lookup_file = "1kg.subset.plotting.csv"
 
 # txt file with one row for each sample ID
 sample_id_file = "sample_ids.txt"
@@ -108,7 +108,7 @@ num_shards = 8
 # Fraction of the SV length that a flanking read is allowed to overlap the SV
 # region and still be included.
 # 1.0 = full overlap allowed; 0.5 = half the SV length.
-read_overlap = 0.6
+read_overlap = 0.9
 
 # ------------------------------------------------------------------------------
 # [model] — Gaussian mixture model / Dirichlet process parameters
@@ -121,13 +121,13 @@ read_overlap = 0.6
 default_insert_size = 450
 
 # Initialization method for GMM clustering. Supported algorithms: dp_k-means++, k-means++ or random.
-init = "random"
+init = "dp_kmeans++"
 
 # Whether to apply cluster repulsion to GMM clustering
-repulsion = "True"
+repulsion = "False"
 
 # Used if repulsion is True. Interaction radius for the repulsive force
-r_threshold = 0.4
+r_threshold = 0.8
 
 # Used if repulsion is True. Repulsion stepsize
 repulsion_stepsize = 1
