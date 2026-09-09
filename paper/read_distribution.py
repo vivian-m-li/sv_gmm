@@ -440,7 +440,7 @@ def analyze_query_region(
     plt.close(fig)
 
 
-def slop_vs_query_region(
+def slop_vs_query_region_plots(
     cfg: dict,
     sv_id: str,
     *,
@@ -610,6 +610,97 @@ def slop_vs_query_region(
     plt.savefig(
         f"output/plots/slop_query_region/{sv_id}_{'inner' if sample_summary else 'all'}.png"
     )
+    plt.close(fig)
+
+
+def slop_vs_query_region_sample_summaries(
+    sv_id: str,
+    *,
+    lookup: pd.DataFrame | None = None,
+):
+    if lookup is None:
+        lookup = pd.read_csv("data/1kg/1kg.subset.csv", low_memory=False)
+    row = lookup[lookup["id"] == sv_id].iloc[0]
+    start, stop = row["start"], row["stop"]
+
+    sample_ids = get_sample_ids("data/1kg/sample_ids.txt")
+    insert_size_lookup = get_insert_size_lookup(
+        "data/1kg", "insert_sizes.csv", 450, sample_ids
+    )
+
+    stix_output_dir = "output/query_region_analysis/"
+
+    fig, axs = plt.subplots(10, 5, figsize=(10, 8))
+    min_l = 0
+    max_l = 0
+    min_r = 0
+    max_r = 0
+
+    q_vals = np.arange(0.6, 1.01, 0.1)
+    s_vals = np.arange(100, 1001, 100)
+    for i, s in enumerate(s_vals[::-1]):
+        for j, q in enumerate(q_vals):
+            q = round(q, 1)
+            output_dir = os.path.join(stix_output_dir, f"stix_output_s{s}_q{q}")
+            reads, _ = get_nonref_reads(
+                sv_id, lookup=lookup, stix_output_dir=output_dir, verbose=False
+            )
+            points, _ = process_data(
+                reads,
+                L=start,
+                R=stop,
+                insert_size_lookup=insert_size_lookup,
+                sample_summary=True,
+            )
+            points = np.array(points)
+
+            if len(points) == 0:
+                continue
+
+            axs[i][j].scatter(points[:, 0], points[:, 1], alpha=0.6, s=10)
+            axs[i][j].axvline(x=0, color="gray", linestyle="--", linewidth=0.5)
+            axs[i][j].axhline(y=0, color="gray", linestyle="--", linewidth=0.5)
+
+            min_l = min(min_l, points[:, 0].min())
+            max_l = max(max_l, points[:, 0].max())
+            min_r = min(min_r, points[:, 1].min())
+            max_r = max(max_r, points[:, 1].max())
+
+            if i != len(s_vals) - 1:
+                axs[i][j].set_xticks([])
+            if j != 0:
+                axs[i][j].set_yticks([])
+
+            if j == 0:
+                axs[i][j].set_ylabel(f"s={s}")
+            if i == 0:
+                axs[i][j].text(
+                    0.35,
+                    1.25,
+                    f"q={q}",
+                    transform=axs[i][j].transAxes,
+                    verticalalignment="top",
+                    horizontalalignment="left",
+                )
+
+    for i in range(len(s_vals)):
+        for j in range(len(q_vals)):
+            axs[i][j].set_xlim(min_l - 10, max_l + 10)
+            axs[i][j].set_ylim(min_r - 10, max_r + 10)
+
+    plt.suptitle(f"Processed reads for {sv_id} (svlen={stop - start})")
+    fig.text(0.45, 0.01, "read_L - L", fontsize=12)
+    fig.text(0.01, 0.5, "read_R - R", rotation=90, fontsize=12)
+
+    plt.subplots_adjust(
+        left=0.093,
+        bottom=0.075,
+        right=0.99,
+        top=0.93,
+        wspace=0.09,
+        hspace=0.115,
+    )
+    plt.savefig(f"output/plots/slop_query_region/{sv_id}_points.png")
     plt.close(fig)
 
 
@@ -862,4 +953,4 @@ if __name__ == "__main__":
         "HGSV_220750",
         "HGSV_161412",
     ]:
-        plot_sample_vs_all_reads(sv_id, lookup=lookup)
+        slop_vs_query_region_sample_summaries(sv_id, lookup=lookup)
