@@ -52,6 +52,7 @@ class EstimatedGMM:
     responsibility: np.ndarray
     num_pruned: list[int]
     num_iterations: int
+    split_confidence: float
 
 
 @dataclass

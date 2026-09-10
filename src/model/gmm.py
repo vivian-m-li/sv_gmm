@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.special import logsumexp
-from scipy.stats import multivariate_normal
+from scipy.stats import multivariate_normal, chi2
 from sklearn.cluster import KMeans
 
 from src.utils.model_helper import reciprocal_overlap
@@ -273,6 +273,28 @@ def score_model(
                 is_valid = False
                 break
     return score, is_valid
+
+
+def calc_split_confidence(mu: list[np.ndarray]) -> float:
+    """
+    Using only the cluster centroids, calculate the confidence that the clusters are distinct enough to be considered separate SVs.
+    Confidence is estimated using the median insert size sd (108bp), which accounts for some error in L- and R- coordinates due to sequencing noise.
+    """
+    num_modes = len(mu)
+    if num_modes == 1:
+        return 1.0
+
+    # calculate the confidence that the clusters are distinct based on the median insert size sd (mean diff of 0 with sd of 108bp for our null hypothesis that the clusters are not distinct)
+    confidences = []
+    for i in range(num_modes):
+        for j in range(i + 1, num_modes):
+            diff = np.array(mu[i]) - np.array(mu[j])
+            sigma_diff = np.sqrt(2) * 108
+            z = diff / sigma_diff
+            Q = np.sum(z**2)
+            confidence = chi2.cdf(Q, df=2)
+            confidences.append(confidence)
+    return min(confidences)
 
 
 def init_em_random(
@@ -656,6 +678,7 @@ def gmm(
             responsibility=np.array([[1.0]]),
             num_pruned=[0],
             num_iterations=0,
+            split_confidence=0.0,
         )
 
     if len(x) <= 10:  # small number of samples detected
@@ -725,6 +748,7 @@ def gmm(
             x, num_sv, final_iter.mu, final_iter.cov, final_iter.p
         )
     )
+    split_confidence = calc_split_confidence(final_iter.mu)
 
     return EstimatedGMM2D(
         mu=final_iter.mu,
@@ -740,4 +764,5 @@ def gmm(
         responsibility=responsibility,
         num_pruned=[0 for _ in range(num_sv)],
         num_iterations=best_model["num_iterations"],
+        split_confidence=split_confidence,
     )
