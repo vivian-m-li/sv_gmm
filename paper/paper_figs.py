@@ -19,7 +19,7 @@ import pandas as pd
 import pysam
 
 from src.model.split import split_sv
-from model.gmm_trial import (
+from src.model.gmm_trial import (
     process_data,
     get_evidence_by_mode,
     gmm_trial,
@@ -129,10 +129,17 @@ def load_synthetic_data_results(
     sample_size: int, *, path: str = "", add_gatk_results: bool = True
 ) -> pd.DataFrame:
     split_file = os.path.join(
-        "output/synthetic_tests", path, f"resultsn={sample_size}.csv"
+        "output/synthetic_tests",
+        path,
+        f"resultsn={sample_size}.csv",
     )
     split_df = pd.read_csv(split_file)
-    split_df = split_df[split_df["gmm_model"] == "split"]
+    split_df = split_df[
+        split_df["gmm_model"].isin(
+            ["split"]
+            # ["split", "split_kmeans++", "split_random_repulsion"]
+        )
+    ]
     if not add_gatk_results:
         return split_df
 
@@ -194,6 +201,7 @@ def plot_reciprocal_overlap_svlen(
 
 
 def parameter_sweep(case: str = "B", path: str = ""):
+    """Parameter sweep for synthetic data tests: varying sample size and SV length, plotting TPR, FPR, and r at TPR > 0.5"""
     sample_sizes = []
     for file in os.listdir(os.path.join("output/synthetic_tests", path)):
         if "resultsn=" in file:
@@ -231,7 +239,7 @@ def parameter_sweep(case: str = "B", path: str = ""):
                 if row["num_modes"] > row["expected_num_modes"]:
                     false_positives[overlap] += 1
 
-            # find the overlap at which
+            # find the overlap at which the accuracy is greater than 0.5
             overlaps = np.array(sorted(total.keys()))
             acc = np.array([right[o] / total[o] for o in overlaps])
             fps = np.array([false_positives[o] / total[o] for o in overlaps])
@@ -271,7 +279,87 @@ def parameter_sweep(case: str = "B", path: str = ""):
 
     plt.tight_layout(w_pad=0)
     plt.savefig(
-        f"output/plots/parameter_sweep_heatmaps_case{case}{'_'if path else ''}{path}.pdf"
+        f"output/plots/synthetic_tests/parameter_sweep_heatmaps_case{case}{'_'if path else ''}{path}.pdf"
+    )
+    plt.show()
+
+
+def parameter_sweep_r_less_than_08(case: str = "B", path: str = ""):
+    """Parameter sweep for synthetic data tests: varying sample size and SV length, plotting TPR, FPR for r < 0.8"""
+    sample_sizes = []
+    for file in os.listdir(os.path.join("output/synthetic_tests", path)):
+        if "resultsn=" in file:
+            sample_size = int(file.strip("resultsn=").strip(".csv"))
+            sample_sizes.append(sample_size)
+    sample_sizes = sorted(sample_sizes)
+    file = load_synthetic_data_results(
+        sample_sizes[-1], path=path, add_gatk_results=False
+    )
+    svlens = sorted(file["svlen"].unique())
+
+    tprs = np.zeros((len(sample_sizes), len(svlens)))
+    fprs = np.zeros((len(sample_sizes), len(svlens)))
+    for i, sample_size in enumerate(sample_sizes):
+        df = load_synthetic_data_results(
+            sample_size, path=path, add_gatk_results=False
+        )
+        df = df[(df["gmm_model"] == "split") & (df["case"] == case)]
+        for j, svlen in enumerate(svlens):
+            subset_df = df[(df["svlen"] == svlen) & (df["r"] < 0.8)]
+            if subset_df.empty:
+                print("missing data for", sample_size, svlen)
+                continue
+            right, total, false_positives = (
+                defaultdict(int),
+                defaultdict(int),
+                defaultdict(int),
+            )
+            for _, row in subset_df.iterrows():
+                overlap = row["r"]
+                total[overlap] += 1
+                if row["expected_num_modes"] == row["num_modes"]:
+                    right[overlap] += 1
+                if row["num_modes"] > row["expected_num_modes"]:
+                    false_positives[overlap] += 1
+
+            # get the average TPR and FPR for r < 0.8
+            overlaps = np.array(sorted(total.keys()))
+            acc = np.array([right[o] / total[o] for o in overlaps])
+            fps = np.array([false_positives[o] / total[o] for o in overlaps])
+            tprs[i, j] = np.mean(acc)
+            fprs[i, j] = np.mean(fps)
+
+    fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+    for i, (values, label) in enumerate(
+        zip([tprs, fprs], ["Average TPR (r < 0.8)", "Average FPR (r < 0.8)"])
+    ):
+        ax = axs[i]
+        im = ax.imshow(values.T, cmap="Blues", vmin=0, vmax=1)
+        # put numbers in each cell
+        for j in range(len(sample_sizes)):
+            for k in range(len(svlens)):
+                text = f"{values[j, k]:.2f}"
+                ax.text(
+                    j,
+                    k,
+                    text,
+                    ha="center",
+                    va="center",
+                    color="black" if values[j, k] < 0.5 else "white",
+                    fontsize=10,
+                )
+        ax.set_xticks(np.arange(len(sample_sizes)))
+        ax.set_yticks(np.arange(len(svlens)))
+        ax.set_xticklabels(sample_sizes)
+        ax.set_yticklabels(svlens)
+        ax.set_xlabel("Sample Size", fontsize=14)
+        ax.set_ylabel("SV Length", fontsize=14)
+        ax.set_title(label, fontsize=16)
+        fig.colorbar(im, ax=axs[i])
+
+    plt.tight_layout(w_pad=0)
+    plt.savefig(
+        f"output/plots/synthetic_tests/parameter_sweep_r_less_than_08_case{case}{'_'if path else ''}{path}.pdf"
     )
     plt.show()
 
@@ -282,9 +370,15 @@ def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
     df = load_synthetic_data_results(sample_size, path=path)
     df = df[df["svlen"] == svlen]
 
-    models = ["split", "gatk_MAX_CLIQUE", "gatk_SINGLE_LINKAGE"]
-    colors = ["#bfdbf7", "#1f7a8c", "#022b3a"]
-    markers = ["o", "s", "D"]
+    models = [
+        "split",
+        "gatk_MAX_CLIQUE",
+        "gatk_SINGLE_LINKAGE",
+        "split_kmeans++",
+        "split_random_repulsion",
+    ]
+    colors = ["#bfdbf7", "#1f7a8c", "#022b3a", "orange", "pink"]
+    markers = ["o", "s", "D", "^", "v"]
 
     svs = [
         [(100000, 100802), (100200, 100601)],
@@ -434,7 +528,7 @@ def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
         hspace=0.37,
     )
     plt.savefig(
-        f"output/plots/synthetic_data_n={sample_size}_len={svlen}{'_'if path else ''}{path}.pdf"
+        f"output/plots/synthetic_tests/n={sample_size}_len={svlen}{'_'if path else ''}{path}.pdf"
     )
     plt.show()
 
@@ -479,6 +573,76 @@ def synthetic_data_additional_svs():
 
     plt.tight_layout()
     plt.savefig("output/plots/synthetic_data_additional_svs.pdf")
+    plt.show()
+
+
+def synthetic_data_read_types(
+    case: str,
+    col: str,
+    path: str = "",
+    *,
+    num_samples: int | None = None,
+    svlen: int | None = None,
+):
+    """
+    TPR for synthetic data tests varying the percent of split vs paired end reads.
+    Plot one line for each value of col (either svlen or num_samples).
+    """
+    if col == "num_samples":
+        dfs = []
+        values = []
+        for file in os.listdir(os.path.join("output/synthetic_tests", path)):
+            if "resultsn=" in file:
+                num_samples = int(file.strip("resultsn=").strip(".csv"))
+                values.append(num_samples)
+
+                df_subset = load_synthetic_data_results(
+                    num_samples, path=path, add_gatk_results=False
+                )
+                df_subset = df_subset[df_subset["svlen"] == svlen]
+                dfs.append(df_subset)
+        df = pd.concat(dfs, ignore_index=True)
+    else:
+        assert num_samples is not None
+        df = load_synthetic_data_results(
+            num_samples, path=path, add_gatk_results=False
+        )
+        values = list(df["svlen"].unique())
+
+    values = sorted(values)
+    df = df[df["case"] == case]
+    df = df[df["r"] < 0.8]  # TODO: temp measure
+
+    for value in values:
+        subset = df[df[col] == value]
+        right, total = defaultdict(int), defaultdict(int)
+        for _, row in subset.iterrows():
+            pct_split_reads = row["pct_split_reads"]
+            total[pct_split_reads] += 1
+            if row["expected_num_modes"] == row["num_modes"]:
+                right[pct_split_reads] += 1
+
+        pcts = sorted(total.keys())
+        acc = [right[pct] / total[pct] for pct in pcts]
+
+        color = plt.cm.Blues((values.index(value) + 1) / len(values))
+        plt.plot(
+            pcts,
+            acc,
+            marker="o",
+            label=value,
+            color=color,
+        )
+
+    plt.xlabel("Percent Split Reads", fontsize=14)
+    plt.ylabel("TPR", fontsize=14)
+    plt.ylim(-0.05, 1.05)
+    plt.legend(title=col, loc="upper right", bbox_to_anchor=(1.25, 1.02))
+    plt.title(
+        f"case={case}, {'num_samples' if col == 'svlen' else 'svlen'}={num_samples if col == 'svlen' else svlen}",
+        fontsize=14,
+    )
+    plt.tight_layout()
     plt.show()
 
 
@@ -1400,33 +1564,29 @@ def bayesian_optimization_iterations(file: str):
     """
     # parse eofile for each iteration
     param_names = [
-        "distance_at_0_penalty",
-        "overlap_at_0_penalty",
-        "query_overlap",
-        "max_penalty_value",
+        "query overlap",
+        "repulsion distance",
+        "repulsion step size",
     ]
-    param_values = [[] for _ in range(4)]  # d, r, q, p
+    param_values = [[] for _ in range(len(param_names))]
     f1_scores = []
     with open(file, "r") as f:
         lines = f.readlines()
         for line in lines:
             # match the output line for parameter values
             match = re.match(
-                r"Running calibration for d=(\d+), r=([\d.]+), q=([\d.]+), p=(\d+)",
+                r"Running calibration for q=([\d.]+), r=([\d.]+), epsilon=(\d+)",
                 line,
             )
             if match:
-                d = int(match.group(1))
-                param_values[0].append(d)
+                q = float(match.group(1))
+                param_values[0].append(q)
 
                 r = float(match.group(2))
                 param_values[1].append(r)
 
-                q = float(match.group(3))
-                param_values[2].append(q)
-
-                p = int(match.group(4))
-                param_values[3].append(p)
+                epsilon = int(match.group(3))
+                param_values[2].append(epsilon)
 
             # match the output line for F1 score: Trial 23 F1 score = 0.4281
             match_f1 = re.match(
@@ -1458,7 +1618,7 @@ def bayesian_optimization_iterations(file: str):
     )
 
     # normalize parameter values
-    params_raw = np.array(param_values).T  # shape (N_ITER, 4)
+    params_raw = np.array(param_values).T  # shape (N_ITER, N_PARAMS)
     params_norm = (params_raw - params_raw.min(axis=0)) / (
         params_raw.max(axis=0) - params_raw.min(axis=0)
     )
@@ -1512,12 +1672,12 @@ def bayesian_optimization_iterations(file: str):
     )
     cb.set_label("Normalized\nparameter value")
 
-    plt.savefig("output/plots/bo.pdf")
+    plt.savefig("output/plots/bo_repulsion.pdf")
     plt.show()
 
 
 if __name__ == "__main__":
-    figures = [5, 6, 7]
+    figures = [2]
 
     # Figure 1
     if 1 in figures:
@@ -1528,12 +1688,15 @@ if __name__ == "__main__":
 
     # Figure 2
     if 2 in figures:
+        synthetic_data_read_types("B", "svlen", num_samples=200)
         for case in ["B", "C", "D"]:
-            parameter_sweep(case, "")
-        # for n_samples in [11, 25, 50, 100, 200, 400]:
-        #     for svlen in [50, 100, 200, 400, 800, 1600, 10000]:
-        #         synthetic_data_fig(n_samples, svlen, "")
-        # synthetic_data_additional_svs()
+            # parameter_sweep(case)
+            parameter_sweep_r_less_than_08(case)
+        # synthetic_data_fig(50, 1600, "")
+        for n_samples in [11, 25, 50, 100, 200, 400]:
+            for svlen in [50, 100, 200, 400, 800, 1600, 10000]:
+                synthetic_data_fig(n_samples, svlen, "")
+        synthetic_data_additional_svs()
 
     # Figure 3
     if 3 in figures:
@@ -1563,4 +1726,6 @@ if __name__ == "__main__":
         plot_num_trials()
 
     if 8 in figures:
-        bayesian_optimization_iterations("calibration/results/bo.out")
+        bayesian_optimization_iterations(
+            "output/calibration/bo_repulsion_most_samples.out"
+        )

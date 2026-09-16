@@ -65,16 +65,16 @@ def get_svlen(evidence_by_mode: list[list[Evidence]]) -> list[list[SVStat]]:
         for evidence in mode:
             lengths = [
                 np.mean(paired_end) - np.mean(paired_end)
-                for paired_end in evidence.paired_ends
+                for paired_end in evidence.reads
             ]
             stats.append(
                 SVStat(
                     length=np.mean(lengths) - evidence.mean_insert_size,
                     start=np.mean(
-                        [paired_end[0] for paired_end in evidence.paired_ends]
+                        [paired_end[0] for paired_end in evidence.reads]
                     ),
                     end=np.mean(
-                        [paired_end[1] for paired_end in evidence.paired_ends]
+                        [paired_end[1] for paired_end in evidence.reads]
                     ),
                 )
             )

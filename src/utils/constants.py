@@ -70,9 +70,11 @@ GMM_MODELS = ["1d_len", "1d_L", "2d"]
 MODEL_NAMES = ["Length-only", "L-only", "Length-L"]
 
 GMM_AXES = {
-    "L": lambda x: x[0],
-    "R": lambda x: x[1],
-    "Length": lambda x: x[1] - x[0],
+    "L": lambda x, L, R, scale: x[0] - L if scale else x[0],
+    "R": lambda x, L, R, scale: x[1] - R if scale else x[1],
+    "Length": lambda x, L, R, scale: (
+        (x[1] - x[0]) - (R - L) if scale else x[1] - x[0]
+    ),
 }
 
 SYNTHETIC_DATA_CENTROIDS = {

@@ -3,7 +3,7 @@ import os
 import sys
 
 from src.data.query_stix import query_stix
-from model.gmm_trial import gmm_trial
+from src.model.gmm_trial import gmm_trial
 from src.model.dirichlet import run_dirichlet
 from src.utils.helper import (
     stix_output_to_df,
@@ -38,6 +38,7 @@ def split_sv(
     stix_file_dir: str = "stix_output",
     # query/model parameters
     read_overlap: float = 1.0,
+    slop: int = 500,
     r_threshold: float | None = None,
     repulsion_stepsize: float | None = None,
     init: str | None = None,
@@ -120,6 +121,7 @@ def split_sv(
             stix_database,
             num_stix_shards,
             parallel,
+            slop,
         )
     else:
         if print_messages:

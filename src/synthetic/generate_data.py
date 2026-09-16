@@ -293,8 +293,10 @@ def generate_mapped_pairs_for_sv(
     mode_start: int,
     mode_end: int,
     insert_mean: int,
+    insert_sd: int = 108,
     n_pairs: int = 10,
-    fragment_length_sd: int = 108,
+    include_split_reads: bool = True,
+    include_paired_reads: bool = True,
     read_jitter: int = 5,
 ):
     """
@@ -307,29 +309,67 @@ def generate_mapped_pairs_for_sv(
     - left mate placed so its end sits a small jitter upstream of mode_start.
     """
     pairs = []
-    for _ in range(n_pairs):
-        # fragment length + deletion length = insert size
-        # addn noise to fragment length (but not deletion length since that's fixed for the SV)
+    if include_paired_reads and include_split_reads:
+        pct_split = random.uniform(0, 1)
+        n_split_pairs = int(n_pairs * pct_split)
+    elif include_split_reads:
+        n_split_pairs = n_pairs
+    elif include_paired_reads:
+        n_split_pairs = 0
+    else:
+        raise ValueError("Must include at least one of split or paired reads.")
 
-        # generate the fragment length from a normal distribution
-        fragment_length = int(
-            max(10, min(900, random.gauss(insert_mean, fragment_length_sd)))
-        )
+    for i in range(n_pairs):
+        read_type = "split" if i < n_split_pairs else "paired"
+        read_length = 150
 
-        # split the fragment into left and right fragments
-        # the split point is sampled from a normal distribution so that most splits are near the middle of the fragment
-        split_point = random.gauss(0.5, 0.1)
-        left_fragment_length = int(fragment_length * split_point)
-        right_fragment_length = fragment_length - left_fragment_length
+        if read_type == "paired":
+            # left read length + right read length + deletion length + gap between reads = insert size
+            # for paired end reads, the left and right reads are placed on either side of the deletion
+            # the insert size is sampled from a normal distribution with mean insert_mean and sd fragment_length_sd
+            # here, we're using the insert size to encompass the entire fragment (including the reads and the deletion)
+            # we vary the point at which the inner gap is split by the deletion and add a small jitter
+            insert_size = int(
+                max(100, min(900, random.gauss(insert_mean, insert_sd)))
+            )
 
-        # each pair's inner bounds are the same as the variant breakpoints with +- 5bp
-        left_start = mode_start - left_fragment_length
-        left_end = mode_start + random.randint(-read_jitter, read_jitter)
+            # split point between left and right reads
 
-        right_end = mode_end + right_fragment_length
-        right_start = mode_end + random.randint(-read_jitter, read_jitter)
+            # it's more likely that the read is split near either end rather than in the middle (simulate this with a betavariate distribution)
+            # split_point = random.betavariate(0.8, 0.8)
 
-        pairs.append((left_start, left_end, right_start, right_end))
+            # uniform distribution to decide where the deletion falls within the read
+            split_point = random.uniform(0.2, 0.8)
+            left_gap = int(insert_size * split_point)
+            right_gap = insert_size - left_gap
+
+            # the left read will start at the mode start minus the gap
+            left_start = mode_start - left_gap
+            # the left end will be the left_start plus the read length OR the deletion left breakpoint, but we add a small jitter to simulate sequencing error
+            left_end = min(
+                left_start + read_length, mode_start
+            ) + random.randint(-read_jitter, read_jitter)
+
+            # the right read will start at the mode end plus the gap+jitter
+            right_end = mode_end + right_gap
+            right_start = max(
+                right_end - read_length, mode_end
+            ) + random.randint(-read_jitter, read_jitter)
+
+        elif read_type == "split":
+            # for split reads, either the left or right read is split across the breakpoint
+            split_point = random.randint(30, read_length - 30)
+            left_read_length = split_point
+            right_read_length = read_length - split_point
+
+            # each pair's inner bounds are the same as the variant breakpoints with +- 5bp
+            left_end = mode_start + random.randint(-read_jitter, read_jitter)
+            left_start = left_end - left_read_length
+
+            right_start = mode_end + random.randint(-read_jitter, read_jitter)
+            right_end = mode_end + right_read_length
+
+        pairs.append((left_start, left_end, right_start, right_end, read_type))
 
     return pairs
 
@@ -343,10 +383,14 @@ def generate_and_split_sample_reads(
     model_params: dict,
     n_samples: int | None = None,
     p: list[float] | None = None,
+    include_split_reads: bool = True,
+    include_paired_reads: bool = True,
+    pct_split_reads: float | None = None,
     gmm_model: str = "2d",
     run_split: bool = True,
     plot: bool = False,
     plot_reads: bool = False,
+    plot_sample_summary_reads: bool = False,
     vcf_filename: str | None = None,  # writes the data to the file
 ):
     """Generates synthetic short-read data for testing purposes and runs the data through the SV analysis pipeline."""
@@ -356,6 +400,11 @@ def generate_and_split_sample_reads(
     num_samples = random.randint(11, 2504) if n_samples is None else n_samples
     samples = [f"sample_{i}" for i in range(num_samples)]
 
+    if p is not None and len(svs) != len(p):
+        raise ValueError(
+            f"Length of p ({len(p)}) must match number of SVs ({len(svs)})"
+        )
+
     # decide how we want to divide the samples between the SVs
     weights = generate_weights(num_svs) if p is None else p
     modes = assign_modes(weights, samples)
@@ -363,6 +412,14 @@ def generate_and_split_sample_reads(
     insert_sizes = get_insert_size_lookup(input_dir, insert_size_file)
     insert_size_distribution = [sample.mean for sample in insert_sizes.values()]
     insert_size_sds = [sample.sd for sample in insert_sizes.values()]
+
+    # if pct_split_reads is not None, divide the population into samples that have only split reads and samples that have only paired reads
+    split_samples = set()
+    paired_samples = set()
+    if pct_split_reads is not None:
+        n_split_samples = int(num_samples * pct_split_reads)
+        split_samples = set(random.sample(samples, n_split_samples))
+        paired_samples = set([s for s in samples if s not in split_samples])
 
     # for each sample, generate random evidence
     reads = stix_output_to_df("", write_empty_file=True)
@@ -378,11 +435,24 @@ def generate_and_split_sample_reads(
             mean=insert_size, sd=random.choice(insert_size_sds)
         )
 
+        sample_has_paired_reads = (
+            include_paired_reads
+            if pct_split_reads is None
+            else sample in paired_samples
+        )
+        sample_has_split_reads = (
+            include_split_reads
+            if pct_split_reads is None
+            else sample in split_samples
+        )
+
         pairs = generate_mapped_pairs_for_sv(
             mode_start=mode_start,
             mode_end=mode_end,
             insert_mean=insert_size,
             n_pairs=num_evidence,
+            include_paired_reads=sample_has_paired_reads,
+            include_split_reads=sample_has_split_reads,
         )
         for pair in pairs:
             reads.loc[len(reads)] = [
@@ -394,30 +464,73 @@ def generate_and_split_sample_reads(
                 1,
                 pair[2],
                 pair[3],
-                "split",
+                pair[4],
             ]
             evidence[sample].extend([pair[1], pair[2]])  # l_end, r_start
 
-    # pass synthetic data through SV analysis pipeline
+    # set L and R to the median of the SV coordinates, which is a reasonable estimate if we don't know the true SV coordinates used to generate the data
     L = np.median([start for start, _ in svs])
     R = np.median([stop for _, stop in svs])
     evidence = {key: np.array(value) for key, value in evidence.items()}
 
     if plot_reads:
         plt.figure()
-        plt.scatter(
-            reads["l_start"].tolist(),
-            reads["r_end"].tolist(),
-            color="blue",
-            alpha=0.6,
-        )
+        for read_type, color in zip(["paired", "split"], ["red", "blue"]):
+            subset = reads[reads["type"] == read_type]
+            plt.scatter(
+                subset["l_end"].tolist(),
+                subset["r_start"].tolist(),
+                color=color,
+                alpha=0.6,
+                label=read_type,
+            )
         plt.xlabel("L")
         plt.ylabel("R")
+        plt.legend()
+        plt.show()
+
+    if plot_sample_summary_reads:
+        summary_reads = pd.DataFrame(
+            columns=["sample_id", "l_end", "r_start", "type"]
+        )
+        for sample_id in reads["sample_id"].unique():
+            sample_reads = reads[reads["sample_id"] == sample_id]
+            split_reads = sample_reads[sample_reads["type"] == "split"]
+            paired_reads = sample_reads[sample_reads["type"] == "paired"]
+            if split_reads.shape[0] > 1:
+                summary_reads.loc[len(summary_reads)] = [
+                    sample_id,
+                    split_reads["l_end"].max(),
+                    split_reads["r_start"].min(),
+                    "split",
+                ]
+            elif paired_reads.shape[0] > 1:
+                summary_reads.loc[len(summary_reads)] = [
+                    sample_id,
+                    paired_reads["l_end"].max(),
+                    paired_reads["r_start"].min(),
+                    "paired",
+                ]
+
+        plt.figure()
+        for read_type, color in zip(["paired", "split"], ["red", "blue"]):
+            subset = summary_reads[summary_reads["type"] == read_type]
+            plt.scatter(
+                subset["l_end"].tolist(),
+                subset["r_start"].tolist(),
+                color=color,
+                alpha=0.6,
+                label=read_type,
+            )
+        plt.xlabel("L")
+        plt.ylabel("R")
+        plt.legend()
         plt.show()
 
     if vcf_filename:
         data_to_vcf(evidence, insert_size_lookup, vcf_filename)
 
+    # pass synthetic data through SV analysis pipeline
     if run_split:
         gmm_results, _, _ = run_dirichlet(
             reads,
