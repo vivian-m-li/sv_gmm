@@ -98,7 +98,7 @@ class Evidence:
     reads: list[list[float]]
     mean_insert_size: int
     insert_size_sd: float
-    evidence_type: Literal["split", "paired"]
+    evidence_type: list[Literal["split", "paired"]]
     mode_probabilities: list[float] = field(
         default_factory=list
     )  # probability of belonging to each mode. Length should match the number of modes in the GMM

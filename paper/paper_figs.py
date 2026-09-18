@@ -789,7 +789,7 @@ def methods_clustered(ax, svs, reads, insert_size_lookup, num_modes):
         insert_size_lookup=insert_size_lookup,
         min_pairs=1,
     )
-    gmm_result = gmm(points, L=L, R=R, force_n_modes=num_modes)
+    gmm_result = gmm(points, sv_evidence, L=L, R=R, force_n_modes=num_modes)
     evidence = get_evidence_by_mode(
         gmm_result,
         sv_evidence,

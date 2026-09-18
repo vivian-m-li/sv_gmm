@@ -774,6 +774,7 @@ def gmm_trial(
 
     gmm_result = gmm(
         points,
+        sv_evidence,
         L=L,
         R=R,
         r_threshold=r_threshold,

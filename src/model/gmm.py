@@ -1,10 +1,12 @@
+from collections import Counter
+
 import numpy as np
 from scipy.special import logsumexp
 from scipy.stats import multivariate_normal, chi2
 from sklearn.cluster import KMeans
 
 from src.utils.model_helper import reciprocal_overlap
-from src.utils.types import GMM2D, EstimatedGMM2D
+from src.utils.types import GMM2D, EstimatedGMM2D, Evidence
 
 RESPONSIBILITY_THRESHOLD = 1e-10
 
@@ -190,6 +192,134 @@ def calc_log_likelihood(
     return logL
 
 
+def merge_clusters(
+    params: list[GMM2D],
+    num_iterations: int,
+    samples: list[Evidence],
+    x: np.ndarray,
+    gz: np.ndarray,
+    L: int,
+    R: int,
+    merge_threshold_sd: int = 2,
+) -> list[GMM2D]:
+    """If we have multiple clusters, check if we should merge any of them based on the read types, their distance to other clusters, and the insert size distribution. merge_threshold_sd determines the allowable distance between clusters to be merged, in terms of the number of standard deviations of the insert size distribution."""
+    gmm_result = params[-1]
+    num_modes = len(gmm_result.mu)
+
+    # if there is only one mode, return the params as is
+    if num_modes == 1:
+        return params, num_iterations, gz
+
+    assignments = np.argmax(gz, axis=1)
+    samples = np.array(samples)
+    read_types_by_cluster = [
+        Counter([s.evidence_type for s in samples[assignments == i]])
+        for i in range(num_modes)
+    ]
+
+    # get all potential merges based on read type and distance between clusters
+    # in the for loop, we check if we can merge cluster i into j
+    can_merge = []  # list of tuples of cluster i, j
+    for i in range(num_modes):
+        for j in range(num_modes):
+            if i == j:
+                continue
+
+            # get read composition of each cluster
+            read_types_i = read_types_by_cluster[i]
+            read_types_j = read_types_by_cluster[j]
+
+            # if all reads in cluster i are paired-end reads and cluster j contains split reads, and if the L coord in cluster i falls within [L_j - merge_threshold_sd*insert_size_sd, L_j + 5] and the R coord in cluster_i falls within [R_j - 5, R_j + merge_threshold_sd*insert_size_sd], then we can merge cluster i into cluster j
+            if (
+                read_types_i["paired"] == sum(read_types_i.values())
+                and read_types_j["split"] > 0
+            ):
+                mu_i = gmm_result.mu[i]
+                mu_j = gmm_result.mu[j]
+
+                if (
+                    (mu_i[0] >= mu_j[0] - merge_threshold_sd * 108)
+                    and (mu_i[0] <= mu_j[0] + 5)
+                    and (mu_i[1] >= mu_j[1] - 5)
+                    and (mu_i[1] <= mu_j[1] + merge_threshold_sd * 108)
+                ):
+                    can_merge.append((i, j))
+
+    # if there are no merge-able clusters, then return
+    if len(can_merge) == 0:
+        return params, num_iterations, gz
+
+    # determine the order of the merge - if a cluster i can be merged into multiple clusters j, then we want to merge it into the cluster j that is closest to it (in terms of Euclidean distance between the cluster centroids)
+    merge_order = []
+    for i, j in can_merge:
+        mu_i = gmm_result.mu[i]
+        mu_j = gmm_result.mu[j]
+        dist = np.linalg.norm(mu_i - mu_j)
+        merge_order.append((i, j, dist))
+    merge_order = sorted(merge_order, key=lambda x: x[2])
+
+    # remove duplicate merges - if cluster i can be merged into multiple clusters j, then we only want to keep the merge with the closest cluster j
+    merges_to_keep = []
+    seen_i = set()
+    for i, j, _ in merge_order:
+        if i in seen_i:
+            continue
+        merges_to_keep.append((i, j))
+
+    params = params.copy()
+
+    # two clusters are getting merged into the same cluster, so do this simultaneously
+    # we know that if we're doing 2 merges, then we have 3 modes, so all of the points in the end will belong to the same cluster
+    if len(merges_to_keep) == 2:
+        _, mu, cov, p, _ = init_em(x, 1, L, R, "kmeans++")
+        params.append(
+            GMM2D(
+                mu=mu,
+                cov=cov,
+                p=p,
+                logL=calc_log_likelihood(x, mu, cov, p, L, R),
+            )
+        )
+
+    # one cluster is getting merged into another, but we don't know if we originally had 2 or 3 modes
+    else:
+        i, j = merges_to_keep[0]
+        points_to_merge = np.concatenate(
+            (x[assignments == i], x[assignments == j]), axis=0
+        )
+        _, mu, cov, _, _ = init_em(points_to_merge, 1, L, R, "kmeans++")
+
+        # add our updated cluster parameters to the list of clusters
+        mus = [mu[0]]
+        covs = [cov[0]]
+        ps = [gmm_result.p[i] + gmm_result.p[j]]
+
+        # if we originally had 3 modes (and now we have 2), add the remaining cluster parameters to the list of clusters
+        if len(gmm_result.mu) == 3:
+            last_iter = params[-1]
+            k = [idx for idx in range(3) if idx not in (i, j)][0]
+            mus.append(last_iter.mu[k])
+            covs.append(last_iter.cov[k])
+            ps.append(last_iter.p[k])
+
+        params.append(
+            GMM2D(
+                mu=mus,
+                cov=covs,
+                p=ps,
+                logL=calc_log_likelihood(x, mus, covs, ps, L, R),
+            )
+        )
+
+    num_iterations += 1
+
+    gz = calc_responsibility(
+        x, len(x), params[-1].mu, params[-1].cov, params[-1].p
+    )
+
+    return params, num_iterations, gz
+
+
 def calc_aic(
     logL: float,
     num_modes: int,
@@ -230,16 +360,67 @@ def calc_icl(
     return icl
 
 
+def model_is_valid(
+    gmm_result: GMM2D,
+    num_modes: int,
+    gz: np.ndarray,
+    samples: list[Evidence],
+):
+    """
+    Checks if the model is valid by verifying that clusters are sufficiently far apart based on read type.
+
+    If cluster i and cluster j contain sufficient split reads (> 5 split reads per cluster), then use the centroids of the split reads to determine if the clusters are sufficiently far apart (> 10 bp in either direction).
+    Otherwise, the model if valid if all pairs of clusters pass 2/3 of the criteria:
+    1. The L-coordinates of the cluster centroids are at least 100 bp apart
+    2. The R-coordinates of the cluster centroids are at least 100 bp apart
+    3. The Euclidean distance between the cluster centroids is at least 150 bp apart
+    """
+    assignments = np.argmax(gz, axis=1)
+    samples = np.array(samples)
+    is_valid = True
+    for i in range(num_modes):
+        for j in range(i + 1, num_modes):
+            # get read composition of each cluster
+            samples_i = samples[assignments == i]
+            read_types_i = Counter([s.evidence_type for s in samples_i])
+            samples_j = samples[assignments == j]
+            read_types_j = Counter([s.evidence_type for s in samples_j])
+
+            mu_i = gmm_result.mu[i]
+            mu_j = gmm_result.mu[j]
+            l_coord_dist = abs(mu_i[0] - mu_j[0])
+            r_coord_dist = abs(mu_i[1] - mu_j[1])
+
+            if read_types_i["split"] >= 5 and read_types_j["split"] >= 5:
+                is_valid = l_coord_dist > 10 and r_coord_dist > 10
+            else:
+                passes = 0
+                if abs(l_coord_dist) >= 100:
+                    passes += 1
+                if abs(r_coord_dist) >= 100:
+                    passes += 1
+                if np.sqrt(l_coord_dist**2 + r_coord_dist**2) >= 150:
+                    passes += 1
+
+                if passes < 2:
+                    is_valid = False
+
+            if is_valid is False:
+                break
+
+    return is_valid
+
+
 def score_model(
     gmm_result: GMM2D,
     num_modes: int,
-    x: np.ndarray,
+    samples: list[Evidence],
     gz: np.ndarray,
     f: str = "aic",
 ) -> float:
     """Calculates the penalized log-likelihood using the specified model selection criterion."""
     logL = gmm_result.logL
-    num_samples = len(x)
+    num_samples = len(samples)
 
     if f == "aic":
         score = calc_aic(logL, num_modes)
@@ -250,28 +431,7 @@ def score_model(
     else:
         raise ValueError(f"Invalid model selection criterion: {f}")
 
-    # check that cluster mus are at least 100 bp apart in either dimension
-    # if not, then this is not a valid model
-    # assumes that the mu values are in the format [insert_size, L-coordinate]
-    is_valid = True
-    for i in range(num_modes):
-        for j in range(i + 1, num_modes):
-            # for now, ignore the insert size distance since this would disqualify SVs that are similar size but a sizeable distance apart
-            # insert_size_dist = gmm_result.mu[i][0] - gmm_result.mu[j][0]
-            l_coord_dist = abs(gmm_result.mu[i][0] - gmm_result.mu[j][0])
-            r_coord_dist = abs(gmm_result.mu[i][1] - gmm_result.mu[j][1])
-
-            passes = 0
-            if abs(l_coord_dist) >= 100:
-                passes += 1
-            if abs(r_coord_dist) >= 100:
-                passes += 1
-            if np.sqrt(l_coord_dist**2 + r_coord_dist**2) >= 150:
-                passes += 1
-
-            if passes < 2:
-                is_valid = False
-                break
+    is_valid = model_is_valid(gmm_result, num_modes, gz, samples)
     return score, is_valid
 
 
@@ -638,6 +798,7 @@ def select_model(x: np.ndarray, model_results: dict):
 
 def gmm(
     x: np.ndarray[tuple[float, int]],
+    samples: list[Evidence],
     *,
     L: int,
     R: int,
@@ -713,10 +874,22 @@ def gmm(
                 responsibility = calc_responsibility(
                     x, len(x), params[-1].mu, params[-1].cov, params[-1].p
                 )
+
+                # to avoid oversplitting, we check whether we should merge nearby clusters
+                params, num_iterations, responsibility = merge_clusters(
+                    params,
+                    num_iterations,
+                    samples,
+                    x,
+                    responsibility,
+                    L,
+                    R,
+                )
+
                 model_score, valid = score_model(
                     params[-1],
-                    num_modes,
-                    x,
+                    len(params[-1].mu),
+                    samples,
                     responsibility,
                     f=model_comparison_func,
                 )
