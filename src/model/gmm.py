@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, defaultdict
 
 import numpy as np
 from scipy.special import logsumexp
@@ -216,6 +216,10 @@ def merge_clusters(
         Counter([s.evidence_type for s in samples[assignments == i]])
         for i in range(num_modes)
     ]
+    split_reads_by_cluster = defaultdict(list)
+    for pt, sample, assignment in zip(x, samples, assignments):
+        if sample.evidence_type == "split":
+            split_reads_by_cluster[assignment].append(pt)
 
     # get all potential merges based on read type and distance between clusters
     # in the for loop, we check if we can merge cluster i into j
@@ -244,6 +248,23 @@ def merge_clusters(
                     and (mu_i[1] <= mu_j[1] + merge_threshold_sd * 108)
                 ):
                     can_merge.append((i, j))
+                    continue
+
+            # alternatively, we can merge clusters if any of their split reads overlap (are within 10 bp of one another)
+            # it doesn't really matter which cluster we merge into the other because we'll rerun the em for them
+            split_i = split_reads_by_cluster[i]
+            split_j = split_reads_by_cluster[j]
+            for read_i in split_i:
+                if (i, j) in can_merge or (j, i) in can_merge:
+                    break
+
+                for read_j in split_j:
+                    if (
+                        abs(read_i[0] - read_j[0]) <= 5
+                        and abs(read_i[1] - read_j[1]) <= 5
+                    ):
+                        can_merge.append((i, j))
+                        break
 
     # if there are no merge-able clusters, then return
     if len(can_merge) == 0:

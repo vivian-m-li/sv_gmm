@@ -121,7 +121,7 @@ read_overlap = 0.9
 default_insert_size = 450
 
 # Initialization method for GMM clustering. Supported algorithms: dp_k-means++, k-means++ or random.
-init = "dp_kmeans++"
+init = "kmeans++"
 
 # Whether to apply cluster repulsion to GMM clustering
 repulsion = "False"
