@@ -1,4 +1,5 @@
 from collections import Counter, defaultdict
+import warnings
 
 import numpy as np
 from scipy.special import logsumexp
@@ -9,6 +10,9 @@ from src.utils.model_helper import reciprocal_overlap
 from src.utils.types import GMM2D, EstimatedGMM2D, Evidence
 
 RESPONSIBILITY_THRESHOLD = 1e-10
+
+# suppress runtime warnings, generally divide by zero errors
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 class TooFewUniqueValuesError(Exception):
@@ -906,10 +910,11 @@ def gmm(
                     L,
                     R,
                 )
+                num_sv_post_merge = len(params[-1].mu)
 
                 model_score, valid = score_model(
                     params[-1],
-                    len(params[-1].mu),
+                    num_sv_post_merge,
                     samples,
                     responsibility,
                     f=model_comparison_func,
@@ -924,9 +929,10 @@ def gmm(
                     "num_iterations": 0,
                 }
 
+            # num_modes and num_sv_post_merge may differ 
             model_results[num_modes] = {
                 "valid": valid,
-                "num_sv": num_modes,
+                "num_sv": num_sv_post_merge,
                 "score": model_score,
                 "params": params,
                 "num_iterations": num_iterations,

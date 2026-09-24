@@ -60,7 +60,7 @@ local_intermediate_output_dir = "output/results/processed_svs"
 
 # VCF or CSV file listing structural variants.
 # Supported formats: .vcf, .vcf.gz, .csv
-sv_lookup_file = "1kg.subset.plotting.csv"
+sv_lookup_file = "1kg.subset.csv"
 
 # txt file with one row for each sample ID
 sample_id_file = "sample_ids.txt"

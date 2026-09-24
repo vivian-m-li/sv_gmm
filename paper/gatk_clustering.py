@@ -16,10 +16,10 @@ from src.utils.timeout import break_after
 from typing import Optional
 
 PLOIDY_TABLE = (
-    "/Users/vili4418/sv/sv_gmm/synthetic_data/generated_files/ploidy_table.tsv"
+    "/Users/vili4418/sv/sv_gmm/data/synthetic_data/generated_files/ploidy_table.tsv"
 )
 REFERENCE_FILE = (
-    "/Users/vili4418/sv/sv_gmm/synthetic_data/generated_files/reference.fasta"
+    "/Users/vili4418/sv/sv_gmm/data/synthetic_data/generated_files/reference.fasta"
 )
 
 
@@ -38,18 +38,7 @@ def process_gatk_output(filename: str):
         if svtype != "DEL":
             continue
 
-        # END marks the right breakpoint
-        if "END" in info:
-            end = info["END"]
-        else:
-            # fallback: attempt to parse ALT
-            end = pos
-            if record.alts and ":" in record.alts[0]:
-                try:
-                    end_str = record.alts[0].split(":")[1].rstrip("><")
-                    end = int(end_str)
-                except ValueError:
-                    pass
+        end = record.stop
 
         Ls.append(pos)
         lengths.append(abs(end - pos))
@@ -64,7 +53,7 @@ def write_csv(
     fixed_n_samples: Optional[int] = None,
     fixed_svlen: Optional[int] = None,
 ):
-    file = f"synthetic_data/results{'' if fixed_n_samples is None else 'n=' + str(fixed_n_samples)}.csv"
+    file = f"output/synthetic_tests/results{'' if fixed_n_samples is None else 'n=' + str(fixed_n_samples)}.csv"
     # append to existing file generated in synthetic_tests.py
     with open(
         file,
@@ -82,9 +71,11 @@ def write_csv(
             "num_modes",
             "lengths",
             "Ls",
+            "confidence",
             "num_samples",
             "svlen",
             "weights",
+            "pct_split_reads",
         ]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
 
@@ -102,10 +93,10 @@ def write_csv(
             gatk_output_file,
         ) in all_results:
             try:
-                n_clusters, lengths, Ls = process_gatk_output(gatk_output_file)
+                n_clusters, Ls, lengths = process_gatk_output(gatk_output_file)
             except FileNotFoundError:
                 print(
-                    f"File not found: {gatk_output_file}, case={case}, rs={rs}, svs={svs}, n_samples={n_samples}"
+                    f"File not found: {gatk_output_file}, case={case}, rs={rs}, svs={svs}, n_samples={n_samples}", flush=True
                 )
                 continue
             if type(rs) is tuple:
@@ -125,14 +116,18 @@ def write_csv(
                     "num_modes": n_clusters,
                     "lengths": lengths,
                     "Ls": Ls,
+                    "confidence": 1.0,
                     "num_samples": n_samples,
                     "svlen": fixed_svlen,
                     "weights": weights,
+                    "pct_split_reads": -1,
                 }
             )
 
     df = pd.read_csv(file)
-    df = df.sort_values(by=["case", "gmm_model", "r", "r2"])
+    df = df.sort_values(
+        by=["case", "gmm_model", "r", "r2", "num_samples", "svlen"],
+    )
     df.to_csv(file, index=False)
 
 
@@ -157,8 +152,8 @@ def gatk_cluster_reads(case, r, svs, weights, n_samples, gatk_alg, results):
     output_file = (
         f"/scratch/Users/vili4418/synthetic_data/clustered/{run_id}.vcf"
     )
-    result = subprocess.run(  # noqa: F841
-        ["bash", "../src/synthetic/bash/gatk_svcluster.sh"]
+    subprocess.run(  # noqa: F841
+        ["bash", "paper/bash/gatk_svcluster.sh"]
         + [  # noqa: W503
             filename,
             output_file,
@@ -189,7 +184,7 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, gatk_alg, results):
         f"/scratch/Users/vili4418/synthetic_data/clustered/{run_id}.vcf"
     )
     result = subprocess.run(  # noqa: F841
-        ["bash", "../src/synthetic/bash/gatk_svcluster.sh"]
+        ["bash", "paper/bash/gatk_svcluster.sh"]
         + [  # noqa: W503
             filename,
             output_file,
