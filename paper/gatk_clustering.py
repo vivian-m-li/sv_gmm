@@ -12,7 +12,7 @@ from src.synthetic.generate_data import (
     generate_and_split_sample_reads,
     generate_synthetic_sv_vcf,
 )
-from src.utils.timeout import break_after
+from src.utils.config_loader import load_config
 from typing import Optional
 
 PLOIDY_TABLE = (
@@ -131,7 +131,7 @@ def write_csv(
     df.to_csv(file, index=False)
 
 
-def gatk_cluster_reads(case, r, svs, weights, n_samples, gatk_alg, results):
+def gatk_cluster_reads(cfg, case, r, svs, weights, n_samples, gatk_alg, results):
     """Generates synthetic short-read data and runs gatk's SVCluster method on it. Appends the results to the multiprocessing-managed list to be written to a CSV later. File I/O is done on scratch."""
     # generates synthetic data and writes to a vcf file
     run_id = uuid.uuid4()
@@ -142,8 +142,11 @@ def gatk_cluster_reads(case, r, svs, weights, n_samples, gatk_alg, results):
         svs,
         input_dir="data/1kg",
         insert_size_file="insert_sizes.csv",
+        model_params=cfg["model"],
         n_samples=n_samples,
         p=weights,
+        include_split_reads=True,
+        include_paired_reads=True,
         run_split=False,
         vcf_filename=filename,
     )
@@ -167,7 +170,7 @@ def gatk_cluster_reads(case, r, svs, weights, n_samples, gatk_alg, results):
     results.append([case, r, svs, n_samples, weights, gatk_alg, output_file])
 
 
-def gatk_cluster_inner(case, r, svs, weights, n_samples, gatk_alg, results):
+def gatk_cluster_inner(cfg, case, r, svs, weights, n_samples, gatk_alg, results):
     """Generates synthetic SVs and runs gatk's SVCluster method on it. Appends the results to the multiprocessing-managed list to be written to a CSV later. File I/O is done on scratch."""
     # generates synthetic data and writes to a vcf file
     run_id = uuid.uuid4()
@@ -203,8 +206,8 @@ def gatk_cluster_inner(case, r, svs, weights, n_samples, gatk_alg, results):
     results.append([case, r, svs, n_samples, weights, gatk_alg, output_file])
 
 
-@break_after(hours=11, minutes=55)
 def gatk_cluster(
+    cfg,
     n_samples: int,
     svlen: int,
     test_case: Optional[str] = None,
@@ -229,7 +232,7 @@ def gatk_cluster(
             for weight in weights:
                 # for _ in range(10):
                 args.append(
-                    (case, r, svs, weight, n_samples, gatk_alg, results)
+                    (cfg, case, r, svs, weight, n_samples, gatk_alg, results)
                 )
 
         # add a chunk size; each worker will be given 10 tasks to run
@@ -279,7 +282,10 @@ def main():
         nargs="?",
     )
     args = parser.parse_args()
+
+    cfg = load_config()
     gatk_cluster(
+        cfg,
         n_samples=args.n,
         svlen=args.l,
         test_case=args.c,
