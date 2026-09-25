@@ -142,6 +142,7 @@ class SVInfoGMM:
     alt: str | None
     qual: str | None
     score: float
+    confidence: float
     # filter: list[str]
     af: str | None
     # info: dict

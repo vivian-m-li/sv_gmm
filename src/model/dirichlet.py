@@ -9,7 +9,7 @@ from src.utils.model_helper import calculate_posteriors
 from src.utils.types import GMM, Evidence
 from src.utils.viz import plot_2d_coords
 
-MAX_N = 30  # maximum number of iterations for the Dirichlet process
+MAX_N = 10  # maximum number of iterations for the Dirichlet process
 
 
 # ----------------------------------------
@@ -164,7 +164,7 @@ def run_dirichlet(
     """
     chr, L, R = kwargs["chr"], kwargs["L"], kwargs["R"]
 
-    init = kwargs.get("init", "dp_kmeans++")
+    init = kwargs.get("init", "kmeans++")
     display_output = kwargs.get("plot", False)
 
     alpha = np.array([1, 1, 1])  # initialize alpha values

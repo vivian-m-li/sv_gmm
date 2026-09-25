@@ -23,13 +23,7 @@ from src.utils.helper import (
     get_svlen,
     df_to_bed,
 )
-from src.utils.model_helper import (
-    calc_af,
-    calculate_posteriors_from_trials,
-    calculate_ci,
-    reciprocal_overlap,
-    giggle_format,
-)
+from src.utils.model_helper import calc_af, reciprocal_overlap, giggle_format
 
 from src.utils.types import (
     SVInfoGMM,
@@ -107,7 +101,8 @@ def init_sv_stat_row(
         alt=row.get("alt"),
         qual=row.get("qual"),
         af=row.get("af"),
-        score=999999,
+        score=999999.0,
+        confidence=0.0,
         num_samples=num_samples,
         num_samples_run=0,
         num_pruned=0,
@@ -197,6 +192,7 @@ def write_sv_stats(
     sv_stat.num_modes = gmm_result.num_modes
     sv_stat.num_iterations = gmm_result.num_iterations
     sv_stat.score = gmm_result.score
+    sv_stat.confidence = gmm_result.split_confidence
 
     all_svlen = get_svlen(evidence_by_mode)
     sv_stat.svlen_post = int(
@@ -354,8 +350,6 @@ def write_most_common_split(output_dir: str):
             row = row.drop(
                 [
                     "consensus_num_modes",
-                    "ci_lower",
-                    "ci_upper",
                     "num_modes_2",
                     "sv_id",
                     "confidence",
@@ -424,7 +418,7 @@ def write_ancestry_dissimilarity(output_dir: str, ancestry_file: str):
         left_on="id",
         right_on="sv_id",
     )
-    df = df[(df["confidence"] != "low") & (df["consensus_num_modes"] > 1)]
+    df = df[(df["consensus_num_modes"] > 1)]
     ancestry_df = pd.read_csv(
         ancestry_file, delimiter="\t" if ancestry_file.endswith(".tsv") else ","
     )
@@ -488,9 +482,6 @@ def get_n_modes(
             "sv_id",
             "num_modes",
             "confidence",
-            "ci_lower",
-            "ci_upper",
-            "num_modes_2",
         ]
     )
 
@@ -508,28 +499,17 @@ def get_n_modes(
         # if the GMM defaulted to 1 mode because there were 1-10 samples,
         # label it as 1 mode inconclusively
         if rows["num_samples_run"].values[0] <= 10:
-            sv_df.loc[len(sv_df)] = [sv_id, 1, "inconclusive", 0, 0, np.nan]
+            sv_df.loc[len(sv_df)] = [sv_id, 1, 0]
             continue
 
         # pick the model with the best (minimum) score
         best_score = min(rows["score"].values)
         best_gmm = rows[rows["score"] == best_score].iloc[0]
-
-        new_row = [sv_id, best_gmm["num_modes"]]
-
-        # TODO: confidence calculation here will be removed eventually
-        outcomes = rows["num_modes"].values
-        p, var = calculate_posteriors_from_trials(outcomes)
-        ci = calculate_ci(p, var, len(outcomes))
-        if ci[0] >= 0.6:
-            new_row.append("high")
-        elif ci[0] >= 0.3:
-            new_row.append("medium")
-        else:
-            new_row.append("low")
-        new_row.extend([ci[0][0], ci[1][0], np.nan])
-
-        sv_df.loc[len(sv_df)] = new_row
+        sv_df.loc[len(sv_df)] = [
+            sv_id,
+            best_gmm["num_modes"],
+            best_gmm["confidence"],
+        ]
     sv_df.to_csv(os.path.join(output_dir, "svs_n_modes.csv"), index=False)
 
 
@@ -681,7 +661,7 @@ def outlier_gene_intersections():
 
 
 def high_confidence_gene_intersections():
-    """Get SVs that are both high confidence and have new gene intersections."""
+    """Get SVs that have new gene intersections."""
     svs_with_new_genes = set()
     with open("1kg/new_gene_intersections.bed", "r") as f:
         for line in f:
@@ -690,12 +670,9 @@ def high_confidence_gene_intersections():
             svs_with_new_genes.add(sv_id)
 
     df = pd.read_csv("1kg/svs_n_modes.csv")
-    high_confidence_svs = set(
-        df[(df["confidence"] == "high") & (df["num_modes"] >= 1)]["sv_id"]
-    )
-    print("n high confidence SVs:", len(high_confidence_svs))
+    high_confidence_svs = set(df[(df["num_modes"] >= 1)]["sv_id"])
     print(
-        "n high confidence SVs with new gene intersections:",
+        "n SVs with new gene intersections:",
         len(high_confidence_svs.intersection(svs_with_new_genes)),
     )
 
@@ -735,7 +712,7 @@ def recalculate_afs():
 def compare_short_long_reads():
     """Compare the number of modes and confidence between short read and long read analyses."""
     sr_df = pd.read_csv("1kg/svs_n_modes.csv")
-    sr_df = sr_df[sr_df["confidence"] != "inconclusive"]
+    sr_df = sr_df[sr_df["confidence"] > 0]
     sr_df = sr_df.rename(
         columns={
             "num_modes": "sr_num_modes",
@@ -745,7 +722,7 @@ def compare_short_long_reads():
     )
 
     lr_df = pd.read_csv("long_reads/svs_n_modes.csv")
-    lr_df = lr_df[lr_df["confidence"] != "inconclusive"]
+    lr_df = lr_df[lr_df["confidence"] > 0]
     lr_df = lr_df.rename(
         columns={
             "num_modes": "lr_num_modes",
