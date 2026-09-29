@@ -927,15 +927,17 @@ def gmm(
                     "score": 999999,
                     "params": [],
                     "num_iterations": 0,
+                    "merged": False,
                 }
 
-            # num_modes and num_sv_post_merge may differ 
+            # num_modes and num_sv_post_merge may differ
             model_results[num_modes] = {
                 "valid": valid,
                 "num_sv": num_sv_post_merge,
                 "score": model_score,
                 "params": params,
                 "num_iterations": num_iterations,
+                "merged": num_modes > num_sv_post_merge,
             }
 
         best_model = select_model(x, model_results)
@@ -965,4 +967,5 @@ def gmm(
         num_pruned=[0 for _ in range(num_sv)],
         num_iterations=best_model["num_iterations"],
         split_confidence=split_confidence,
+        merged=best_model["merged"],
     )

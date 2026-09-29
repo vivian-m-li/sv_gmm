@@ -103,6 +103,7 @@ def init_sv_stat_row(
         af=row.get("af"),
         score=999999.0,
         confidence=0.0,
+        merged=False,
         num_samples=num_samples,
         num_samples_run=0,
         num_pruned=0,
@@ -193,6 +194,7 @@ def write_sv_stats(
     sv_stat.num_iterations = gmm_result.num_iterations
     sv_stat.score = gmm_result.score
     sv_stat.confidence = gmm_result.split_confidence
+    sv_stat.merged = gmm_result.merged
 
     all_svlen = get_svlen(evidence_by_mode)
     sv_stat.svlen_post = int(
@@ -220,24 +222,22 @@ def write_sv_stats(
         starts = []
         ends = []
         for evidence in mode:
-            med_l = np.median([paired_end[0] for paired_end in evidence.reads])
-            med_r = np.median([paired_end[1] for paired_end in evidence.reads])
-            med_length = np.median(
-                [
-                    paired_end[1] - paired_end[0] - evidence.mean_insert_size
-                    for paired_end in evidence.reads
-                ]
+            l = max(  # noqa: E741
+                [paired_end[0] for paired_end in evidence.reads]
             )
-            lengths.append(med_length)
-            starts.append(med_l)
-            ends.append(med_r)
+            r = min([paired_end[1] for paired_end in evidence.reads])
+            length = r - l
+            lengths.append(length)
+            starts.append(l)
+            ends.append(r)
 
-        mode_start = int(np.median(starts))
-        mode_end = int(np.median(ends))
+        mode_start = int(np.max(starts))
+        mode_end = int(np.min(ends))
         mode_coords.append((mode_start, mode_end))
+        read_types = Counter([e.evidence_type for e in mode])
 
         mode_stat = ModeStat(
-            length=int(np.median(lengths)),
+            length=int(np.min(lengths)),
             length_sd=float(np.std(lengths)),
             start=mode_start,
             start_sd=float(np.std(starts)),
@@ -248,6 +248,7 @@ def write_sv_stats(
             num_homozygous=num_homozygous,
             sample_ids=sample_ids,
             sample_probabilities=sample_mode_probabilities[i],
+            read_types=dict(read_types),
             num_pruned=gmm_result.num_pruned[i],
             af=af,
         )
@@ -310,6 +311,7 @@ def write_most_common_split(output_dir: str):
     svs_n_modes.rename(
         columns={"num_modes": "consensus_num_modes"}, inplace=True
     )
+    svs_n_modes = svs_n_modes.drop(columns=["confidence"])
     df = df.merge(svs_n_modes, left_on="id", right_on="sv_id")
     df.loc[df["num_modes"] == 0, "num_modes"] = (
         1  # set num_modes = 1 where it is 0
@@ -350,7 +352,6 @@ def write_most_common_split(output_dir: str):
             row = row.drop(
                 [
                     "consensus_num_modes",
-                    "num_modes_2",
                     "sv_id",
                     "confidence",
                 ]

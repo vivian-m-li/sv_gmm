@@ -53,6 +53,7 @@ class EstimatedGMM:
     num_pruned: list[int]
     num_iterations: int
     split_confidence: float
+    merged: bool
 
 
 @dataclass
@@ -126,6 +127,7 @@ class ModeStat:
     sample_probabilities: dict[
         str, float
     ]  # probability of each sample belonging to this mode
+    read_types: dict[str, int]  # counts of read types supporting this mode
     num_pruned: int
     af: float
 
@@ -143,6 +145,7 @@ class SVInfoGMM:
     qual: str | None
     score: float
     confidence: float
+    merged: bool
     # filter: list[str]
     af: str | None
     # info: dict

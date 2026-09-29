@@ -800,8 +800,7 @@ def gmm_trial(
     if plot:
         plot_2d_coords_fig(
             evidence_by_mode,
-            None,
-            # plot_file,
+            plot_file,
             L=L,
             R=R,
             axis1="L",
