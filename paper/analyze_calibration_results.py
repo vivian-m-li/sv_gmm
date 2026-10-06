@@ -9,7 +9,7 @@ from src.model.split import split_sv
 from src.utils.model_helper import giggle_format
 from paper.data_processing.get_bam_files import get_bam_files
 
-FIJI_PATH = "vili4418@fiji.colorado.edu:/Users/vili4418/sv/sv_gmm"
+HPC_PATH = "vili4418@baffin.colorado.edu:/home/vili4418/sv/sv_gmm"
 RESULTS_DIR = "output/calibration/results"
 
 
@@ -213,9 +213,7 @@ def copy_result_files():
             subprocess.run(
                 [
                     "scp",
-                    os.path.join(
-                        FIJI_PATH, RESULTS_DIR, os.path.basename(file)
-                    ),
+                    os.path.join(HPC_PATH, RESULTS_DIR, os.path.basename(file)),
                     file,
                 ]
             )
@@ -231,7 +229,7 @@ def copy_result_files():
                 subprocess.run(
                     [
                         "scp",
-                        os.path.join(FIJI_PATH, dir_name, filename),
+                        os.path.join(HPC_PATH, dir_name, filename),
                         dir_name,
                     ]
                 )
@@ -313,7 +311,7 @@ def copy_viz_files():
         subprocess.run(
             [
                 "scp",
-                "vili4418@fiji.colorado.edu:/Users/vili4418/sv/sv_gmm/data/calibration/viz_subset.csv",
+                "vili4418@baffin.colorado.edu:/home/vili4418/sv/sv_gmm/data/calibration/viz_subset.csv",
                 viz_subset,
             ]
         )
@@ -336,7 +334,7 @@ def copy_viz_files():
             subprocess.run(
                 [
                     "scp",
-                    f"vili4418@fiji.colorado.edu:/Users/vili4418/sv/sv_gmm/output/calibration/plots/{sv_string}.png",
+                    f"vili4418@baffin.colorado.edu:/home/vili4418/sv/sv_gmm/output/calibration/plots/{sv_string}.png",
                     cluster_file,
                 ],
                 stdout=subprocess.DEVNULL,
@@ -353,7 +351,7 @@ def copy_viz_files():
                 [
                     "scp",
                     "-r",
-                    f"vili4418@fiji.colorado.edu:/Users/vili4418/sv/sv_gmm/data/long_reads/bam_files/{sv_id}",
+                    f"vili4418@baffin.colorado.edu:/home/vili4418/sv/sv_gmm/data/long_reads/bam_files/{sv_id}",
                     bam_file_dir,
                 ],
                 stdout=subprocess.DEVNULL,

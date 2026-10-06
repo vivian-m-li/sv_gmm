@@ -187,16 +187,16 @@ def samplot_viz(
 def samplot_viz_all_svs():
     """Use samplot to visualize each bam file for all SVs with 2+ modes. Make sure to activate the conda env for samplot to work."""
     filename = "data/long_reads/sv_bam_files.txt"
-    fiji_root = "vili4418@fiji.colorado.edu:/scratch/Users/vili4418/data/long_reads/bam_files/"
+    root = "vili4418@baffin.colorado.edu:/scratch/beegfs/home/vili4418/data/long_reads/bam_files/"
     lookup = get_sv_lookup("data/1kg")
     with open(filename, "r") as f:
         lines = f.readlines()
         for i, line in enumerate(lines):
             sv_id = line.strip("\n")
             print(f"Processing {sv_id}... ({i + 1}/{len(lines)})", end="\r")
-            dir = os.path.join(fiji_root, sv_id)
+            dir = os.path.join(root, sv_id)
 
-            # download bam files from fiji
+            # download bam files from baffin
             subprocess.run(
                 f"rsync -avz --progress {dir} data/long_reads/bam_files/",
                 shell=True,

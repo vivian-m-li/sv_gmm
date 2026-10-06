@@ -134,12 +134,7 @@ def load_synthetic_data_results(
         f"resultsn={sample_size}.csv",
     )
     split_df = pd.read_csv(split_file)
-    split_df = split_df[
-        split_df["gmm_model"].isin(
-            ["split"]
-            # ["split", "split_kmeans++", "split_random_repulsion"]
-        )
-    ]
+    split_df = split_df[split_df["gmm_model"].isin(["split"])]
     if not add_gatk_results:
         return split_df
 
@@ -370,13 +365,7 @@ def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
     df = load_synthetic_data_results(sample_size, path=path)
     df = df[df["svlen"] == svlen]
 
-    models = [
-        "split",
-        "gatk_MAX_CLIQUE",
-        "gatk_SINGLE_LINKAGE",
-        "split_kmeans++",
-        "split_random_repulsion",
-    ]
+    models = ["split", "gatk_MAX_CLIQUE", "gatk_SINGLE_LINKAGE"]
     colors = ["#bfdbf7", "#1f7a8c", "#022b3a", "orange", "pink"]
     markers = ["o", "s", "D", "^", "v"]
 
@@ -477,9 +466,11 @@ def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
 
         xlabel = "r1" if case == "D" else "r"
         fpr_ax.set_xlabel(f"Reciprocal Overlap ({xlabel})", fontsize=13)
-        fpr_ax.set_ylim(-0.05, 0.05)
-        fpr_ax.set_yticks([0.0])
-        fpr_ax.set_yticklabels(["0.0"])
+        max_fpr = max([max(fps) for fps in all_fps])
+        fpr_ax.set_ylim(-0.05, max_fpr + 0.05)
+        if max_fpr == 0:
+            fpr_ax.set_yticks([0.0])
+            fpr_ax.set_yticklabels(["0.0"])
 
         if case == "D":
             # set the tpr y axis to 0, 1.5
@@ -531,6 +522,7 @@ def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
         f"output/plots/synthetic_tests/n={sample_size}_len={svlen}{'_'if path else ''}{path}.pdf"
     )
     plt.show()
+    plt.close()
 
 
 def synthetic_data_additional_svs():
@@ -925,12 +917,12 @@ def plot_sv_short_long_reads(sv_id, sample_ids, skip_evidence_plot=False):
         return
 
     if not os.path.exists(f"long_reads/bam_files/{sv_id}"):
-        # copy files from fiji
+        # copy files from baffin
         subprocess.run(
             [
                 "scp",
                 "-r",
-                f"vili4418@fiji.colorado.edu:/Users/vili4418/sv/sv_gmm/long_reads/bam_files/{sv_id}",
+                f"vili4418@baffin.colorado.edu:/home/vili4418/sv/sv_gmm/long_reads/bam_files/{sv_id}",
                 "long_reads/bam_files",
             ],
             capture_output=True,
@@ -1692,7 +1684,6 @@ if __name__ == "__main__":
         for case in ["B", "C", "D"]:
             # parameter_sweep(case)
             parameter_sweep_r_less_than_08(case)
-        # synthetic_data_fig(50, 1600, "")
         for n_samples in [11, 25, 50, 100, 200, 400]:
             for svlen in [50, 100, 200, 400, 800, 1600, 10000]:
                 synthetic_data_fig(n_samples, svlen, "")

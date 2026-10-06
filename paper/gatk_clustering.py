@@ -15,12 +15,8 @@ from src.synthetic.generate_data import (
 from src.utils.config_loader import load_config
 from typing import Optional
 
-PLOIDY_TABLE = (
-    "/Users/vili4418/sv/sv_gmm/data/synthetic_data/generated_files/ploidy_table.tsv"
-)
-REFERENCE_FILE = (
-    "/Users/vili4418/sv/sv_gmm/data/synthetic_data/generated_files/reference.fasta"
-)
+PLOIDY_TABLE = "/home/vili4418/sv/sv_gmm/data/synthetic_data/generated_files/ploidy_table.tsv"
+REFERENCE_FILE = "/home/vili4418/sv/sv_gmm/data/synthetic_data/generated_files/reference.fasta"
 
 
 def process_gatk_output(filename: str):
@@ -96,7 +92,8 @@ def write_csv(
                 n_clusters, Ls, lengths = process_gatk_output(gatk_output_file)
             except FileNotFoundError:
                 print(
-                    f"File not found: {gatk_output_file}, case={case}, rs={rs}, svs={svs}, n_samples={n_samples}", flush=True
+                    f"File not found: {gatk_output_file}, case={case}, rs={rs}, svs={svs}, n_samples={n_samples}",
+                    flush=True,
                 )
                 continue
             if type(rs) is tuple:
@@ -131,12 +128,14 @@ def write_csv(
     df.to_csv(file, index=False)
 
 
-def gatk_cluster_reads(cfg, case, r, svs, weights, n_samples, gatk_alg, results):
+def gatk_cluster_reads(
+    cfg, case, r, svs, weights, n_samples, gatk_alg, results
+):
     """Generates synthetic short-read data and runs gatk's SVCluster method on it. Appends the results to the multiprocessing-managed list to be written to a CSV later. File I/O is done on scratch."""
     # generates synthetic data and writes to a vcf file
     run_id = uuid.uuid4()
     r_str = ",".join([str(x) for x in r]) if type(r) is tuple else str(r)
-    filename = f"/scratch/Users/vili4418/synthetic_data/data/{case}_r{r_str}_svlen{str(svs[0][1] - svs[0][0])}_n{n_samples}_{run_id}.vcf"
+    filename = f"/scratch/beegfs/home/vili4418/synthetic_data/data/{case}_r{r_str}_svlen{str(svs[0][1] - svs[0][0])}_n{n_samples}_{run_id}.vcf"
     generate_and_split_sample_reads(
         1,
         svs,
@@ -153,7 +152,7 @@ def gatk_cluster_reads(cfg, case, r, svs, weights, n_samples, gatk_alg, results)
 
     # run GATK's SVCluster on the generated vcf
     output_file = (
-        f"/scratch/Users/vili4418/synthetic_data/clustered/{run_id}.vcf"
+        f"/scratch/beegfs/home/vili4418/synthetic_data/clustered/{run_id}.vcf"
     )
     subprocess.run(  # noqa: F841
         ["bash", "paper/bash/gatk_svcluster.sh"]
@@ -170,12 +169,14 @@ def gatk_cluster_reads(cfg, case, r, svs, weights, n_samples, gatk_alg, results)
     results.append([case, r, svs, n_samples, weights, gatk_alg, output_file])
 
 
-def gatk_cluster_inner(cfg, case, r, svs, weights, n_samples, gatk_alg, results):
+def gatk_cluster_inner(
+    cfg, case, r, svs, weights, n_samples, gatk_alg, results
+):
     """Generates synthetic SVs and runs gatk's SVCluster method on it. Appends the results to the multiprocessing-managed list to be written to a CSV later. File I/O is done on scratch."""
     # generates synthetic data and writes to a vcf file
     run_id = uuid.uuid4()
     r_str = ",".join([str(x) for x in r]) if type(r) is tuple else str(r)
-    filename = f"/scratch/Users/vili4418/synthetic_data/data/{case}_r{r_str}_svlen{str(svs[0][1] - svs[0][0])}.vcf"
+    filename = f"/scratch/beegfs/home/vili4418/synthetic_data/data/{case}_r{r_str}_svlen{str(svs[0][1] - svs[0][0])}.vcf"
     generate_synthetic_sv_vcf(
         1,
         svs,
@@ -184,7 +185,7 @@ def gatk_cluster_inner(cfg, case, r, svs, weights, n_samples, gatk_alg, results)
 
     # run GATK's SVCluster on the generated vcf
     output_file = (
-        f"/scratch/Users/vili4418/synthetic_data/clustered/{run_id}.vcf"
+        f"/scratch/beegfs/home/vili4418/synthetic_data/clustered/{run_id}.vcf"
     )
     result = subprocess.run(  # noqa: F841
         ["bash", "paper/bash/gatk_svcluster.sh"]

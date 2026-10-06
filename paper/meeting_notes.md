@@ -6,7 +6,7 @@ Using stix to pull long reads for a region
 
 1. query stix for long reads, similar to how we're doing it for high-cov short reads with multiple shards (split by samples)
 
-- long read index is found in: `/scratch/Shares/layer/stix/indices/LR/GRCh38_STIX_indexes`
+- long read index is found in: `/scratch/beegfs/Shares/layer/stix/indices/LR/GRCh38_STIX_indexes`
 - example long reads query: stix -i 03.1.giggle_idx_00 -d 0.3.1.meta.ped.00.db -s 150 -t DEL -l 4:9473951-9473951 -r 4:9474534-9474534
 - for short reads, slop needs to be higher than insert size to reduce false negatives, and for long reads slop should be shorter (~150)
 - to give Vivian access to the stix directory: copy the directory to the stix/indices directory

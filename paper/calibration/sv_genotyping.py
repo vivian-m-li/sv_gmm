@@ -294,7 +294,7 @@ def main():
         build_sr_lr_overlap_set(
             sr_vcf=sr_vcf,
             lr_vcf=lr_vcf,
-            bedtools_path="/Users/vili4418/sv/bedtools/bin/bedtools",
+            bedtools_path="/home/vili4418/sv/bedtools/bin/bedtools",
             output_file=output_file,
         )
 

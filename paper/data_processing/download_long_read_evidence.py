@@ -18,8 +18,8 @@ from src.utils.helper import stix_output_to_df
 from src.utils.model_helper import giggle_format
 from src.utils.timeout import break_after
 
-SCRATCH_DIR = "/scratch/Shares/layer/1kg_lr_crams"
-STIX_DATA_DIR = "/Users/vili4418/sv/sv_gmm/data_dump/lr_stix_output/"
+SCRATCH_DIR = "/scratch/beegfs/Shares/layer/1kg_lr_crams"
+STIX_DATA_DIR = "/home/vili4418/sv/sv_gmm/data_dump/lr_stix_output/"
 
 
 def write_completed_sample(sample_id: str):
@@ -407,7 +407,7 @@ def download_long_read_evidence_wrapper(
     move_files: bool = True,
     redo_samples: bool = False,
 ):
-    """Download long read evidence (cram -> bam -> cigar string) for all samples and SVs in the lookup table. Moves evidence files between home directory and scratch to check for previous progress and speed up I/O on fiji."""
+    """Download long read evidence (cram -> bam -> cigar string) for all samples and SVs in the lookup table. Moves evidence files between home directory and scratch to check for previous progress and speed up I/O on baffin."""
 
     # only process SVs that have at least one long read sample, and only process samples that have short-read evidence
     # it would take too long to process all svs for all samples

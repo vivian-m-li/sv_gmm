@@ -27,9 +27,9 @@ if __name__ == "__main__":
             stix_file = query_stix(
                 query_region,
                 output_dir,
-                "/Users/vili4418/sv/stix/bin/stix",
-                "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
-                "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
+                "/home/vili4418/sv/stix/bin/stix",
+                "/scratch/beegfs/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
+                "/scratch/beegfs/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard",
                 8,
                 True,
             )

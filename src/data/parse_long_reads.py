@@ -14,7 +14,7 @@ from src.utils.config_loader import load_config
 from src.utils.helper import get_sv_lookup, get_most_common_split_df
 from src.utils.model_helper import reciprocal_overlap
 
-SCRATCH_DIR = "/scratch/Users/vili4418/"
+SCRATCH_DIR = "/scratch/beegfs/home/vili4418/"
 
 # ---------------------
 # Standalone functions
@@ -64,8 +64,8 @@ def remove_blank_lines_from_evidence():
 
 
 def write_samples_to_redo():
-    """Parse fiji output file to find samples that need to be redone."""
-    file_dir = "/Users/vili4418/sv/eofiles"
+    """Parse baffin output file to find samples that need to be redone."""
+    file_dir = "/home/vili4418/sv/eofiles"
     files = os.listdir(file_dir)
     samples_to_redo = defaultdict(list)
     for file in files:

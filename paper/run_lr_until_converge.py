@@ -21,7 +21,7 @@ from src.utils.write_sv_output import (
 )
 
 FILE_DIR = "long_reads/processed_svs_converge"
-SCRATCH_FILE_DIR = os.path.join("/scratch/Users/vili4418", FILE_DIR)
+SCRATCH_FILE_DIR = os.path.join("/scratch/beegfs/home/vili4418", FILE_DIR)
 OUTPUT_FILE_NAME = "sv_stats_converge.csv"
 
 

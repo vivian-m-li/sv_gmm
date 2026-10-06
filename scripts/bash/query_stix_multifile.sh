@@ -3,8 +3,8 @@ l=$1
 r=$2
 output_file=$3
 use_current_dir=$4
-STIX_DB="/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian"
-STIX_BUILD="/Users/vili4418/sv/stix/bin/stix"
+STIX_DB="/scratch/beegfs/Shares/layer/stix/indices/1kg_high_coverage_vivian"
+STIX_BUILD="/home/vili4418/sv/stix/bin/stix"
 
 CURRENT_DIR=$(pwd)
 cd "$STIX_DB"

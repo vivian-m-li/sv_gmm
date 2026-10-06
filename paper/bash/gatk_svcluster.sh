@@ -5,12 +5,12 @@ ploidy_table=$3
 reference_file=$4
 gatk_alg=$5
 
-GATK_BUILD="/Users/vili4418/sv/gatk-4.6.2.0/gatk"
+GATK_BUILD="/home/vili4418/sv/gatk-4.6.2.0/gatk"
 
 # write temporary ploidy table and reference file to avoid i/o issues
 run_id=$RANDOM
-ploidy_table_temp="/scratch/Users/vili4418/synthetic_data/ploidy_table_${run_id}.tsv"
-reference_file_temp="/scratch/Users/vili4418/synthetic_data/reference_${run_id}.fasta"
+ploidy_table_temp="/scratch/beegfs/home/vili4418/synthetic_data/ploidy_table_${run_id}.tsv"
+reference_file_temp="/scratch/beegfs/home/vili4418/synthetic_data/reference_${run_id}.fasta"
 
 cp $ploidy_table $ploidy_table_temp
 cp $reference_file $reference_file_temp

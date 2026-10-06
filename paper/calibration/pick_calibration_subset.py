@@ -9,7 +9,7 @@ from src.utils.model_helper import load_vcf, giggle_format
 
 """
 The purpose of this script is to pick a subset of structural variants (SVs) from a larger VCF file to be used for the calibration test.
-Example usage: python3 pick_calibration_subset.py --sv_lookup final-vcf.unphased.vcf.gz --bedtools_path /Users/vili4418/sv/bedtools/bin/bedtools -n 192
+Example usage: python3 pick_calibration_subset.py --sv_lookup final-vcf.unphased.vcf.gz --bedtools_path /home/vili4418/sv/bedtools/bin/bedtools -n 192
 """
 
 Q_VALS = [0.6, 0.7, 0.8, 0.9, 1.0]

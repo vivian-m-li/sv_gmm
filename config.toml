@@ -32,7 +32,7 @@
 input_dir = "data/1kg"
 output_dir = "output/results"
 stix_output_dir = "output/stix_output"
-intermediate_output_dir = "/scratch/Users/vili4418/processed_svs"
+intermediate_output_dir = "/scratch/beegfs/home/vili4418/processed_svs"
 local_intermediate_output_dir = "output/results/processed_svs"
 
 # use these paths when running calibrate_model.py on 1kg data
@@ -51,7 +51,7 @@ local_intermediate_output_dir = "output/results/processed_svs"
 # output_dir = "output/synthetic_tests"
 
 # use these paths when running get_insert_sizes
-# intermediate_output_dir = "/scratch/Users/vili4418/insert_size_files"
+# intermediate_output_dir = "/scratch/beegfs/home/vili4418/insert_size_files"
 
 # ------------------------------------------------------------------------------
 # [input_files] — Files expected inside input_dir
@@ -91,10 +91,10 @@ reference_genome_file = "hg38.fa"
 bin = "/Users/vili4418/sv/stix/bin/stix"
 
 # Absolute path to the STIX index file
-index = "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard"
+index = "/scratch/beegfs/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard"
 
 # Absolute path to the STIX database.
-database = "/scratch/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard"
+database = "/scratch/beegfs/Shares/layer/stix/indices/1kg_high_coverage_vivian/shard"
 
 # Number of shards the index and database are split into.
 # Set to 1 if your index is a single file.
