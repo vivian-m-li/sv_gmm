@@ -187,7 +187,7 @@ def samplot_viz(
 def samplot_viz_all_svs():
     """Use samplot to visualize each bam file for all SVs with 2+ modes. Make sure to activate the conda env for samplot to work."""
     filename = "data/long_reads/sv_bam_files.txt"
-    root = "vili4418@baffin.colorado.edu:/scratch/beegfs/home/vili4418/data/long_reads/bam_files/"
+    root = "vili4418@baffin.colorado.edu:/scratch/beegfs/Users/vili4418/data/long_reads/bam_files/"
     lookup = get_sv_lookup("data/1kg")
     with open(filename, "r") as f:
         lines = f.readlines()

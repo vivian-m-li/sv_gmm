@@ -244,8 +244,8 @@ def split_synthetic_svs(
             for weight in weights:
                 for pct_split_reads in np.arange(0, 1.01, 0.1):
                     pct_split_reads = round(pct_split_reads, 2)
-                    # run each case 10 times and average at the end
-                    for _ in range(10):
+                    # run each case 50 times and average at the end
+                    for _ in range(50):
                         args.append(
                             (
                                 case,

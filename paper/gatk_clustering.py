@@ -135,7 +135,7 @@ def gatk_cluster_reads(
     # generates synthetic data and writes to a vcf file
     run_id = uuid.uuid4()
     r_str = ",".join([str(x) for x in r]) if type(r) is tuple else str(r)
-    filename = f"/scratch/beegfs/home/vili4418/synthetic_data/data/{case}_r{r_str}_svlen{str(svs[0][1] - svs[0][0])}_n{n_samples}_{run_id}.vcf"
+    filename = f"/scratch/beegfs/Users/vili4418/synthetic_data/data/{case}_r{r_str}_svlen{str(svs[0][1] - svs[0][0])}_n{n_samples}_{run_id}.vcf"
     generate_and_split_sample_reads(
         1,
         svs,
@@ -152,7 +152,7 @@ def gatk_cluster_reads(
 
     # run GATK's SVCluster on the generated vcf
     output_file = (
-        f"/scratch/beegfs/home/vili4418/synthetic_data/clustered/{run_id}.vcf"
+        f"/scratch/beegfs/Users/vili4418/synthetic_data/clustered/{run_id}.vcf"
     )
     subprocess.run(  # noqa: F841
         ["bash", "paper/bash/gatk_svcluster.sh"]
@@ -176,7 +176,7 @@ def gatk_cluster_inner(
     # generates synthetic data and writes to a vcf file
     run_id = uuid.uuid4()
     r_str = ",".join([str(x) for x in r]) if type(r) is tuple else str(r)
-    filename = f"/scratch/beegfs/home/vili4418/synthetic_data/data/{case}_r{r_str}_svlen{str(svs[0][1] - svs[0][0])}.vcf"
+    filename = f"/scratch/beegfs/Users/vili4418/synthetic_data/data/{case}_r{r_str}_svlen{str(svs[0][1] - svs[0][0])}.vcf"
     generate_synthetic_sv_vcf(
         1,
         svs,
@@ -185,7 +185,7 @@ def gatk_cluster_inner(
 
     # run GATK's SVCluster on the generated vcf
     output_file = (
-        f"/scratch/beegfs/home/vili4418/synthetic_data/clustered/{run_id}.vcf"
+        f"/scratch/beegfs/Users/vili4418/synthetic_data/clustered/{run_id}.vcf"
     )
     result = subprocess.run(  # noqa: F841
         ["bash", "paper/bash/gatk_svcluster.sh"]
