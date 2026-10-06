@@ -167,8 +167,9 @@ def run_dirichlet(
     init = kwargs.get("init", "kmeans++")
     display_output = kwargs.get("plot", False)
 
-    alpha = np.array([1, 1, 1])  # initialize alpha values
-    counts = np.array([0, 0, 0])  # count of num_modes
+    max_n_clusters = kwargs.get("max_n_clusters", 3)
+    alpha = np.array([1] * max_n_clusters)  # initialize alpha values
+    counts = np.array([0] * max_n_clusters)  # count of num_modes
     alphas = [alpha]  # alphas over time
     posterior_distributions = []  # distributions over time
     gmm_results = []  # keep track of output gmms

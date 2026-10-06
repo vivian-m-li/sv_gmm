@@ -349,13 +349,7 @@ def write_most_common_split(output_dir: str):
             most_common = samples.most_common(1)[0][0]
             row = rows.loc[samples_by_row[most_common]].copy()
             row["num_gmm_runs"] = num_gmm_runs
-            row = row.drop(
-                [
-                    "consensus_num_modes",
-                    "sv_id",
-                    "confidence",
-                ]
-            )
+            row = row.drop(["consensus_num_modes", "sv_id"])
             csv_writer.writerow(row.to_dict())
 
 

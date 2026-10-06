@@ -116,6 +116,7 @@ def run_dirichlet_inner(
                 "L": row["start"],
                 "R": row["stop"],
                 "init": "random",
+                "max_n_clusters": cfg["model"]["max_n_clusters"],
                 "repulsion": True,
                 "r_threshold": r,
                 "repulsion_stepsize": epsilon,

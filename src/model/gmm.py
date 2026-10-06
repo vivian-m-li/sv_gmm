@@ -828,6 +828,7 @@ def gmm(
     L: int,
     R: int,
     init: str = "kmeans++",
+    max_n_clusters: int = 3,
     repulsion: bool = False,
     r_threshold: float = 0.8,
     repulsion_stepsize: float = 10.0,
@@ -865,6 +866,7 @@ def gmm(
             num_pruned=[0],
             num_iterations=0,
             split_confidence=0.0,
+            merged=False,
         )
 
     if len(x) <= 10:  # small number of samples detected
@@ -877,11 +879,14 @@ def gmm(
             "score": 999999,
             "params": opt_params,
             "num_iterations": num_iterations,
+            "merged": False,
         }
     else:
         model_results = {}
         mode_options = (
-            [force_n_modes] if force_n_modes is not None else range(1, 4)
+            [force_n_modes]
+            if force_n_modes is not None
+            else range(1, max_n_clusters + 1)
         )
         for num_modes in mode_options:
             try:
@@ -920,6 +925,16 @@ def gmm(
                     f=model_comparison_func,
                 )
 
+                # num_modes and num_sv_post_merge may differ
+                model_results[num_modes] = {
+                    "valid": valid,
+                    "num_sv": num_sv_post_merge,
+                    "score": model_score,
+                    "params": params,
+                    "num_iterations": num_iterations,
+                    "merged": num_modes > num_sv_post_merge,
+                }
+
             except TooFewUniqueValuesError:
                 model_results[num_modes] = {
                     "valid": False,
@@ -929,16 +944,6 @@ def gmm(
                     "num_iterations": 0,
                     "merged": False,
                 }
-
-            # num_modes and num_sv_post_merge may differ
-            model_results[num_modes] = {
-                "valid": valid,
-                "num_sv": num_sv_post_merge,
-                "score": model_score,
-                "params": params,
-                "num_iterations": num_iterations,
-                "merged": num_modes > num_sv_post_merge,
-            }
 
         best_model = select_model(x, model_results)
 

@@ -155,6 +155,12 @@ def main():
         help="Initialization method for GMM clustering",
     )
     parser.add_argument(
+        "--max_n_clusters",
+        type=int,
+        default=None,
+        help="Maximum number of clusters to fit during GMM clustering",
+    )
+    parser.add_argument(
         "--repulsion",
         type=bool,
         nargs="?",
@@ -218,6 +224,7 @@ def main():
     stix_database = _get(args.stix_database, "stix", "database", None) or None
     num_stix_shards = _get(args.num_stix_shards, "stix", "num_shards", 1)
     init = _get(args.init, "model", "init", "kmeans++")
+    max_n_clusters = _get(args.max_n_clusters, "model", "max_n_clusters", 4)
     repulsion = _get(args.repulsion, "model", "repulsion", False)
     r_threshold = _get(args.r_threshold, "model", "r_threshold", 0.8)
     repulsion_stepsize = _get(
@@ -243,6 +250,7 @@ def main():
         insert_size_file=insert_size_file,
         read_overlap=read_overlap,
         init=init,
+        max_n_clusters=max_n_clusters,
         repulsion=repulsion,
         r_threshold=r_threshold,
         repulsion_stepsize=repulsion_stepsize,

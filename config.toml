@@ -123,6 +123,9 @@ default_insert_size = 450
 # Initialization method for GMM clustering. Supported algorithms: dp_k-means++, k-means++ or random.
 init = "kmeans++"
 
+# Maximum number of clusters to fit.
+max_n_clusters = 3
+
 # Whether to apply cluster repulsion to GMM clustering
 repulsion = "False"
 
