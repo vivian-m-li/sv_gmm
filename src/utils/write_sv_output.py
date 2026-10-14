@@ -320,8 +320,11 @@ def write_most_common_split(output_dir: str):
     with open(
         os.path.join(output_dir, "most_common_split.csv"), mode="w", newline=""
     ) as out:
-        fieldnames = [field.name for field in fields(SVInfoGMM)]
-        fieldnames.append("num_gmm_runs")
+        fieldnames = [field.name for field in fields(SVInfoGMM)] + [
+            "n_split_samples",
+            "n_paired_samples",
+            "num_gmm_runs",
+        ]
         csv_writer = csv.DictWriter(out, fieldnames=fieldnames)
         csv_writer.writeheader()
         for sv_id in sv_ids:
@@ -348,7 +351,16 @@ def write_most_common_split(output_dir: str):
 
             most_common = samples.most_common(1)[0][0]
             row = rows.loc[samples_by_row[most_common]].copy()
+
+            modes = ast.literal_eval(row["modes"])
+            row["n_split_samples"] = sum(
+                [mode["read_types"].get("split", 0) for mode in modes]
+            )
+            row["n_paired_samples"] = sum(
+                [mode["read_types"].get("paired", 0) for mode in modes]
+            )
             row["num_gmm_runs"] = num_gmm_runs
+
             row = row.drop(["consensus_num_modes", "sv_id"])
             csv_writer.writerow(row.to_dict())
 

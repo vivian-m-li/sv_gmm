@@ -60,4 +60,8 @@ def load_config(path: str | None = None) -> dict:
             "intermediate_output_dir"
         ]
 
+    for key in ["sample_id_file", "insert_size_file", "ancestry_file"]:
+        if key in cfg["input_files"] and cfg["input_files"][key] == "":
+            cfg["input_files"][key] = None
+
     return cfg

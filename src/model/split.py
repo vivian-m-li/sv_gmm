@@ -67,7 +67,8 @@ def split_sv(
         raise FileNotFoundError(f"SV lookup file {sv_lookup_file} not found.")
 
     # write input files that will be used later on during querying
-    _, insert_size_lookup = process_input_files(
+    _, _, insert_size_lookup = process_input_files(
+        {"input_files": {}},
         input_dir,
         sv_lookup_file,
         sample_id_file,
@@ -133,6 +134,9 @@ def split_sv(
 
     # remove samples queried by STIX but missing in the vcf/csv
     # in 1KG, this happens because the extended high coverage dataset includes samples that did not appear in the original study
+    if sample_id_file is None:
+        # this file was created in process_input_files() if it was not provided by the user
+        sample_id_file = "sample_ids.txt"
     sample_ids = get_sample_ids(os.path.join(input_dir, sample_id_file))
     reads = reads[reads["sample_id"].isin(sample_ids)]
 

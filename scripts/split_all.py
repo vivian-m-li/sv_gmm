@@ -214,32 +214,25 @@ def main(config_path: str = "config.toml"):
         "local_intermediate_output_dir"
     ]
 
-    sample_id_file = cfg["input_files"]["sample_id_file"]
-    sample_ids = get_sample_ids(os.path.join(input_dir, sample_id_file))
-
     # write input files that will be used later on during querying
-    _, insert_size_lookup = process_input_files(
+    cfg, _, insert_size_lookup = process_input_files(
+        cfg,
         input_dir,
         cfg["input_files"]["sv_lookup_file"],
-        sample_id_file,
+        cfg["input_files"]["sample_id_file"],
         cfg["input_files"].get("insert_size_file"),
         cfg["model"].get("default_insert_size"),
     )
-    sv_lookup_file = cfg["input_files"]["sv_lookup_file"]
-    if sv_lookup_file.endswith(".vcf"):
-        cfg["input_files"]["sv_lookup_file"] = (
-            sv_lookup_file.strip(".vcf") + ".csv"
-        )
-    elif sv_lookup_file.endswith(".vcf.gz"):
-        cfg["input_files"]["sv_lookup_file"] = (
-            sv_lookup_file.strip(".vcf.gz") + ".csv"
-        )
 
     os.makedirs(intermediate_output_dir, exist_ok=True)
     os.makedirs(local_intermediate_output_dir, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
 
     start = time.time()
+
+    sample_ids = get_sample_ids(
+        os.path.join(input_dir, cfg["input_files"]["sample_id_file"])
+    )
 
     # this is the main function that splits each SV
     split_all(cfg, sample_ids, insert_size_lookup)
@@ -261,12 +254,16 @@ def main(config_path: str = "config.toml"):
         os.path.join(input_dir, cfg["input_files"]["sv_lookup_file"]),
         low_memory=False,
     )
+
+    ancestry_file = cfg["input_files"].get("ancestry_file")
     write_post_processed_files(
         output_dir,
         sample_ids,
         sv_lookup,
-        ancestry_file=os.path.join(
-            input_dir, cfg["input_files"].get("ancestry_file")
+        ancestry_file=(
+            None
+            if ancestry_file is None
+            else os.path.join(input_dir, ancestry_file)
         ),
     )
 

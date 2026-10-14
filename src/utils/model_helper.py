@@ -140,14 +140,14 @@ def write_svs_by_chr(dir: str, df: pd.DataFrame, chr: str | None = None):
 
 
 def write_default_insert_sizes(
-    dir: str, sample_ids: str, default_size: int = 450
+    dir: str, sample_ids: str, default_size: int = 450, default_sd: int = 100
 ):
     """Writes a default insert size file with the specified default size for each sample."""
     filename = os.path.join(dir, "insert_sizes.csv")
     with open(filename, "w") as f:
-        f.write("sample_id,mean_insert_size\n")
+        f.write("sample_id,mean_insert_size,insert_size_sd\n")
         for sample_id in sample_ids:
-            f.write(f"{sample_id},{default_size}\n")
+            f.write(f"{sample_id},{default_size},{default_sd}\n")
     return filename
 
 
@@ -158,7 +158,6 @@ def get_insert_size_lookup(
     sample_ids: set[str] | None = None,
 ) -> dict[str, InsertSizeDistribution]:
     """Returns a dictionary mapping sample IDs to their mean insert sizes from sequencing high-coverage short-reads."""
-    insert_size_file = os.path.join(dir, filename)
     if filename is None:
         if default_insert_size is None:
             warnings.warn(
@@ -173,6 +172,8 @@ def get_insert_size_lookup(
         insert_size_file = write_default_insert_sizes(
             dir, sample_ids, default_insert_size
         )
+    else:
+        insert_size_file = os.path.join(dir, filename)
 
     insert_size_df = pd.read_csv(
         insert_size_file,
@@ -191,6 +192,7 @@ def get_insert_size_lookup(
 
 
 def process_input_files(
+    cfg: dict,
     dir: str,
     sv_lookup_file: str,
     sample_id_file: str | None,
@@ -198,11 +200,20 @@ def process_input_files(
     default_insert_size: int | None,
 ) -> tuple[pd.DataFrame, dict]:
     """Processes input files for more efficient lookup during querying."""
-
     df = None
+    cfg = cfg.copy()
     if sv_lookup_file.endswith(".vcf") or sv_lookup_file.endswith(".vcf.gz"):
         df, _ = load_vcf(dir, sv_lookup_file)
         write_svs_by_chr(dir, df)
+
+        if sv_lookup_file.endswith(".vcf"):
+            cfg["input_files"]["sv_lookup_file"] = (
+                sv_lookup_file.strip(".vcf") + ".csv"
+            )
+        elif sv_lookup_file.endswith(".vcf.gz"):
+            cfg["input_files"]["sv_lookup_file"] = (
+                sv_lookup_file.strip(".vcf.gz") + ".csv"
+            )
     elif not os.path.isdir(os.path.join(dir, "svs_by_chr")):
         df = pd.read_csv(os.path.join(dir, sv_lookup_file))
         write_svs_by_chr(dir, df)
@@ -211,6 +222,7 @@ def process_input_files(
         if df is None:
             df = pd.read_csv(os.path.join(dir, sv_lookup_file))
         sample_ids = write_sample_ids_file(dir, "sample_ids.txt", df)
+        cfg["input_files"]["sample_id_file"] = "sample_ids.txt"
     else:
         sample_ids = get_sample_ids(os.path.join(dir, sample_id_file))
 
@@ -222,8 +234,10 @@ def process_input_files(
     insert_size_lookup = get_insert_size_lookup(
         dir, insert_size_file, default_insert_size, sample_ids
     )
+    if insert_size_file is None:
+        cfg["input_files"]["insert_size_file"] = "insert_sizes.csv"
 
-    return df, insert_size_lookup
+    return cfg, df, insert_size_lookup
 
 
 def giggle_format(chromosome: str, position: int):
