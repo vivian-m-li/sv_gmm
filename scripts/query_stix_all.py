@@ -125,10 +125,6 @@ def query_stix_all(cfg: dict, sv_lookup_file: str):
         p = multiprocessing.Pool(multiprocessing.cpu_count())
         args = []
         for _, row in df.iterrows():
-            # skip rows with too few samples
-            # this column may be unreliable so for now, we will query all SVs
-            # if row["num_samples"] <= 10:
-            #     continue
             args.append((cfg, row.to_dict()))
 
         print(f"Querying stix for {len(args)} SVs...")

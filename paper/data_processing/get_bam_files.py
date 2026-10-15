@@ -20,7 +20,10 @@ def get_bam_files_sv(
     filter_ref_samples: bool = False,
     cfg: dict | None = None,
 ):
-    """Standalone function to get BAM files for all samples in a given SV or region of the genome."""
+    """
+    Standalone function to get BAM files for all samples in a given SV or region of the genome.
+    Run on baffin since that's where the samtools build is located.
+    """
     assert sv_id is not None or region is not None
 
     if cfg is None:
@@ -65,7 +68,7 @@ def get_bam_files_sv(
         subprocess.run(
             ["bash", "src/data/bash/read_cram_file.sh"]
             + [
-                row["file"],
+                row["cram_file"],
                 region,
                 output_file,
                 cfg["samtools"]["bin"],
@@ -88,9 +91,8 @@ def get_bam_files(sv_id: str, cfg: dict):
     df = df.merge(long_read_samples, on="sample_id")
 
     # get bam files
-    file_dir = f"data/long_reads/bam_files/{sv_id}"
-    if not os.path.exists(file_dir):
-        os.mkdir(file_dir)
+    file_dir = f"output/bam_files/{sv_id}"
+    os.makedirs(file_dir, exist_ok=True)
     chr, start, stop = get_sv_chr(sv_id, "data/1kg")
     region = f"chr{chr}:{start}-{stop}"
     for _, row in df.iterrows():
@@ -98,7 +100,7 @@ def get_bam_files(sv_id: str, cfg: dict):
         subprocess.run(
             ["bash", "src/data/bash/read_cram_file.sh"]
             + [
-                row["file"],
+                row["cram_file"],
                 region,
                 output_file,
                 cfg["samtools"]["bin"],
@@ -116,9 +118,13 @@ def get_all_bam_files():
     """Get BAM files for all samples/SV regions for SVs with 2+ modes."""
     cfg = load_config()
 
-    df = pd.read_csv("1kg/svs_n_modes.csv")
-    df = df[df["num_modes"] > 1]
+    df = pd.read_csv("output/results/svs_n_modes.csv")
+    anc = pd.read_csv("output/results/ancestry_dissimilarity.csv")
+    anc = anc.rename(columns={"id": "sv_id"})
+    df = df.merge(anc, on="sv_id", how="right")
+    df = df[(df["num_modes"] == 3) & (df["dissimilarity"] > 0.5)]
     sv_ids = df["sv_id"].unique()
+
     with multiprocessing.Manager():
         # when using http, limit to 4 processes at once
         p = multiprocessing.Pool(4)
@@ -144,6 +150,9 @@ def samplot_viz(
     lookup: pd.DataFrame | None = None,
     sample_ids: list | None = None,
 ) -> None:
+    """
+    Use samplot to visualize each bam file for a given SV. Make sure to activate the conda env for samplot to work.
+    """
     if lookup is None:
         cfg = load_config()
         lookup = get_sv_lookup(cfg["paths"]["input_dir"])
@@ -165,7 +174,7 @@ def samplot_viz(
     else:
         bam_files_dir = input_dir
 
-    subprocess.run(
+    result = subprocess.run(
         ["bash", "src/utils/bash/samplot_viz.sh"]
         + [  # noqa: W503
             sv_id,
@@ -178,6 +187,7 @@ def samplot_viz(
         capture_output=True,
         text=True,
     )
+    print(result.stdout, result.stderr)
     print("Samplot file saved to", os.path.join(out_dir, f"{sv_id}.png"))
 
     if sample_ids is not None:
@@ -187,7 +197,7 @@ def samplot_viz(
 def samplot_viz_all_svs():
     """Use samplot to visualize each bam file for all SVs with 2+ modes. Make sure to activate the conda env for samplot to work."""
     filename = "data/long_reads/sv_bam_files.txt"
-    root = "vili4418@baffin.colorado.edu:/scratch/beegfs/Users/vili4418/data/long_reads/bam_files/"
+    root = "vili4418@baffin.colorado.edu:/scratch/beegfs/Users/vili4418/output/bam_files/"
     lookup = get_sv_lookup("data/1kg")
     with open(filename, "r") as f:
         lines = f.readlines()
@@ -198,31 +208,32 @@ def samplot_viz_all_svs():
 
             # download bam files from baffin
             subprocess.run(
-                f"rsync -avz --progress {dir} data/long_reads/bam_files/",
+                f"rsync -avz --progress {dir} output/bam_files/",
                 shell=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            if not os.path.exists(f"data/long_reads/bam_files/{sv_id}"):
+            if not os.path.exists(f"output/bam_files/{sv_id}"):
                 print(f"skipping... {sv_id} not found")
                 continue
 
             # use samplot to visualize each bam file
             samplot_viz(
                 sv_id=sv_id,
-                bam_files_dir=os.path.join("data/long_reads/bam_files", sv_id),
-                out_dir="data/long_reads/samplot_viz",
+                bam_files_dir=os.path.join("output/bam_files", sv_id),
+                out_dir="output/samplot_viz",
                 lookup=lookup,
             )
 
             # remove the downloaded bam files to save space
             subprocess.run(
-                f"rm -r data/long_reads/bam_files/{sv_id}",
+                f"rm -r output/bam_files/{sv_id}",
                 shell=True,
             )
 
 
 if __name__ == "__main__":
+    # run this function on baffin
     get_bam_files_sv(
         sv_id="HGSV_245267",
         sample_sv_lookup_path="data/long_reads/sample_sv_lookup.csv",
@@ -230,8 +241,11 @@ if __name__ == "__main__":
         out_dir="output/bam_files",
         filter_ref_samples=True,
     )
+
+    # run this function locally after copying the bam files from baffin to local machine
     samplot_viz(
-        sv_id="HGSV_245267",
-        input_dir="output/high_cov_bam_files/HGSV_245267",
-        out_dir="output/samplot_viz",
+        sv_id="HGSV_24215",
+        input_dir="output/bam_files/HGSV_24215",
+        out_dir="output/plots/samplot_viz",
+        sample_ids=["HG03258", "HG01048", "HG01851"],
     )
