@@ -5,15 +5,15 @@ import random
 import re
 import subprocess
 
+import matplotlib.cm as cm
 from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize
+from matplotlib.colors import Normalize, ListedColormap
 import matplotlib.gridspec as gridspec
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 from matplotlib.patches import Ellipse, Rectangle
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-from matplotlib.ticker import FixedLocator
 import numpy as np
 import pandas as pd
 import pysam
@@ -42,6 +42,9 @@ from src.utils.model_helper import (
     calc_af,
     calculate_posteriors_from_trials,
     calculate_ci,
+    reciprocal_overlap,
+    get_reference_samples,
+    get_insert_size_lookup,
 )
 from src.utils.viz import plot_2d_coords, plot_single_sv
 
@@ -354,9 +357,9 @@ def parameter_sweep_r_less_than_08(case: str = "B", path: str = ""):
 
     plt.tight_layout(w_pad=0)
     plt.savefig(
-        f"output/plots/synthetic_tests/parameter_sweep_r_less_than_08_case{case}{'_'if path else ''}{path}.pdf"
+        f"output/plots/synthetic_tests/parameter_sweep/case{case}{'_'if path else ''}{path}.pdf"
     )
-    plt.show()
+    plt.close()
 
 
 def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
@@ -365,8 +368,13 @@ def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
     df = load_synthetic_data_results(sample_size, path=path)
     df = df[df["svlen"] == svlen]
 
-    models = ["split", "gatk_MAX_CLIQUE", "gatk_SINGLE_LINKAGE"]
-    colors = ["#bfdbf7", "#1f7a8c", "#022b3a", "orange", "pink"]
+    models = [
+        "gatk_MAX_CLIQUE",
+        "gatk_SINGLE_LINKAGE",
+        "split",
+    ]
+    # colors = ["#bfdbf7", "#1f7a8c", "#022b3a", "orange", "pink"]
+    colors = ["#ffbf00", "#ffe69f", "#022b3a"]
     markers = ["o", "s", "D", "^", "v"]
 
     svs = [
@@ -519,9 +527,8 @@ def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
         hspace=0.37,
     )
     plt.savefig(
-        f"output/plots/synthetic_tests/n={sample_size}_len={svlen}{'_'if path else ''}{path}.pdf"
+        f"output/plots/synthetic_tests/tpr_fpr/n={sample_size}_len={svlen}{'_'if path else ''}{path}.pdf"
     )
-    plt.show()
     plt.close()
 
 
@@ -603,7 +610,7 @@ def synthetic_data_read_types(
 
     values = sorted(values)
     df = df[df["case"] == case]
-    df = df[df["r"] < 0.8]  # TODO: temp measure
+    df = df[df["r"] < 0.8]  # TODO: temporary measure
 
     for value in values:
         subset = df[df[col] == value]
@@ -635,7 +642,10 @@ def synthetic_data_read_types(
         fontsize=14,
     )
     plt.tight_layout()
-    plt.show()
+    plt.savefig(
+        f"output/plots/synthetic_tests/read_types/case{case}_{'num_samples' if col == 'svlen' else 'svlen'}={num_samples if col == 'svlen' else svlen}.pdf"
+    )
+    plt.close()
 
 
 def methods_raw_reads(ax, svs, reads):
@@ -891,51 +901,65 @@ def methods_figure_viz(svs, vcf_file: str):
         plt.show()
 
 
-def plot_sv_short_long_reads(sv_id, sample_ids, skip_evidence_plot=False):
+def plot_sv_short_long_reads(
+    sv_id: str, sample_ids: list[str], skip_evidence_plot: bool = False
+):
     chr, start, stop = get_sv_chr(sv_id)
 
     if not skip_evidence_plot:
-        reads = split_sv(sv_id=sv_id, input_dir="1kg", run_split=False)
-        gmm_result, evidence_by_mode = gmm_trial(
+        stix_file = f"output/stix_output/{chr}:{start}_{chr}:{stop}.txt"
+        reads = stix_output_to_df(stix_file)
+        ref_samples = get_reference_samples(reads, chr, start, stop, "data/1kg")
+        reads = reads[~reads["sample_id"].isin(ref_samples)]
+
+        _, evidence_by_mode = gmm_trial(
             reads,
             chr=chr,
             L=start,
             R=stop,
+            model_comparison_func="bic",
+            stem="data/1kg",
+            insert_size_lookup=get_insert_size_lookup(
+                "data/1kg", "insert_sizes.csv"
+            ),
             plot=False,
         )
         plot_single_sv(
             evidence_by_mode,
+            sv_id=sv_id,
             L=start,
             R=stop,
             axis1="L",
-            axis2="Length",
+            axis2="R",
             size_by="",
             add_right_padding=True,
         )
 
+    exit()
+
     if len(sample_ids) == 0:
         return
 
-    if not os.path.exists(f"long_reads/bam_files/{sv_id}"):
+    if not os.path.exists(f"output/bam_files/{sv_id}"):
         # copy files from baffin
         subprocess.run(
             [
                 "scp",
                 "-r",
-                f"vili4418@baffin.colorado.edu:/home/vili4418/sv/sv_gmm/long_reads/bam_files/{sv_id}",
-                "long_reads/bam_files",
+                f"vili4418@baffin.colorado.edu:/home/vili4418/sv/sv_gmm/output/bam_files/{sv_id}",
+                "output/bam_files",
             ],
             capture_output=True,
             text=True,
         )
 
-    os.mkdir(f"long_reads/bam_files_subset/{sv_id}")
+    os.makedirs(f"output/bam_files_subset/{sv_id}", exist_ok=True)
     for sample_id in sample_ids:
         subprocess.run(
             [
                 "cp",
-                f"long_reads/bam_files/{sv_id}/{sample_id}.bam",
-                f"long_reads/bam_files_subset/{sv_id}/{sample_id}.bam",
+                f"output/bam_files/{sv_id}/{sample_id}.bam",
+                f"output/bam_files_subset/{sv_id}/{sample_id}.bam",
             ],
             capture_output=True,
             text=True,
@@ -943,8 +967,8 @@ def plot_sv_short_long_reads(sv_id, sample_ids, skip_evidence_plot=False):
         subprocess.run(
             [
                 "cp",
-                f"long_reads/bam_files/{sv_id}/{sample_id}.bam.bai",
-                f"long_reads/bam_files_subset/{sv_id}/{sample_id}.bam.bai",
+                f"output/bam_files/{sv_id}/{sample_id}.bam.bai",
+                f"output/bam_files_subset/{sv_id}/{sample_id}.bam.bai",
             ],
             capture_output=True,
             text=True,
@@ -952,14 +976,14 @@ def plot_sv_short_long_reads(sv_id, sample_ids, skip_evidence_plot=False):
 
     # the samplot image is generated separately and needs to be added in post-processing
     subprocess.run(
-        ["bash", "bash/samplot_paper_viz.sh"]
+        ["bash", "paper/bash/samplot_paper_viz.sh"]
         + [sv_id, str(chr), str(start), str(stop)],
         capture_output=True,
         text=True,
     )
 
     subprocess.run(
-        ["rm", "-r", f"long_reads/bam_files_subset/{sv_id}"],
+        ["rm", "-r", f"output/bam_files_subset/{sv_id}"],
         capture_output=True,
         text=True,
     )
@@ -1020,6 +1044,8 @@ def get_all_svs_df(path: str = "") -> pd.DataFrame:
             "svlen",
             "num_samples_run",
             "modes",
+            "n_split_samples",
+            "n_paired_samples",
         ]
     ]
     df = pd.read_csv(os.path.join(filepath, "svs_n_modes.csv"))
@@ -1140,76 +1166,130 @@ def plot_sv_breakdown(path: str = ""):
     plt.show()
 
 
-def plot_af_delta_histogram():
-    """Figure 5 - Histogram of allele frequency changes after splitting SVs."""
-    sv_df = get_most_common_split_df()
-    sv_df = sv_df[sv_df["num_samples"] > 10]
-    original_afs = sv_df[sv_df["num_modes"] == 1]["af"].values
-    sv_df = sv_df[sv_df["num_modes"].isin([2, 3])]
-    original_afs_split = sv_df["af"].values
+def plot_sv_breakdown_read_types(path: str = ""):
+    """Figure 4 - horizontal bar charts of the breakdown of SVs by number of modes. Updated to show read types used to support each SV."""
+    df = get_all_svs_df(path)
 
-    # calculate delta ratios
-    delta_ratios = []
+    svs_split_reads = df[
+        (df["n_split_samples"] > 0) & (df["n_paired_samples"] == 0)
+    ]
+    svs_paired_reads = df[
+        (df["n_split_samples"] == 0) & (df["n_paired_samples"] > 0)
+    ]
+    svs_both_reads = df[
+        (df["n_split_samples"] > 0) & (df["n_paired_samples"] > 0)
+    ]
+
+    n_svs = [
+        df_subset.shape[0]
+        for df_subset in [
+            svs_both_reads,
+            svs_paired_reads,
+            svs_split_reads,
+        ]
+    ]
+    categories = [
+        "Both Split and Paired Reads",
+        "Paired Reads Only",
+        "Split Reads Only",
+    ]
+
+    # Plot left figure: horizontal bar chart of the read types used per SV
+    # read types used - paired end reads only, split reads only, both
+    fig, axs = plt.subplots(
+        1, 2, figsize=(12, 3), gridspec_kw={"width_ratios": [1, 2]}
+    )
+    ax1 = axs[0]
+    ax1.barh(categories, n_svs, color="#274c77")
+    ax1.set_xlim(0, max(n_svs) + 15000)
+
+    n_svs_per_mode = [
+        df[df["num_modes"] == n_modes].shape[0] for n_modes in range(1, 4)
+    ]
+    mode_labels = ["1", "2", "3"]
+
+    # Plot right figure: horizontal bar chart of the number of SVs by number of modes
+    ax2 = axs[1]
+    ax2.barh(mode_labels, n_svs_per_mode, color="#274c77")
+    fig.text(0.3, 0.02, "Number of SVs per Category", fontsize=14)
+    plt.tight_layout()
+    plt.subplots_adjust(left=0.11, bottom=0.19)
+    plt.savefig("output/plots/sv_breakdown.pdf")
+    plt.show()
+
+
+def plot_afs_hexbin():
+    """
+    Plots hexbin maps of allele frequencies for 2- and 3-mode SVs.
+    """
+    sv_df = get_most_common_split_df()
+    sv_df = sv_df[
+        (sv_df["num_samples"] > 0) & (sv_df["num_modes"].isin([2, 3]))
+    ]
+
+    afs = {2: ([], []), 3: ([], [])}
+
     for _, row in sv_df.iterrows():
+        num_modes = row["num_modes"]
+        modes = ast.literal_eval(row["modes"])
+        x = afs[num_modes][0]
+        y = afs[num_modes][1]
+
         n_homozygous = 0
         n_heterozygous = 0
-        modes = ast.literal_eval(row["modes"])
-        mode_afs = []
 
         for mode in modes:
             n_homozygous += mode["num_homozygous"]
             n_heterozygous += mode["num_heterozygous"]
-            af = calc_af(mode["num_homozygous"], mode["num_heterozygous"], 2504)
-            mode_afs.append(af)
+
+            af = calc_af(
+                mode["num_homozygous"],
+                mode["num_heterozygous"],
+                2504,
+            )
+            y.append(af)
 
         original_af = calc_af(n_homozygous, n_heterozygous, 2504)
-        for af in mode_afs:
-            if original_af > 0:
-                delta = af / original_af
-                delta_ratios.append(delta)
+        for _ in modes:
+            x.append(original_af)
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    for num_modes, ax in zip([2, 3], axes):
+        x, y = afs[num_modes]
 
-    ax.hist(delta_ratios, bins=20, color="black", alpha=0.8, edgecolor="white")
-    ax.set_xlim(-0.005, 1.015)
+        orig_cmap = cm.get_cmap("Blues")
+        new_colors = orig_cmap(np.linspace(0.2, 1, 256))
+        darker_blues = ListedColormap(new_colors)
+        hb = ax.hexbin(x, y, gridsize=25, cmap=darker_blues, mincnt=1, vmax=100)
 
-    ax_box = ax.inset_axes([0.4, 0.65, 0.4, 0.3])
-    ax_box.boxplot(
-        [original_afs, original_afs_split],
-        positions=[1, 2],
-        widths=0.4,
-        patch_artist=True,
-        boxprops=dict(facecolor="lightgrey", color="black"),
-        medianprops=dict(color="black"),
-        whiskerprops=dict(color="black"),
-        capprops=dict(color="black"),
-        flierprops=dict(marker="o", color="black", markersize=5),
-    )
-    ax_box.set_xticks([1, 2])
-    ax_box.set_xticklabels(
-        ["Unsplit SVs", "Split SVs"],
-        fontsize=12,
-    )
-    ax_box.set_ylabel("Original Allele\nFrequency", fontsize=12)
-    ax_box.set_ylim(0, 1.0)
-    ax_box.tick_params(axis="y", labelsize=12)
-    ax_box.yaxis.set_major_locator(FixedLocator(np.arange(0, 1.01, 0.2)))
+        # Add identity line
+        min_val = -0.02
+        max_val = 1.02
+        ax.plot(
+            [min_val, max_val],
+            [min_val, max_val],
+            linestyle="--",
+            color="darkgrey",
+        )
 
-    ax.set_xlabel("Allele Frequency Ratio, New/Original", fontsize=14)
-    ax.set_ylabel("Count", fontsize=14)
-    ax.tick_params(axis="both", labelsize=14)
-    # ax.xaxis.set_major_locator(FixedLocator(np.arange(0, 1.1, 0.2)))
-    # ax.yaxis.set_major_locator(FixedLocator(np.arange(0, 181, 20)))
-    # ax.xaxis.set_minor_locator(FixedLocator(np.arange(0, 1.1, 0.1)))
-    # ax.yaxis.set_minor_locator(FixedLocator(np.arange(0, 181, 10)))
-    # ax.tick_params(axis="x", which="minor", length=4, labelbottom=False)
-    # ax.tick_params(axis="y", which="minor", length=4, labelleft=False)
+        ax.set_xlim(min_val, max_val)
+        ax.set_ylim(min_val, max_val)
+        ax.set_xlabel("Allele Frequency Pre-Split", fontsize=12)
+        ax.set_ylabel("Allele Frequency Post-Split", fontsize=12)
+        cb = fig.colorbar(hb, ax=ax)
+        cb.set_label("Counts")
+
     plt.tight_layout()
-    plt.savefig("output/plots/af_delta_histogram.pdf")
+    plt.savefig("output/plots/afs_hexbin.pdf")
     plt.show()
 
 
 def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
+    """
+    Left plot: likelihood of two populations co-occurring in the same mode.
+    Right plot: likelihood of two populations co-occurring in different modes.
+    by: either "superpopulation" or "population"
+    """
     ancestry_df = pd.read_csv("data/1kg/ancestry.tsv", delimiter="\t")
 
     # create a lookup of sample_id:population
@@ -1247,17 +1327,22 @@ def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
         for mode_index, mode in enumerate(modes):
             for sample in mode["sample_ids"]:
                 mode_by_samples[sample] = mode_index
-        for s1, m1 in mode_by_samples.items():
+
+        sample_ids = list(mode_by_samples.keys())
+        for s1_index, s1 in enumerate(sample_ids):
             p1 = populations.index(sample_lookup[s1])
-            for s2, m2 in mode_by_samples.items():
-                if s1 == s2:
-                    continue
+            m1 = mode_by_samples[s1]
+            for s2 in sample_ids[s1_index + 1 :]:
+                m2 = mode_by_samples[s2]
                 p2 = populations.index(sample_lookup[s2])
                 all_comparisons[p1][p2] += 1
+                all_comparisons[p2][p1] += 1
                 if m1 == m2:  # in the same mode
                     comparisons[p1][p2] += 1
+                    comparisons[p2][p1] += 1
                 elif m1 != m2:  # in different modes
                     split_comparisons[p1][p2] += 1
+                    split_comparisons[p2][p1] += 1
 
     fig, axs = plt.subplots(1, 2, figsize=(12, 5))
     # fig, ax = plt.subplots(1, 1, figsize=(6, 6))
@@ -1359,12 +1444,67 @@ def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
     plt.show()
 
 
-def print_sv_stats(path: str = ""):
+def print_sv_stats():
+    df = get_most_common_split_df()
+    df = df[df["num_samples_run"] > 10]
+    print("Total SVs:", df.shape[0])
+    for n_modes in range(1, 4):
+        subset = df[df["num_modes"] == n_modes]
+        split_reads_only = []
+        paired_reads_only = []
+        both_reads = []
+        values = {
+            "svlen": [],
+            "af_pre": [],
+            "af_post": [],
+            "num_samples_run": [],
+            "reciprocal_overlap": [],
+        }
+        values["svlen"] = subset["svlen"].values.tolist()
+        values["af_pre"] = subset["af"].values.tolist()
+        values["num_samples_run"] = subset["num_samples_run"].values.tolist()
+        for _, row in subset.iterrows():
+            modes = ast.literal_eval(row["modes"])
+            mode_afs = [mode["af"] for mode in modes]
+            values["af_post"].extend(mode_afs)
+            sv_coords = [(mode["start"], mode["end"]) for mode in modes]
+            for i in range(len(sv_coords)):
+                for j in range(i + 1, len(sv_coords)):
+                    L1, R1 = sv_coords[i]
+                    L2, R2 = sv_coords[j]
+                    ro = reciprocal_overlap((L1, R1), (L2, R2))
+                    values["reciprocal_overlap"].append(ro)
+            if row["n_split_samples"] > 0 and row["n_paired_samples"] == 0:
+                split_reads_only.append(row["id"])
+            elif row["n_split_samples"] == 0 and row["n_paired_samples"] > 0:
+                paired_reads_only.append(row["id"])
+            else:
+                both_reads.append(row["id"])
+
+        print(f"SVs with {n_modes} modes:")
+        print(f"  Total: {subset.shape[0]}")
+        for field in [
+            "svlen",
+            "af_pre",
+            "af_post",
+            "num_samples_run",
+            "reciprocal_overlap",
+        ]:
+            mean = np.mean(values[field])
+            median = np.median(values[field])
+            print(f"  {field}: mean={mean:.3f}, median={median:.3f}")
+        print(f"  Split Reads Only: {len(split_reads_only)}")
+        print(f"  Paired Reads Only: {len(paired_reads_only)}")
+        print(f"  Both Reads: {len(both_reads)}")
+        print()
+
+
+def sv_stats_boxplot(path: str = ""):
     """Compares various statistics between split SVs and all SVs and plots boxplots."""
     df = get_all_svs_df(path)
 
     # load breakpoint precision info
-    bp_df = pd.read_csv("1kg/cipos.csv")
+    bp_df = pd.read_csv("data/1kg/cipos.csv")
     bp_df.rename(columns={"id": "sv_id"}, inplace=True)
     bp_df["bp_precision"] = bp_df["ciend"].apply(
         lambda x: eval(x)[1] - eval(x)[0]
@@ -1372,7 +1512,6 @@ def print_sv_stats(path: str = ""):
     df = df.merge(bp_df[["sv_id", "bp_precision"]], on="sv_id", how="left")
 
     # get only SVs that were actually clustered
-    df = df[df["num_samples_run"] > 10]
     split = df[df["num_modes"] > 1]
 
     stats = {}
@@ -1450,7 +1589,10 @@ def print_sv_stats(path: str = ""):
 
 
 def plot_num_trials(path: str = ""):
-    """Plots the number of trials per confidence level."""
+    """
+    Plots the number of trials per confidence level.
+    DEPRECATED
+    """
     # all low and medium confidence SVs ran all 100 trials
     # most high confidence SVs ran 8 trials
     # 4% of high confidence SVs ran >8 trials, with a mean of 25 and median of 18
@@ -1669,7 +1811,7 @@ def bayesian_optimization_iterations(file: str):
 
 
 if __name__ == "__main__":
-    figures = [2]
+    figures = []
 
     # Figure 1
     if 1 in figures:
@@ -1680,37 +1822,43 @@ if __name__ == "__main__":
 
     # Figure 2
     if 2 in figures:
-        synthetic_data_read_types("B", "svlen", num_samples=200)
         for case in ["B", "C", "D"]:
             # parameter_sweep(case)
             parameter_sweep_r_less_than_08(case)
+
         for n_samples in [11, 25, 50, 100, 200, 400]:
-            for svlen in [50, 100, 200, 400, 800, 1600, 10000]:
+            for i, svlen in enumerate([50, 100, 200, 400, 800, 1600, 10000]):
                 synthetic_data_fig(n_samples, svlen, "")
+
+        for case in ["A", "B", "C", "D"]:
+            for n_samples in [11, 25, 50, 100, 200, 400]:
+                synthetic_data_read_types(case, "svlen", num_samples=n_samples)
+            for svlen in [50, 100, 200, 400, 800, 1600, 10000]:
+                synthetic_data_read_types(case, "num_samples", svlen=svlen)
+
         synthetic_data_additional_svs()
 
     # Figure 3
     if 3 in figures:
-        plot_sv_breakdown()
+        plot_sv_breakdown_read_types()
 
     # Figure 4
     if 4 in figures:
-        plot_sv_short_long_reads("HGSV_776", ["HG00096"])
+        plot_sv_short_long_reads("HGSV_11595", ["HG02445"])
         plot_sv_short_long_reads("HGSV_54541", ["HG03548", "HG00149"])
         plot_sv_short_long_reads(
-            "HGSV_1289",
-            ["HG00537", "NA19383", "NA19350"],
-            skip_evidence_plot=True,
+            "HGSV_24215", ["HG03258", "HG01048", "HG01851"]
         )
 
     # Figure 5
     if 5 in figures:
-        plot_af_delta_histogram()
+        plot_afs_hexbin()
         compare_sv_ancestry_by_mode(by="population")
 
     # Print SV stats
     if 6 in figures:
         print_sv_stats()
+        sv_stats_boxplot()
 
     # SI figure - confidence vs. number of trials
     if 7 in figures:

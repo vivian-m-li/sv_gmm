@@ -10,7 +10,6 @@ import re
 from Bio import SeqIO, Seq
 from brokenaxes import brokenaxes
 import matplotlib.cm as cm
-from matplotlib.colors import ListedColormap
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
@@ -231,8 +230,8 @@ def plot_evidence_by_mode(
         # Place pie chart using normalized figure coordinates
         pie_ax = fig.add_axes(
             [
-                fig_x0 - 0.18,  # horizontal position
-                mean_y_fig_norm - 0.1,  # vertical position (centered)
+                fig_x0 - 0.20,  # horizontal position
+                mean_y_fig_norm - 0.05,  # vertical position (centered)
                 0.2,  # width
                 0.2,  # height
             ]
@@ -479,7 +478,7 @@ def plot_2d_coords(
             elif size_by == "insert_size":
                 scatter_sizes.append(mean_insert_size)
             else:
-                scatter_sizes.append(5)
+                scatter_sizes.append(50)
 
         x = np.array(x)
         num_evidence = np.array(num_evidence)
@@ -595,7 +594,7 @@ def plot_2d_coords(
     ax_labels = [axis1, axis2]
     for i, ax_label in enumerate(ax_labels):
         if ax_label == "L" or ax_label == "R":
-            ax_labels[i] = f"{ax_label}-Position"
+            ax_labels[i] = f"{ax_label}-Coordinate"
     ax_main.set_xlabel(ax_labels[0], fontsize=12)
     ax_main.set_ylabel(ax_labels[1], fontsize=12)
 
@@ -654,9 +653,9 @@ def plot_single_sv(
 
     # plt.tight_layout()
     plt.subplots_adjust(
-        left=0.02, right=0.93, bottom=0.205, top=0.82, wspace=0.05, hspace=0
+        left=0.02, right=0.93, bottom=0.205, top=0.82, wspace=0.15, hspace=0
     )
-    plt.savefig(f"plots/evidence/{sv_id}.pdf")
+    plt.savefig(f"output/plots/evidence/{sv_id}.pdf")
 
 
 def extract_hetero_homozygous(row):
@@ -1000,7 +999,7 @@ def analyze_ancestry() -> None:
 
 def plot_afs():
     """
-    Plots the allele frequencies for the SVs before and after being split by SVeperator
+    Plots the allele frequencies for the SVs before and after being split
     """
     sv_df = get_most_common_split_df()
     sv_df = sv_df[sv_df["num_samples"] > 0]
@@ -1078,8 +1077,8 @@ def plot_afs():
             plt.scatter(x3, y3, color=COLORS[2], alpha=0.15)
 
         plt.plot([0, plot_lim], [0, plot_lim], linestyle="--", color="darkgrey")
-        plt.xlim(0, plot_lim)
-        plt.ylim(0, plot_lim)
+        plt.xlim(-0.01, plot_lim)
+        plt.ylim(-0.01, plot_lim)
 
         # plt.set_title(
         #     f"Num Modes={num_modes + 1}, n={np.mean(n_samples):.1f}"
@@ -1089,63 +1088,72 @@ def plot_afs():
         plt.show()
 
 
-def plot_afs_hexbin():
-    """
-    Plots hexbin maps of allele frequencies for 2- and 3-mode SVs.
-    """
+def plot_af_delta_histogram():
+    """Histogram of allele frequency changes after splitting SVs."""
     sv_df = get_most_common_split_df()
-    sv_df = sv_df[
-        (sv_df["num_samples"] > 0) & (sv_df["num_modes"].isin([2, 3]))
-    ]
+    sv_df = sv_df[sv_df["num_samples"] > 10]
+    original_afs = sv_df[sv_df["num_modes"] == 1]["af"].values
+    sv_df = sv_df[sv_df["num_modes"].isin([2, 3])]
+    original_afs_split = sv_df["af"].values
 
-    afs = {2: ([], []), 3: ([], [])}
-
+    # calculate delta ratios
+    delta_ratios = []
     for _, row in sv_df.iterrows():
-        num_modes = row["num_modes"]
-        modes = ast.literal_eval(row["modes"])
-        x = afs[num_modes][0]
-        y = afs[num_modes][1]
-
         n_homozygous = 0
         n_heterozygous = 0
+        modes = ast.literal_eval(row["modes"])
+        mode_afs = []
 
         for mode in modes:
             n_homozygous += mode["num_homozygous"]
             n_heterozygous += mode["num_heterozygous"]
-
-            af = calc_af(
-                mode["num_homozygous"],
-                mode["num_heterozygous"],
-                2504,
-            )
-            y.append(af)
+            af = calc_af(mode["num_homozygous"], mode["num_heterozygous"], 2504)
+            mode_afs.append(af)
 
         original_af = calc_af(n_homozygous, n_heterozygous, 2504)
-        for _ in modes:
-            x.append(original_af)
+        for af in mode_afs:
+            if original_af > 0:
+                delta = af / original_af
+                delta_ratios.append(delta)
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-    for num_modes, ax in zip([2, 3], axes):
-        x, y = afs[num_modes]
+    fig, ax = plt.subplots(figsize=(8, 5))
 
-        orig_cmap = cm.get_cmap("Blues")
-        new_colors = orig_cmap(np.linspace(0.2, 1, 256))
-        darker_blues = ListedColormap(new_colors)
-        hb = ax.hexbin(x, y, gridsize=40, cmap=darker_blues, mincnt=1)
+    ax.hist(delta_ratios, bins=20, color="black", alpha=0.8, edgecolor="white")
+    ax.set_xlim(-0.005, 1.015)
 
-        # Add identity line
-        plot_lim = max(max(x), max(y)) + 0.01
-        ax.plot([0, plot_lim], [0, plot_lim], linestyle="--", color="darkgrey")
+    ax_box = ax.inset_axes([0.4, 0.65, 0.4, 0.3])
+    ax_box.boxplot(
+        [original_afs, original_afs_split],
+        positions=[1, 2],
+        widths=0.4,
+        patch_artist=True,
+        boxprops=dict(facecolor="lightgrey", color="black"),
+        medianprops=dict(color="black"),
+        whiskerprops=dict(color="black"),
+        capprops=dict(color="black"),
+        flierprops=dict(marker="o", color="black", markersize=5),
+    )
+    ax_box.set_xticks([1, 2])
+    ax_box.set_xticklabels(
+        ["Unsplit SVs", "Split SVs"],
+        fontsize=12,
+    )
+    ax_box.set_ylabel("Original Allele\nFrequency", fontsize=12)
+    ax_box.set_ylim(0, 1.0)
+    ax_box.tick_params(axis="y", labelsize=12)
+    ax_box.yaxis.set_major_locator(FixedLocator(np.arange(0, 1.01, 0.2)))
 
-        ax.set_xlim(0, plot_lim)
-        ax.set_ylim(0, plot_lim)
-        ax.set_xlabel("Original Allele Frequency", fontsize=12)
-        ax.set_ylabel("New Allele Frequency", fontsize=12)
-        cb = fig.colorbar(hb, ax=ax)
-        cb.set_label("Counts")
-
+    ax.set_xlabel("Allele Frequency Ratio, New/Original", fontsize=14)
+    ax.set_ylabel("Count", fontsize=14)
+    ax.tick_params(axis="both", labelsize=14)
+    # ax.xaxis.set_major_locator(FixedLocator(np.arange(0, 1.1, 0.2)))
+    # ax.yaxis.set_major_locator(FixedLocator(np.arange(0, 181, 20)))
+    # ax.xaxis.set_minor_locator(FixedLocator(np.arange(0, 1.1, 0.1)))
+    # ax.yaxis.set_minor_locator(FixedLocator(np.arange(0, 181, 10)))
+    # ax.tick_params(axis="x", which="minor", length=4, labelbottom=False)
+    # ax.tick_params(axis="y", which="minor", length=4, labelleft=False)
     plt.tight_layout()
-    plt.savefig("plots/afs_hexbin.png")
+    plt.savefig("output/plots/af_delta_histogram.pdf")
     plt.show()
 
 
