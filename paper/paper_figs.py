@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import pysam
 
+from paper.helper import get_ancestry_lookup
 from src.model.split import split_sv
 from src.model.gmm_trial import (
     process_data,
@@ -153,7 +154,7 @@ def plot_reciprocal_overlap_svlen(
     df = load_synthetic_data_results(sample_size, path=path)
     df = df[(df["case"] == case)]
 
-    models = ["2d", "gatk_MAX_CLIQUE", "gatk_SINGLE_LINKAGE"]
+    models = ["split", "gatk_MAX_CLIQUE", "gatk_SINGLE_LINKAGE"]
     colors = ["#ffed00", "#ffce0b", "#f8ac30", "#f0853c", "#eb5c3f"]
     fig, axs = plt.subplots(1, len(models), figsize=(5 * len(models), 5))
 
@@ -295,15 +296,33 @@ def parameter_sweep_r_less_than_08(case: str = "B", path: str = ""):
     )
     svlens = sorted(file["svlen"].unique())
 
-    tprs = np.zeros((len(sample_sizes), len(svlens)))
-    fprs = np.zeros((len(sample_sizes), len(svlens)))
-    for i, sample_size in enumerate(sample_sizes):
+    sample_sizes_to_plot = [s for s in sample_sizes if s <= 100]
+    svlens_to_plot = [s for s in svlens if s <= 800]
+
+    tprs = np.zeros((len(sample_sizes_to_plot), len(svlens_to_plot)))
+    fprs = np.zeros((len(sample_sizes_to_plot), len(svlens_to_plot)))
+    for i, sample_size in enumerate(sample_sizes_to_plot):
         df = load_synthetic_data_results(
             sample_size, path=path, add_gatk_results=False
         )
+        if sample_size == 100:
+            for s in sample_sizes:
+                if s > 100:
+                    df = pd.concat(
+                        [
+                            df,
+                            load_synthetic_data_results(
+                                s, path=path, add_gatk_results=False
+                            ),
+                        ]
+                    )
+
         df = df[(df["gmm_model"] == "split") & (df["case"] == case)]
-        for j, svlen in enumerate(svlens):
-            subset_df = df[(df["svlen"] == svlen) & (df["r"] < 0.8)]
+        for j, svlen in enumerate(svlens_to_plot):
+            if svlen == 800:
+                subset_df = df[(df["svlen"] >= 800) & (df["r"] < 0.8)]
+            else:
+                subset_df = df[(df["svlen"] == svlen) & (df["r"] < 0.8)]
             if subset_df.empty:
                 print("missing data for", sample_size, svlen)
                 continue
@@ -327,15 +346,12 @@ def parameter_sweep_r_less_than_08(case: str = "B", path: str = ""):
             tprs[i, j] = np.mean(acc)
             fprs[i, j] = np.mean(fps)
 
-    fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-    for i, (values, label) in enumerate(
-        zip([tprs, fprs], ["Average TPR (r < 0.8)", "Average FPR (r < 0.8)"])
-    ):
-        ax = axs[i]
-        im = ax.imshow(values.T, cmap="Blues", vmin=0, vmax=1)
+    fig, ax = plt.subplots(1, 1, figsize=(7, 3.5))
+    for i, values in enumerate([tprs]):
+        im = ax.imshow(values.T, cmap="Blues", vmin=0, vmax=1, aspect=0.5)
         # put numbers in each cell
-        for j in range(len(sample_sizes)):
-            for k in range(len(svlens)):
+        for j in range(len(sample_sizes_to_plot)):
+            for k in range(len(svlens_to_plot)):
                 text = f"{values[j, k]:.2f}"
                 ax.text(
                     j,
@@ -346,14 +362,15 @@ def parameter_sweep_r_less_than_08(case: str = "B", path: str = ""):
                     color="black" if values[j, k] < 0.5 else "white",
                     fontsize=10,
                 )
-        ax.set_xticks(np.arange(len(sample_sizes)))
-        ax.set_yticks(np.arange(len(svlens)))
-        ax.set_xticklabels(sample_sizes)
-        ax.set_yticklabels(svlens)
-        ax.set_xlabel("Sample Size", fontsize=14)
-        ax.set_ylabel("SV Length", fontsize=14)
-        ax.set_title(label, fontsize=16)
-        fig.colorbar(im, ax=axs[i])
+        ax.set_xticks(np.arange(len(sample_sizes_to_plot)))
+        ax.set_yticks(np.arange(len(svlens_to_plot)))
+        ax.set_xticklabels(
+            [s if s < 100 else "100+" for s in sample_sizes_to_plot]
+        )
+        ax.set_yticklabels([s if s < 800 else "800+" for s in svlens_to_plot])
+        ax.set_xlabel("Sample Size")
+        ax.set_ylabel("SV Length")
+        fig.colorbar(im, ax=ax)
 
     plt.tight_layout(w_pad=0)
     plt.savefig(
@@ -368,14 +385,10 @@ def synthetic_data_fig(sample_size: int, svlen: int, path: str = ""):
     df = load_synthetic_data_results(sample_size, path=path)
     df = df[df["svlen"] == svlen]
 
-    models = [
-        "gatk_MAX_CLIQUE",
-        "gatk_SINGLE_LINKAGE",
-        "split",
-    ]
+    models = ["gatk_MAX_CLIQUE", "gatk_SINGLE_LINKAGE", "split"]
     # colors = ["#bfdbf7", "#1f7a8c", "#022b3a", "orange", "pink"]
     colors = ["#ffbf00", "#ffe69f", "#022b3a"]
-    markers = ["o", "s", "D", "^", "v"]
+    markers = ["s", "D", "o"]
 
     svs = [
         [(100000, 100802), (100200, 100601)],
@@ -1284,23 +1297,72 @@ def plot_afs_hexbin():
     plt.show()
 
 
+def compare_sample_ancestries():
+    """
+    For all pairs of populations, what fraction of SVs do they co-occur in the same mode vs. different modes?
+    What is the expected rate of overlap? Use a randomized model where SVs are assigned at random - keep the number of SVs constant, and shuffle SVs between samples to get a null distribution.
+    Plot the results as a heatmap of the fraction of SVs that co-occur in the same mode vs. different modes for each pair of populations, and compare to the expected rate of overlap from the randomized model.
+    """
+    df = pd.read_csv("output/results/sample_ancestry_comparison.csv")
+
+    # group by population pairs and calculate mean fraction_shared_svs
+    df["population_pair"] = df.apply(
+        lambda row: tuple(
+            sorted([row["sample_1_population"], row["sample_2_population"]])
+        ),
+        axis=1,
+    )
+    population_df = (
+        df.groupby("population_pair").mean(numeric_only=True).reset_index()
+    )
+
+    empirical_matrix = population_df.pivot(
+        index="population_pair",
+        columns="population_pair",
+        values="fraction_shared_svs",
+    )
+
+    # load pre-generated null distributions
+    # TODO: update format
+    null_distributions = []
+    for _, row in generated_null_distributions.iterrows():
+        null_matrix = row.values.reshape(
+            len(population_pairs), len(population_pairs)
+        )
+        null_distributions.append(null_matrix)
+
+    # calculate the mean null distribution - do this in the loop above
+    mean_null_matrix = sum(null_distributions) / len(null_distributions)
+
+    # plot the heatmaps
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+    # empirical heatmap
+    im1 = axes[0].imshow(empirical_matrix, cmap="Blues", aspect="auto")
+    axes[0].set_title("1kG Distribution", fontsize=14)
+    axes[0].set_xlabel("Population 2", fontsize=12)
+    axes[0].set_ylabel("Population 1", fontsize=12)
+    fig.colorbar(im1, ax=axes[0])
+
+    # null distribution heatmap
+    im2 = axes[1].imshow(mean_null_matrix, cmap="Reds", aspect="auto")
+    axes[1].set_title("Mean Null Distribution", fontsize=14)
+    axes[1].set_xlabel("Population 2", fontsize=12)
+    axes[1].set_ylabel("Population 1", fontsize=12)
+    fig.colorbar(im2, ax=axes[1])
+
+    plt.tight_layout()
+    plt.savefig("output/plots/population_ancestry_comparison_heatmap.pdf")
+    plt.show()
+
+
 def compare_sv_ancestry_by_mode(by: str = "superpopulation"):
     """
     Left plot: likelihood of two populations co-occurring in the same mode.
     Right plot: likelihood of two populations co-occurring in different modes.
     by: either "superpopulation" or "population"
     """
-    ancestry_df = pd.read_csv("data/1kg/ancestry.tsv", delimiter="\t")
-
-    # create a lookup of sample_id:population
-    # if multiple populations are listed for a sample, take the first one (only happens for 1 sample)
-    sample_lookup = {
-        row["Sample name"]: row["Population code"].split(",")[0]
-        for _, row in ancestry_df.iterrows()
-    }
-    population_lookup = {}
-    for i, row in ancestry_df.iterrows():
-        population_lookup[row["Population code"]] = row["Superpopulation code"]
+    sample_lookup, population_lookup = get_ancestry_lookup()
 
     sv_df = get_most_common_split_df()
     sv_df = sv_df[sv_df["num_modes"] > 1]
@@ -1811,7 +1873,7 @@ def bayesian_optimization_iterations(file: str):
 
 
 if __name__ == "__main__":
-    figures = []
+    figures = [5]
 
     # Figure 1
     if 1 in figures:
@@ -1826,6 +1888,7 @@ if __name__ == "__main__":
             # parameter_sweep(case)
             parameter_sweep_r_less_than_08(case)
 
+        # currently using n=200, svlen=800 as the paper example
         for n_samples in [11, 25, 50, 100, 200, 400]:
             for i, svlen in enumerate([50, 100, 200, 400, 800, 1600, 10000]):
                 synthetic_data_fig(n_samples, svlen, "")
@@ -1852,8 +1915,9 @@ if __name__ == "__main__":
 
     # Figure 5
     if 5 in figures:
-        plot_afs_hexbin()
-        compare_sv_ancestry_by_mode(by="population")
+        # plot_afs_hexbin()
+        # compare_sv_ancestry_by_mode(by="population")
+        compare_sample_ancestries()
 
     # Print SV stats
     if 6 in figures:

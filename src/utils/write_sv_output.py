@@ -18,7 +18,6 @@ from src.utils.helper import (
     get_all_split_trials_df,
     get_most_common_split_df,
     get_sample_mode_probabilities,
-    get_sv_lookup,
     get_sample_ids,
     get_svlen,
     df_to_bed,
@@ -779,64 +778,6 @@ def bed_to_df(bed_file: str, remove_dupes: bool = False) -> pd.DataFrame:
         axis=1,
     )
     return df
-
-
-def get_overlapping_clustered_svs():
-    """Checks for overlaps between clustered SVs and the original SV breakpoints."""
-    overlap_threshold = 0.7
-    if not os.path.exists("1kg/sv_lookup_intersect.csv"):
-        lookup = get_sv_lookup()
-        lookup["sv_id"] = lookup["id"].astype(str)
-        lookup.rename(columns={"stop": "end"}, inplace=True)
-        bed_file = "1kg/sv_lookup.bed"
-        df_to_bed(in_df=lookup, out_file=bed_file)
-
-        output_bed_file = "1kg/sv_lookup_intersect.bed"
-        bedtools_bin = "bedtools"  # TODO: load bedtools binary
-        subprocess.run(
-            ["bash", "src/utils/bash/bed_intersect.sh"]
-            + [
-                bedtools_bin,
-                bed_file,
-                "1kg/consensus_svs.bed",
-                output_bed_file,
-            ],
-            capture_output=True,
-            text=True,
-        )
-
-        df = bed_to_df(output_bed_file)
-        df.to_csv("1kg/sv_lookup_intersect.csv", index=False)
-    else:
-        df = pd.read_csv("1kg/sv_lookup_intersect.csv")
-
-    overlaps = df[
-        (df["r"] >= overlap_threshold) & (df["sv1_id"] != df["sv2_id"])
-    ]
-
-    # this gets all overlapping SVs - however, we want to check whether the original SVs were overlapping as well (pre-clustering)
-    # print(
-    #     overlaps[["sv1_id", "sv1_l", "sv1_r", "sv2_id", "sv2_l", "sv2_r", "r"]]
-    # )
-
-    og_overlaps = pd.read_csv("1kg/og_svs_intersect.csv")
-    og_overlaps = og_overlaps[og_overlaps["r"] >= overlap_threshold]
-    # only need sv ids to check for overlaps
-    og_overlaps = og_overlaps[["sv1_id", "sv2_id"]]
-
-    # merge new overlaps with og_overlaps
-    new_overlaps = overlaps.merge(
-        og_overlaps,
-        left_on=["sv1_id", "sv2_id"],
-        right_on=["sv1_id", "sv2_id"],
-        how="left",
-        indicator=True,
-    )
-    # filter for entries in overlaps that are not in og_overlaps
-    new_overlaps = new_overlaps[new_overlaps["_merge"] == "left_only"]
-
-    # there are 22 overlapping SVs (>= 0.7 reciprocal overlap)
-    print(new_overlaps.shape[0], new_overlaps)
 
 
 def write_post_processed_files(
