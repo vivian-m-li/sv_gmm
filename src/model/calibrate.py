@@ -104,6 +104,7 @@ def run_dirichlet_inner(
         print_messages=False,
     )
 
+    chr, L, R = row["chr"], row["start"], row["stop"]
     if reads.empty:
         # if no samples have any data supporting the SV then not included
         gmm_results, alphas, posterior_distributions = [(None, [])], [], []
@@ -112,9 +113,9 @@ def run_dirichlet_inner(
         gmm_results, alphas, posterior_distributions = run_dirichlet(
             reads,
             **{
-                "chr": row["chr"],
-                "L": row["start"],
-                "R": row["stop"],
+                "chr": chr,
+                "L": L,
+                "R": R,
                 "init": "random",
                 "max_n_clusters": cfg["model"]["max_n_clusters"],
                 "repulsion": True,
@@ -136,6 +137,8 @@ def run_dirichlet_inner(
             num_reference=num_samples - reads["sample_id"].nunique(),
         )
         write_sv_stats(
+            L,
+            R,
             sv_stat,
             gmm_result,
             evidence_by_mode,

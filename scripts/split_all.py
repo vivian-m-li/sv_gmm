@@ -37,6 +37,7 @@ def run_split_trial(
     insert_size_lookup: dict[str, InsertSizeDistribution],
 ):
     sv_id = row["id"]
+    chr, L, R = row["chr"], row["start"], row["stop"]
     input_dir = cfg["paths"]["input_dir"]
     reads, num_samples = get_raw_data(
         row, cfg, filter_reference_samples=True, print_messages=False
@@ -65,9 +66,9 @@ def run_split_trial(
         gmm_results, alphas, posterior_distributions = run_dirichlet(
             reads,
             **{
-                "chr": row["chr"],
-                "L": row["start"],
-                "R": row["stop"],
+                "chr": chr,
+                "L": L,
+                "R": R,
                 "plot": False,
                 "stem": input_dir,
                 **model_params,
@@ -82,6 +83,8 @@ def run_split_trial(
             num_reference=num_samples - reads["sample_id"].nunique(),
         )
         write_sv_stats(
+            L,
+            R,
             sv_stat,
             gmm_result,
             evidence_by_mode,

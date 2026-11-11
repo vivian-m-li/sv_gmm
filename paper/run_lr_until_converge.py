@@ -33,6 +33,7 @@ def run_lr_dirichlet_wrapper(
 ):
     """Runs the dirichlet/GMM process for a single SV using long read data."""
     sv_id = row["id"]
+    chr, L, R = row["chr"], row["start"], row["stop"]
 
     # don't need to remove insert size for long reads
     insert_size_lookup = {
@@ -62,9 +63,9 @@ def run_lr_dirichlet_wrapper(
         gmm_results, alphas, posterior_distributions = run_dirichlet(
             reads,
             **{
-                "chr": row["chr"],
-                "L": row["start"],
-                "R": row["stop"],
+                "chr": chr,
+                "L": L,
+                "R": R,
                 "insert_size_lookup": insert_size_lookup,
                 "min_pairs": 1,  # reduce number of points required per sample - long read data is sparse and "more accurate"
                 "plot": False,
@@ -79,6 +80,8 @@ def run_lr_dirichlet_wrapper(
             num_reference=0,  # these are pre-filtered out when we download data
         )
         write_sv_stats(
+            L,
+            R,
             sv_stat,
             gmm_result,
             evidence_by_mode,
