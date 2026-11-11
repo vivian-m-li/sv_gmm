@@ -750,36 +750,6 @@ def compare_short_long_reads():
     merged.to_csv("1kg/sr_lr_merged.csv", index=False)
 
 
-def bed_to_df(bed_file: str, remove_dupes: bool = False) -> pd.DataFrame:
-    """Convert a BED file to a pandas DataFrame."""
-    df = pd.read_csv(
-        bed_file,
-        delimiter="\t",
-        names=[
-            "sv1_chr",
-            "sv1_l",
-            "sv1_r",
-            "sv1_id",
-            "sv1_id_dup",
-            "sv2_chr",
-            "sv2_l",
-            "sv2_r",
-            "sv2_id",
-            "sv2_svid",
-        ],
-    )
-    if remove_dupes:
-        df = df[df["sv1_id"] != df["sv2_id"]]
-
-    df["r"] = df.apply(
-        lambda row: reciprocal_overlap(
-            (row["sv1_l"], row["sv1_r"]), (row["sv2_l"], row["sv2_r"])
-        ),
-        axis=1,
-    )
-    return df
-
-
 def write_post_processed_files(
     output_dir: str,
     sample_ids: set[str],

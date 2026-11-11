@@ -172,7 +172,7 @@ def gatk_cluster_reads(
 def gatk_cluster_inner(
     cfg, case, r, svs, weights, n_samples, gatk_alg, results
 ):
-    """Generates synthetic SVs and runs gatk's SVCluster method on it. Appends the results to the multiprocessing-managed list to be written to a CSV later. File I/O is done on scratch."""
+    """Generates synthetic SV breakpoints and runs gatk's SVCluster method on it. Appends the results to the multiprocessing-managed list to be written to a CSV later. File I/O is done on scratch."""
     # generates synthetic data and writes to a vcf file
     run_id = uuid.uuid4()
     r_str = ",".join([str(x) for x in r]) if type(r) is tuple else str(r)
@@ -214,7 +214,7 @@ def gatk_cluster(
     test_case: Optional[str] = None,
     gatk_alg: Optional[str] = None,
 ):
-    """Parallelized synthetic data tests with varying r and (optional) cluster weights. Each set of parameters is repeated 50 times. Run with the bash script run_gatk_clustering.sh to test different sample sizes and sv lengths."""
+    """Parallelized synthetic data tests with varying r and (optional) cluster weights. Run with the bash script run_gatk_clustering.sh to test different sample sizes and SV lengths."""
     # generate synthetic data
     if test_case is None:
         data = []
@@ -225,25 +225,24 @@ def gatk_cluster(
 
     with multiprocessing.Manager() as manager:
         # assign more cores to the job than the pool size
-        p = multiprocessing.Pool(10)
+        p = multiprocessing.Pool(100)
         results = manager.list()
         args = []
         for case, r, svs in data:
             weights = [[1.0 / len(svs) for _ in range(len(svs))]]
             for weight in weights:
-                # for _ in range(10):
                 args.append(
                     (cfg, case, r, svs, weight, n_samples, gatk_alg, results)
                 )
 
         # add a chunk size; each worker will be given 10 tasks to run
-        p.starmap(gatk_cluster_inner, args, chunksize=10)
+        p.starmap(gatk_cluster_reads, args, chunksize=10)
         p.close()
         p.join()
 
         write_csv(
             results,
-            fixed_n_samples=None,
+            fixed_n_samples=n_samples,
             fixed_svlen=svlen,
         )
 

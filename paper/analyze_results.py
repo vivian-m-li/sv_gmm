@@ -16,7 +16,6 @@ from src.utils.config_loader import load_config
 from src.utils.constants import NONREF_GTS, SUBPOPULATIONS, SUPERPOPULATIONS
 from src.utils.helper import get_sample_ids, get_most_common_split_df
 from src.utils.model_helper import get_insert_size_lookup, reciprocal_overlap
-from src.utils.write_sv_output import bed_to_df
 
 
 def merge_dfs(dir: str):
@@ -121,21 +120,61 @@ def compare_all_svs(dir):
 
 def df_to_bed(df, output_file):
     with open(output_file, "w") as f:
+        if "sv_id" not in df.columns:
+            df["sv_id"] = df["id"].astype(str)
+        if "stop" not in df.columns:
+            df["stop"] = df["end"]
         for _, row in df.iterrows():
             f.write(
-                f"{row['chr']}\t{row['start']}\t{row['stop']}\t{row['id']}\n"
+                f"{row['chr']}\t{row['start']}\t{row['stop']}\t{row['sv_id']}\t{row['id']}\n"
             )
+
+
+def bed_to_df(bed_file: str, remove_dupes: bool = False) -> pd.DataFrame:
+    """Convert a BED file to a pandas DataFrame."""
+    df = pd.read_csv(
+        bed_file,
+        delimiter="\t",
+        names=[
+            "sv1_chr",
+            "sv1_l",
+            "sv1_r",
+            "sv1_id",
+            "sv1_id_dup",
+            "sv2_chr",
+            "sv2_l",
+            "sv2_r",
+            "sv2_id",
+            "sv2_svid",
+        ],
+    )
+    if remove_dupes:
+        df = df[df["sv1_id"] != df["sv2_id"]]
+
+    df["r"] = df.apply(
+        lambda row: reciprocal_overlap(
+            (row["sv1_l"], row["sv1_r"]), (row["sv2_l"], row["sv2_r"])
+        ),
+        axis=1,
+    )
+    return df
 
 
 def get_overlapping_clustered_svs(cfg: dict):
     """Checks for overlaps between clustered SVs and the original SV breakpoints."""
-    overlap_threshold = 0.7
+    overlap_threshold = 0.5
     if not os.path.exists("output/results/sv_lookup_intersect.csv"):
         lookup = pd.read_csv("data/1kg/sv_lookup.csv")
         lookup["sv_id"] = lookup["id"].astype(str)
         lookup.rename(columns={"stop": "end"}, inplace=True)
         bed_file = "data/1kg/sv_lookup.bed"
-        df_to_bed(in_df=lookup, out_file=bed_file)
+        df_to_bed(lookup, bed_file)
+        consensus_svs_file = "output/results/consensus_svs.bed"
+        if not os.path.exists(consensus_svs_file):
+            df_to_bed(
+                pd.read_csv("output/results/consensus_svs.csv"),
+                consensus_svs_file,
+            )
 
         output_bed_file = "output/results/sv_lookup_intersect.bed"
         bedtools_bin = cfg["bedtools"]["bin"]
@@ -144,7 +183,7 @@ def get_overlapping_clustered_svs(cfg: dict):
             + [
                 bedtools_bin,
                 bed_file,
-                "1kg/consensus_svs.bed",
+                consensus_svs_file,
                 output_bed_file,
             ],
             capture_output=True,
@@ -152,9 +191,9 @@ def get_overlapping_clustered_svs(cfg: dict):
         )
 
         df = bed_to_df(output_bed_file)
-        df.to_csv("1kg/sv_lookup_intersect.csv", index=False)
+        df.to_csv("output/results/sv_lookup_intersect.csv", index=False)
     else:
-        df = pd.read_csv("1kg/sv_lookup_intersect.csv")
+        df = pd.read_csv("output/results/sv_lookup_intersect.csv")
 
     overlaps = df[
         (df["r"] >= overlap_threshold) & (df["sv1_id"] != df["sv2_id"])
@@ -165,7 +204,7 @@ def get_overlapping_clustered_svs(cfg: dict):
     #     overlaps[["sv1_id", "sv1_l", "sv1_r", "sv2_id", "sv2_l", "sv2_r", "r"]]
     # )
 
-    og_overlaps = pd.read_csv("1kg/og_svs_intersect.csv")
+    og_overlaps = pd.read_csv("data/1kg/og_svs_intersect.csv")
     og_overlaps = og_overlaps[og_overlaps["r"] >= overlap_threshold]
     # only need sv ids to check for overlaps
     og_overlaps = og_overlaps[["sv1_id", "sv2_id"]]
@@ -760,4 +799,5 @@ def genotyping_analysis():
 
 if __name__ == "__main__":
     dir = "output/results"
-    generate_ancestry_null_distribution()
+    cfg = load_config()
+    get_overlapping_clustered_svs(cfg)
