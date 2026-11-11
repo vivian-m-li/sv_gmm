@@ -172,6 +172,8 @@ def get_raw_data(
 
 
 def write_sv_stats(
+    L: int,
+    R: int,
     sv_stat: SVInfoGMM,
     gmm_result: GMM | None,
     evidence_by_mode: list[list[Evidence]],
@@ -230,8 +232,11 @@ def write_sv_stats(
             starts.append(l)
             ends.append(r)
 
-        mode_start = int(np.max(starts))
-        mode_end = int(np.min(ends))
+        # calculate mode start/stop using the mode mus, not the sample breakpoints (as we were doing previously)
+        mu = gmm_result.mu[i]
+        mode_start = int(mu[0]) + L
+        mode_end = int(mu[1]) + R
+        length = mode_end - mode_start
         mode_coords.append((mode_start, mode_end))
         read_types = Counter([e.evidence_type for e in mode])
 
