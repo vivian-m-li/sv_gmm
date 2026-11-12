@@ -643,6 +643,23 @@ def calc_responsibility(
     return gz
 
 
+def enforce_mu_constraint(
+    mu: list[np.ndarray], L: int, R: int, eps: float = 1e-6
+) -> list[np.ndarray]:
+    """Project means so that mu[0] + L < mu[1] + R (strictly).
+
+    If violated, mu[0] and mu[1] are each moved half the required distance
+    (the minimal-movement Euclidean projection onto the feasible set).
+    """
+    gap = (mu[0] - mu[1]) - (R - L)  # must be < 0 to satisfy the constraint
+    violation = np.maximum(
+        gap + eps, 0.0
+    )  # how far we must move (0 if already feasible)
+    mu[0] = mu[0] - violation / 2.0
+    mu[1] = mu[1] + violation / 2.0
+    return mu
+
+
 def em(
     x: np.ndarray,
     num_modes: int,
@@ -698,6 +715,9 @@ def em(
         # update mu with repulsion gradient
         for k in range(num_modes):
             mu[k] += repulsion_stepsize * repulsion_grads[k]
+
+    # enforce mu[0] + L < mu[1] + R, i.e. mu[0] - mu[1] < R - L
+    mu = enforce_mu_constraint(mu, L, R)
 
     # update likelihood
     logL = calc_log_likelihood(x, mu, cov, p, L, R)
