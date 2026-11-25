@@ -50,6 +50,7 @@ def run_split_trial(
         for k, v in {
             "init": raw_model.get("init"),
             "max_n_clusters": raw_model.get("max_n_clusters"),
+            "min_n_samples": raw_model.get("min_n_samples"),
             "r_threshold": raw_model.get("r_threshold"),
             "repulsion_stepsize": raw_model.get("repulsion_stepsize"),
             "repulsion": raw_model.get("repulsion"),

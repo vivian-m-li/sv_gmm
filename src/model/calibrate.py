@@ -118,6 +118,7 @@ def run_dirichlet_inner(
                 "R": R,
                 "init": "random",
                 "max_n_clusters": cfg["model"]["max_n_clusters"],
+                "min_n_samples": cfg["model"]["min_n_samples"],
                 "repulsion": True,
                 "r_threshold": r,
                 "repulsion_stepsize": epsilon,

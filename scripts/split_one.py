@@ -161,6 +161,12 @@ def main():
         help="Maximum number of clusters to fit during GMM clustering",
     )
     parser.add_argument(
+        "--min_n_samples",
+        type=int,
+        default=None,
+        help="Maximum number of clusters to fit during GMM clustering",
+    )
+    parser.add_argument(
         "--repulsion",
         type=bool,
         nargs="?",
@@ -225,6 +231,7 @@ def main():
     num_stix_shards = _get(args.num_stix_shards, "stix", "num_shards", 1)
     init = _get(args.init, "model", "init", "kmeans++")
     max_n_clusters = _get(args.max_n_clusters, "model", "max_n_clusters", 4)
+    min_n_samples = _get(args.min_n_samples, "model", "min_n_samples", 11)
     repulsion = _get(args.repulsion, "model", "repulsion", False)
     r_threshold = _get(args.r_threshold, "model", "r_threshold", 0.8)
     repulsion_stepsize = _get(
@@ -251,6 +258,7 @@ def main():
         read_overlap=read_overlap,
         init=init,
         max_n_clusters=max_n_clusters,
+        min_n_samples=min_n_samples,
         repulsion=repulsion,
         r_threshold=r_threshold,
         repulsion_stepsize=repulsion_stepsize,

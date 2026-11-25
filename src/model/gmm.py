@@ -867,6 +867,7 @@ def gmm(
     R: int,
     init: str = "kmeans++",
     max_n_clusters: int = 3,
+    min_n_samples: int = 11,
     repulsion: bool = False,
     r_threshold: float = 0.8,
     repulsion_stepsize: float = 10.0,
@@ -908,7 +909,7 @@ def gmm(
             merged=False,
         )
 
-    if len(x) <= 10:  # small number of samples detected
+    if len(x) < min_n_samples:  # small number of samples detected
         opt_params, num_iterations = run_em(
             x, num_modes=1, L=L, R=R, init="kmeans++"
         )
@@ -922,6 +923,7 @@ def gmm(
         }
     else:
         model_results = {}
+        max_n_clusters = min(max_n_clusters, len(x), min_n_samples)
         mode_options = (
             [force_n_modes]
             if force_n_modes is not None

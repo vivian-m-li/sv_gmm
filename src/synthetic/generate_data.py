@@ -544,6 +544,7 @@ def generate_and_split_sample_reads(
             insert_size_lookup=insert_size_lookup,
             init=model_params["init"],
             max_n_clusters=model_params["max_n_clusters"],
+            min_n_samples=model_params["min_n_samples"],
             repulsion=model_params["repulsion"],
             r_threshold=model_params["r_threshold"],
             repulsion_stepsize=model_params["repulsion_stepsize"],
