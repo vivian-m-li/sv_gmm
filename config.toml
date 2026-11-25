@@ -32,7 +32,7 @@
 input_dir = "data/example_input"
 output_dir = "output/results"
 stix_output_dir = "output/stix_output"
-intermediate_output_dir = "/scratch/beegfs/Users/vili4418/processed_svs"
+intermediate_output_dir = "/scratch/directory/processed_svs"
 local_intermediate_output_dir = "output/results/processed_svs"
 
 # ------------------------------------------------------------------------------
@@ -48,18 +48,15 @@ sv_lookup_file = "1kg.subset.csv"
 
 # txt file with one row for each sample ID
 # NOT REQUIRED and will be automatically generated if absent.
-# sample_id_file = "sample_ids.txt"
 sample_id_file = ""
 
 # Per-sample mean insert size file (two columns: sample_id, mean_insert_size).
 # If this file is absent a uniform default of default_insert_size bp is written
 # automatically.
-# insert_size_file = "insert_sizes.csv"
 insert_size_file = ""
 
 # Ancestry file with required columns "Sample name" and "Superpopulation code"
 # NOT REQUIRED
-# ancestry_file = "ancestry.tsv"
 ancestry_file = ""
 
 # Reference genome file
@@ -106,11 +103,14 @@ read_overlap = 0.9
 # if the file above does not exist.
 default_insert_size = 450
 
-# Initialization method for GMM clustering. Supported algorithms: dp_k-means++, k-means++ or random.
+# Initialization method for GMM clustering. Supported algorithms: dp_kmeans++, kmeans++ or random.
 init = "dp_kmeans++"
 
 # Maximum number of clusters to fit.
 max_n_clusters = 3
+
+# Minimum number of samples required to fit a GMM. If the number of samples is less than this value, then a single cluster is returned by default.
+min_n_samples = 11
 
 # Whether to apply cluster repulsion to GMM clustering
 repulsion = "False"
